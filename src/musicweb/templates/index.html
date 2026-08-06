@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <span class="app-title">Music Library</span>
+      </div>
+      <div class="toolbar-actions">
+        <button type="button" id="btn-add-selected" title="Add selected tree items to playlist">Add selected</button>
+        <button type="button" id="btn-add-folder" title="Add all audio under selected folder">Add folder</button>
+        <button type="button" id="btn-remove" title="Remove selected playlist rows">Remove</button>
+        <button type="button" id="btn-clear" title="Clear playlist">Clear</button>
+      </div>
+    </header>
+
+    <main class="main-panes">
+      <section class="pane library-pane" aria-label="Library file tree">
+        <div class="pane-header">Library</div>
+        <div id="tree" class="tree" role="tree"></div>
+      </section>
+
+      <div class="splitter" id="splitter" role="separator" aria-orientation="vertical"></div>
+
+      <section class="pane playlist-pane" aria-label="Playlist">
+        <div class="pane-header">Playlist</div>
+        <div class="playlist-scroll">
+          <table class="playlist-table" id="playlist-table">
+            <thead>
+              <tr>
+                <th class="col-num">#</th>
+                <th class="col-title">Title</th>
+                <th class="col-artist">Artist</th>
+                <th class="col-album">Album</th>
+                <th class="col-dur">Duration</th>
+              </tr>
+            </thead>
+            <tbody id="playlist-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="player-bar">
+      <div class="now-playing">
+        <img id="cover-art" class="cover-art" src="/static/img/placeholder.svg" alt="" />
+        <div class="track-meta">
+          <div id="np-title" class="np-title">—</div>
+          <div id="np-artist" class="np-artist">No track</div>
+        </div>
+      </div>
+
+      <div class="transport">
+        <div class="transport-buttons">
+          <button type="button" id="btn-prev" title="Previous">⏮</button>
+          <button type="button" id="btn-play" title="Play / Pause">▶</button>
+          <button type="button" id="btn-next" title="Next">⏭</button>
+        </div>
+        <div class="seek-row">
+          <span id="time-cur" class="time">0:00</span>
+          <input type="range" id="seek" min="0" max="1000" value="0" step="1" />
+          <span id="time-total" class="time">0:00</span>
+        </div>
+      </div>
+
+      <div class="player-extras">
+        <label class="vol-label" title="Volume">
+          Vol
+          <input type="range" id="volume" min="0" max="1" step="0.01" value="1" />
+        </label>
+        <button type="button" id="btn-shuffle" class="toggle" title="Shuffle" aria-pressed="false">Shuffle</button>
+        <button type="button" id="btn-repeat" class="toggle" title="Repeat" data-mode="off" aria-pressed="false">Repeat</button>
+      </div>
+    </footer>
+  </div>
+
+  <audio id="audio" preload="metadata"></audio>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
