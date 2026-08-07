@@ -36,6 +36,9 @@ async def lifespan(app: FastAPI):
     transcoder: Transcoder = app.state.transcoder
 
     tool_versions = check_dependencies()
+    aac_encoder = tool_versions.pop("_aac_encoder_name", None)
+    if aac_encoder:
+        transcoder.configure_encoders(aac_encoder)
     settings.validate_library()
     transcoder.start()
 

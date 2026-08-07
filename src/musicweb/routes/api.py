@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, Response
 from musicweb.cover import get_cover_bytes
 from musicweb.library import PathEscapeError
 from musicweb.metadata import read_metadata
+from musicweb.transcode import DEFAULT_PROFILE_TAG, PROFILES, get_profile
 
 router = APIRouter(prefix="/api")
 
@@ -77,6 +78,12 @@ async def meta(
 async def stream(
     request: Request,
     path: str = Query(..., description="Library-relative audio file path"),
+    codec: str = Query(
+        default=DEFAULT_PROFILE_TAG,
+        description=(
+            "Stream profile tag: aac_256_44100 | opus_192_48000"
+        ),
+    ),
 ) -> FileResponse:
     lib = _library(request)
     transcoder = _transcoder(request)
@@ -88,17 +95,31 @@ async def stream(
     if not resolved.is_file() or not lib.is_audio(resolved):
         raise HTTPException(status_code=404, detail="Audio file not found")
 
+    if codec not in PROFILES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported codec profile {codec!r}; "
+                f"allowed: {sorted(PROFILES)}"
+            ),
+        )
+
+    profile = get_profile(codec)
     try:
-        opus_path = transcoder.ensure_opus(resolved, path)
+        media_path = transcoder.ensure_stream(
+            resolved, path, profile_tag=codec
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return FileResponse(
-        path=opus_path,
-        media_type="audio/ogg",
-        filename=f"{resolved.stem}.opus",
+        path=media_path,
+        media_type=profile.media_type,
+        filename=f"{resolved.stem}.{profile.extension}",
         headers={
             "Accept-Ranges": "bytes",
             "Cache-Control": "private, max-age=3600",

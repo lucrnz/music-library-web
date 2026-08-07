@@ -6,7 +6,10 @@
   "use strict";
 
   const STORAGE_KEY = "musicweb.playlist.v1";
+  const CODEC_STORAGE_KEY = "musicweb.streamCodec";
   const PLACEHOLDER_COVER = "/static/img/placeholder.svg";
+  const ALLOWED_CODECS = new Set(["aac_256_44100", "opus_192_48000"]);
+  const DEFAULT_CODEC = "aac_256_44100";
 
   // ── State ──────────────────────────────────────────────────────────
   /** @type {{ path: string, title: string, artist: string, album: string, duration: number|null }[]} */
@@ -19,6 +22,8 @@
   let shuffleOrder = [];
   let shufflePos = -1;
   let seeking = false;
+  /** Stream profile tag for /api/stream (?codec=). */
+  let streamCodec = DEFAULT_CODEC;
 
   /** Tree selection: path -> 'dir' | 'file' */
   const treeSelected = new Map();
@@ -38,6 +43,7 @@
   const timeTotal = $("time-total");
   const seek = $("seek");
   const volume = $("volume");
+  const streamCodecEl = $("stream-codec");
   const btnPlay = $("btn-play");
   const btnShuffle = $("btn-shuffle");
   const btnRepeat = $("btn-repeat");
@@ -477,7 +483,7 @@
     renderPlaylist();
     savePlaylist();
 
-    const url = `/api/stream?path=${encodePath(track.path)}`;
+    const url = `/api/stream?path=${encodePath(track.path)}&codec=${encodeURIComponent(streamCodec)}`;
     audio.src = url;
     try {
       await audio.play();
@@ -605,6 +611,42 @@
     audio.volume = Number(volume.value);
   });
 
+  function loadStreamCodec() {
+    try {
+      const raw = sessionStorage.getItem(CODEC_STORAGE_KEY);
+      if (raw == null) {
+        // One-time map from legacy sample-rate preference
+        const legacy = sessionStorage.getItem("musicweb.sampleRate");
+        if (legacy === "48000") streamCodec = "opus_192_48000";
+        else if (legacy === "44100") streamCodec = "aac_256_44100";
+        return;
+      }
+      if (ALLOWED_CODECS.has(raw)) streamCodec = raw;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function saveStreamCodec() {
+    try {
+      sessionStorage.setItem(CODEC_STORAGE_KEY, streamCodec);
+    } catch {
+      /* ignore quota */
+    }
+  }
+
+  streamCodecEl.addEventListener("change", () => {
+    const v = streamCodecEl.value;
+    if (!ALLOWED_CODECS.has(v)) return;
+    if (v === streamCodec) return;
+    streamCodec = v;
+    saveStreamCodec();
+    // Reload current track so the user gets the new codec stream.
+    if (currentIndex >= 0 && currentIndex < playlist.length) {
+      playIndex(currentIndex);
+    }
+  });
+
   // ── Toolbar buttons ────────────────────────────────────────────────
   $("btn-play").addEventListener("click", togglePlay);
   $("btn-next").addEventListener("click", playNext);
@@ -682,6 +724,8 @@
   });
 
   // ── Boot ───────────────────────────────────────────────────────────
+  loadStreamCodec();
+  streamCodecEl.value = streamCodec;
   loadPlaylist();
   renderPlaylist();
   updateTransportUI();

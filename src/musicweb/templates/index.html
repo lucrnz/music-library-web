@@ -74,6 +74,17 @@
           Vol
           <input type="range" id="volume" min="0" max="1" step="0.01" value="1" />
         </label>
+        <label class="codec-label" title="Stream codec and sample rate">
+          Codec
+          <select id="stream-codec" aria-label="Stream codec">
+            <option value="aac_256_44100" selected>
+              AAC-LC VBR 256kbps 44.1kHz — Recommended for desktop
+            </option>
+            <option value="opus_192_48000">
+              OPUS 192kbps 48kHz — Recommended for mobile
+            </option>
+          </select>
+        </label>
         <button type="button" id="btn-shuffle" class="toggle" title="Shuffle" aria-pressed="false">Shuffle</button>
         <button type="button" id="btn-repeat" class="toggle" title="Repeat" data-mode="off" aria-pressed="false">Repeat</button>
       </div>
