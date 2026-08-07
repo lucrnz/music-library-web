@@ -84,6 +84,7 @@ Press **Ctrl+C** for a clean shutdown. The temporary transcode cache is always d
 
 - Source library is expected to be lossless (FLAC, ALAC in `.m4a`).
 - **Stream URL:** `/api/stream?path=…&codec=aac_256_44100|opus_192_48000|opus_160_48000|flac_16_44100|flac_16_48000`
+- **Prewarm URL:** `POST /api/transcode/prepare` with `{"paths": [...], "codec": "…", "replace": false}` — queues background transcodes (deduped, pending queue capped at 300; `replace: true` drops all pending prewarm jobs, used on codec change). Returns per-status counts. The frontend fires this when tracks are added to the playlist and for the whole playlist after a codec change.
 - **AAC encoder selection** (startup): prefer **`aac_at`** (Apple) when present, else **`libfdk_aac`**. Fail if neither is available. The chosen encoder is logged in the startup banner.
 - **Transcode path** (one ffmpeg process):
   1. `aresample=resampler=soxr:precision=28:cutoff=0.95:dither_method=shibata` (≈ SoX `rate -v` + Shibata dither)
@@ -92,4 +93,5 @@ Press **Ctrl+C** for a clean shutdown. The temporary transcode cache is always d
   4. When the source sample rate already matches the target, ffmpeg **skips** the rate-conversion step (format/dither may still apply)
 - Cache filenames include the profile tag, e.g. `{hash}.aac_256_44100.m4a`, `{hash}.opus_192_48000.opus`, `{hash}.flac_16_44100.flac`
 - Concurrent requests for the same track+profile share one encode
+- All encodes run on a single background worker (serial by design — encodes are CPU-bound) fed by a two-tier queue: play requests first (newest first), then prewarm requests (FIFO). A play request promotes its queued job, or preempts a running prewarm encode — the `.partial` file is deleted (never renamed, so nothing corrupt is ever served) and the canceled job restarts after the urgent work
 - Seeking uses HTTP Range on completed cache files

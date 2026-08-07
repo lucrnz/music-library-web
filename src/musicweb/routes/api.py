@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 
 from musicweb.cover import get_cover_full, get_cover_thumbnail
 from musicweb.library import PathEscapeError
@@ -107,8 +109,8 @@ async def stream(
 
     profile = get_profile(codec)
     try:
-        media_path = transcoder.ensure_stream(
-            resolved, path, profile_tag=codec
+        media_path = await run_in_threadpool(
+            transcoder.ensure_stream, resolved, path, profile_tag=codec
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -126,6 +128,57 @@ async def stream(
             "Cache-Control": "private, max-age=3600",
         },
     )
+
+
+class PrepareRequest(BaseModel):
+    """Batch prewarm request: queue background transcodes for playlist paths."""
+
+    paths: list[str] = Field(default_factory=list, max_length=1000)
+    codec: str = DEFAULT_PROFILE_TAG
+    replace: bool = False  # drop all pending prewarm jobs first (codec change)
+
+
+@router.post("/transcode/prepare")
+async def transcode_prepare(request: Request, payload: PrepareRequest) -> dict:
+    """
+    Queue background transcodes so playback starts instantly later.
+
+    Best-effort: non-audio/missing paths are skipped, already-cached or
+    in-flight jobs are not duplicated, and a pending-queue cap applies.
+    Play requests (/api/stream) always preempt this queue.
+    """
+    lib = _library(request)
+    transcoder = _transcoder(request)
+
+    if payload.codec not in PROFILES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported codec profile {payload.codec!r}; "
+                f"allowed: {sorted(PROFILES)}"
+            ),
+        )
+
+    if payload.replace:
+        transcoder.drop_pending_prewarm()
+
+    counts = {"queued": 0, "already": 0, "ready": 0, "skipped": 0}
+    for rel_path in payload.paths:
+        try:
+            resolved = lib.resolve(rel_path)
+        except PathEscapeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not lib.is_audio(resolved):
+            counts["skipped"] += 1
+            continue
+        try:
+            result = transcoder.prepare(
+                resolved, rel_path, profile_tag=payload.codec
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        counts[result] += 1
+    return counts
 
 
 @router.get("/cover")

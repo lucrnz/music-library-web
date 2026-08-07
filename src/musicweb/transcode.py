@@ -13,6 +13,12 @@ sample rate already matches the target, ffmpeg skips the rate-conversion
 step automatically.
 
 Cache files live under a process temp dir and are wiped on shutdown.
+
+All encodes run on a single background worker fed by a two-tier priority
+queue: play requests (urgent, newest first) ahead of playlist prewarm
+requests (FIFO). A play request promotes its queued job or preempts a
+running prewarm encode (canceled cleanly — the .partial is deleted, never
+renamed — and re-queued to restart afterwards).
 """
 
 from __future__ import annotations
@@ -24,7 +30,8 @@ import shutil
 import subprocess
 import tempfile
 import threading
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -103,16 +110,52 @@ def get_profile(tag: str) -> StreamProfile:
     return profile
 
 
+class TranscodeCanceled(Exception):
+    """Internal: a running encode was preempted by an urgent request."""
+
+
+@dataclass
+class _Job:
+    """One encode request (play or prewarm), tracked until completion."""
+
+    key: str
+    source: Path
+    relative_path: str
+    profile: StreamProfile
+    urgent: bool
+    done: threading.Event = field(default_factory=threading.Event)
+    error: Exception | None = None
+    out_path: Path | None = None
+    proc: subprocess.Popen | None = None
+    cancel_requested: bool = False
+
+
 class Transcoder:
-    """Transcode library audio into tagged cache files (AAC, Opus, or FLAC)."""
+    """Transcode library audio into tagged cache files (AAC, Opus, or FLAC).
+
+    All encodes flow through a single background worker with two priority
+    tiers: urgent (play requests, newest first) and prewarm (FIFO). A play
+    request for a queued job promotes it to the urgent tier; a play request
+    for any other track preempts a running *prewarm* encode, which is then
+    re-queued to restart after the urgent work drains. Encodes write a
+    ``.partial`` file that is atomically renamed only on success, so a
+    canceled encode never leaves a servable corrupt file behind.
+    """
+
+    MAX_PENDING_PREWARM = 300
 
     def __init__(self) -> None:
         self._temp_dir: Path | None = None
-        self._locks: dict[str, threading.Lock] = {}
-        self._locks_guard = threading.Lock()
         self._active: dict[str, subprocess.Popen] = {}
         self._active_guard = threading.Lock()
         self._closed = False
+        # Job queue: all guarded by _queue_cond
+        self._queue_cond = threading.Condition()
+        self._urgent: deque[_Job] = deque()
+        self._prewarm: deque[_Job] = deque()
+        self._jobs: dict[str, _Job] = {}
+        self._current: _Job | None = None
+        self._worker: threading.Thread | None = None
         # Set by configure_encoders() after dependency check
         self._aac_encoder: str | None = None
 
@@ -139,12 +182,27 @@ class Transcoder:
             return self._temp_dir
         self._temp_dir = Path(tempfile.mkdtemp(prefix="musicweb-"))
         self._closed = False
+        self._worker = threading.Thread(
+            target=self._worker_loop, name="transcode-worker", daemon=True
+        )
+        self._worker.start()
         logger.info("Transcode cache directory: %s", self._temp_dir)
         return self._temp_dir
 
     def shutdown(self) -> None:
-        """Kill in-flight helper processes and remove the entire temp directory."""
+        """Fail pending jobs, kill in-flight processes, remove the temp dir."""
         self._closed = True
+        with self._queue_cond:
+            for queue in (self._urgent, self._prewarm):
+                while queue:
+                    job = queue.popleft()
+                    self._jobs.pop(job.key, None)
+                    job.error = RuntimeError("Transcoder is shut down")
+                    job.done.set()
+            if self._current is not None:
+                self._current.cancel_requested = True
+            self._queue_cond.notify_all()
+
         with self._active_guard:
             procs = list(self._active.items())
             self._active.clear()
@@ -158,6 +216,10 @@ class Transcoder:
                     proc.kill()
                     proc.wait(timeout=2)
 
+        if self._worker is not None:
+            self._worker.join(timeout=5)
+            self._worker = None
+
         if self._temp_dir is not None and self._temp_dir.exists():
             logger.info("Cleaning up transcode cache: %s", self._temp_dir)
             shutil.rmtree(self._temp_dir, ignore_errors=True)
@@ -167,11 +229,12 @@ class Transcoder:
         payload = f"{relative_path}\0{profile_tag}".encode("utf-8")
         return hashlib.sha256(payload).hexdigest()
 
-    def _lock_for(self, key: str) -> threading.Lock:
-        with self._locks_guard:
-            if key not in self._locks:
-                self._locks[key] = threading.Lock()
-            return self._locks[key]
+    def _out_path(self, key: str, profile: StreamProfile) -> Path:
+        return self.temp_dir / f"{key}.{profile.tag}.{profile.extension}"
+
+    @staticmethod
+    def _cached(out_path: Path) -> bool:
+        return out_path.is_file() and out_path.stat().st_size > 0
 
     def _run_tracked(
         self,
@@ -179,8 +242,14 @@ class Transcoder:
         cmd: list[str],
         *,
         label: str,
+        job: _Job | None = None,
     ) -> None:
-        """Run a subprocess, tracking it for clean shutdown; raise on failure."""
+        """Run a subprocess, tracking it for clean shutdown; raise on failure.
+
+        When ``job`` is given, the process handle is exposed on it so the job
+        can be preempted; a canceled job raises TranscodeCanceled instead of a
+        generic ffmpeg error (SIGTERM makes the exit code non-zero).
+        """
         if self._closed:
             raise RuntimeError("Transcoder is shut down")
 
@@ -199,6 +268,8 @@ class Transcoder:
         track_key = f"{key}:{label}"
         with self._active_guard:
             self._active[track_key] = proc
+        if job is not None:
+            job.proc = proc
 
         try:
             _, stderr = proc.communicate()
@@ -206,6 +277,8 @@ class Transcoder:
             with self._active_guard:
                 self._active.pop(track_key, None)
 
+        if job is not None and job.cancel_requested:
+            raise TranscodeCanceled(f"{label} preempted for {key}")
         if self._closed:
             raise RuntimeError("Transcoder is shut down")
 
@@ -292,6 +365,59 @@ class Transcoder:
 
         return cmd
 
+    def prepare(
+        self,
+        source: Path,
+        relative_path: str,
+        *,
+        profile_tag: str = DEFAULT_PROFILE_TAG,
+    ) -> str:
+        """
+        Queue a background (prewarm) encode; never blocks on ffmpeg.
+
+        Returns "ready" (cached), "already" (queued or running),
+        "queued" (newly enqueued), or "skipped" (pending-prewarm cap hit).
+        """
+        if self._closed or self._temp_dir is None:
+            raise RuntimeError("Transcoder is shut down")
+        profile = get_profile(profile_tag)
+        key = self._cache_key(relative_path, profile.tag)
+        if self._cached(self._out_path(key, profile)):
+            return "ready"
+
+        with self._queue_cond:
+            if self._closed:
+                raise RuntimeError("Transcoder is shut down")
+            if key in self._jobs:
+                return "already"
+            if len(self._prewarm) >= self.MAX_PENDING_PREWARM:
+                return "skipped"
+            job = _Job(
+                key=key,
+                source=source,
+                relative_path=relative_path,
+                profile=profile,
+                urgent=False,
+            )
+            self._jobs[key] = job
+            self._prewarm.append(job)
+            self._queue_cond.notify()
+            return "queued"
+
+    def drop_pending_prewarm(self) -> int:
+        """Drop all pending prewarm jobs (e.g. codec changed). Returns count."""
+        with self._queue_cond:
+            dropped = 0
+            while self._prewarm:
+                job = self._prewarm.popleft()
+                self._jobs.pop(job.key, None)
+                job.error = RuntimeError("Prewarm request dropped")
+                job.done.set()
+                dropped += 1
+        if dropped:
+            logger.info("Dropped %d pending prewarm job(s)", dropped)
+        return dropped
+
     def ensure_stream(
         self,
         source: Path,
@@ -302,8 +428,10 @@ class Transcoder:
         """
         Return path to a cached stream file, encoding if needed.
 
-        Cache keys and filenames include the profile tag so AAC, Opus, and
-        FLAC variants of the same track never collide.
+        Blocks until the encode finishes. A queued prewarm job for this
+        track+profile is promoted to the urgent tier; a running prewarm
+        encode of anything else is preempted (canceled cleanly, then
+        re-queued) so playback starts as soon as possible.
         """
         if self._closed or self._temp_dir is None:
             raise RuntimeError("Transcoder is shut down")
@@ -312,49 +440,147 @@ class Transcoder:
 
         profile = get_profile(profile_tag)
         key = self._cache_key(relative_path, profile.tag)
-        out_name = f"{key}.{profile.tag}.{profile.extension}"
-        out_path = self.temp_dir / out_name
-        if out_path.is_file() and out_path.stat().st_size > 0:
+        out_path = self._out_path(key, profile)
+        if self._cached(out_path):
             return out_path
 
-        lock = self._lock_for(key)
-        with lock:
+        with self._queue_cond:
             if self._closed:
                 raise RuntimeError("Transcoder is shut down")
-            if out_path.is_file() and out_path.stat().st_size > 0:
-                return out_path
-
-            if profile.kind == "aac":
-                encoder_label = self.aac_encoder
-            elif profile.kind == "opus":
-                encoder_label = "libopus"
+            job = self._jobs.get(key)
+            if job is None:
+                job = _Job(
+                    key=key,
+                    source=source,
+                    relative_path=relative_path,
+                    profile=profile,
+                    urgent=True,
+                )
+                self._jobs[key] = job
+                self._urgent.appendleft(job)
             else:
-                encoder_label = "flac"
-            logger.info(
-                "Transcode %s → profile=%s encoder=%s ar=%s",
-                relative_path,
-                profile.tag,
-                encoder_label,
-                profile.sample_rate,
-            )
+                job.urgent = True
+                try:
+                    self._prewarm.remove(job)
+                except ValueError:
+                    pass  # already running or already urgent
+                else:
+                    self._urgent.appendleft(job)
 
-            partial = self.temp_dir / f"{out_name}.partial"
+            current = self._current
+            if current is not None and current is not job and not current.urgent:
+                self._request_cancel(current)
+            self._queue_cond.notify_all()
+
+        job.done.wait()
+        if job.error is not None:
+            raise job.error
+        if job.out_path is None:  # defensive; done without error implies output
+            raise RuntimeError(f"Transcode finished without output for {source.name}")
+        return job.out_path
+
+    def _request_cancel(self, job: _Job) -> None:
+        """Ask a running job's ffmpeg to stop; the worker loop cleans up."""
+        job.cancel_requested = True
+        proc = job.proc
+        if proc is not None and proc.poll() is None:
+            logger.info(
+                "Preempting prewarm transcode of %s (pid=%s)",
+                job.relative_path,
+                proc.pid,
+            )
+            proc.terminate()
+
+    def _worker_loop(self) -> None:
+        """Single consumer: urgent tier (newest first), then prewarm (FIFO)."""
+        while True:
+            with self._queue_cond:
+                while (
+                    not self._closed and not self._urgent and not self._prewarm
+                ):
+                    self._queue_cond.wait()
+                if self._closed:
+                    return
+                if self._urgent:
+                    job = self._urgent.popleft()
+                else:
+                    job = self._prewarm.popleft()
+                self._current = job
+
             try:
-                if partial.exists():
-                    partial.unlink(missing_ok=True)
-                cmd = self._encode_cmd(source, partial, profile)
-                self._run_tracked(key, cmd, label=f"ffmpeg-{profile.tag}")
-                if not partial.is_file() or partial.stat().st_size == 0:
-                    partial.unlink(missing_ok=True)
-                    raise RuntimeError(
-                        f"ffmpeg produced empty output for {source.name} "
-                        f"({profile.tag})"
-                    )
-                partial.replace(out_path)
-                return out_path
-            except Exception:
+                self._run_job(job)
+            except TranscodeCanceled:
+                with self._queue_cond:
+                    self._current = None
+                    self._jobs.pop(job.key, None)
+                    if self._closed:
+                        job.error = RuntimeError("Transcoder is shut down")
+                        job.done.set()
+                    else:
+                        # Re-arm and restart at the head of the prewarm tier
+                        # once urgent work drains (ffmpeg restarts the file).
+                        job.cancel_requested = False
+                        job.proc = None
+                        job.urgent = False
+                        self._jobs[job.key] = job
+                        self._prewarm.appendleft(job)
+                        self._queue_cond.notify()
+            except Exception as exc:
+                logger.warning(
+                    "Transcode failed for %s (%s): %s",
+                    job.relative_path,
+                    job.profile.tag,
+                    exc,
+                )
+                with self._queue_cond:
+                    self._current = None
+                    self._jobs.pop(job.key, None)
+                job.error = exc
+                job.done.set()
+            else:
+                with self._queue_cond:
+                    self._current = None
+                    self._jobs.pop(job.key, None)
+                job.done.set()
+
+    def _run_job(self, job: _Job) -> None:
+        """Encode one job: ffmpeg into a .partial, atomic rename on success."""
+        profile = job.profile
+        out_path = self._out_path(job.key, profile)
+        if profile.kind == "aac":
+            encoder_label = self.aac_encoder
+        elif profile.kind == "opus":
+            encoder_label = "libopus"
+        else:
+            encoder_label = "flac"
+        logger.info(
+            "Transcode %s → profile=%s encoder=%s ar=%s%s",
+            job.relative_path,
+            profile.tag,
+            encoder_label,
+            profile.sample_rate,
+            " (urgent)" if job.urgent else "",
+        )
+
+        partial = self.temp_dir / f"{out_path.name}.partial"
+        try:
+            if partial.exists():
                 partial.unlink(missing_ok=True)
-                raise
+            cmd = self._encode_cmd(job.source, partial, profile)
+            self._run_tracked(
+                job.key, cmd, label=f"ffmpeg-{profile.tag}", job=job
+            )
+            if not partial.is_file() or partial.stat().st_size == 0:
+                partial.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"ffmpeg produced empty output for {job.source.name} "
+                    f"({profile.tag})"
+                )
+            partial.replace(out_path)
+            job.out_path = out_path
+        except Exception:
+            partial.unlink(missing_ok=True)
+            raise
 
 
 def _require_tool(name: str, args: list[str], *, hint: str) -> str:

@@ -34,6 +34,9 @@
   /** Stream profile tag for /api/stream (?codec=). */
   let streamCodec = DEFAULT_CODEC;
 
+  /** "path|codec" pairs already sent to /api/transcode/prepare this session. */
+  const preparedKeys = new Set();
+
   /** Library navigation stack: [{ path, name }] — empty means library root. */
   let navStack = [];
   /** Desktop multi-select in the library: path -> 'dir' | 'file' */
@@ -318,6 +321,24 @@
     }
   }
 
+  /**
+   * Fire-and-forget prewarm: ask the server to background-transcode paths
+   * with the current codec. Playback never depends on this — /api/stream
+   * transcodes on demand and preempts this queue.
+   */
+  function requestPrepare(paths, { replace = false } = {}) {
+    const fresh = paths.filter((p) => !preparedKeys.has(`${p}|${streamCodec}`));
+    if (!fresh.length && !replace) return;
+    const wanted = replace ? paths : fresh;
+    if (!wanted.length) return;
+    wanted.forEach((p) => preparedKeys.add(`${p}|${streamCodec}`));
+    fetch("/api/transcode/prepare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: wanted, codec: streamCodec, replace }),
+    }).catch(() => {});
+  }
+
   async function addPathsToPlaylist(paths) {
     if (!paths.length) return;
     for (const path of paths) {
@@ -334,6 +355,7 @@
     renderPlaylist();
     updateNowPlaying();
     savePlaylist();
+    requestPrepare(paths);
   }
 
   function removeIndices(indices) {
@@ -470,6 +492,62 @@
 
   btnClear.addEventListener("click", clearPlaylist);
 
+  // ── Media Session (OS lock-screen / control-center integration) ────
+  const msSupported = "mediaSession" in navigator;
+
+  /** Publish current track metadata (title/artist/album/artwork) to the OS. */
+  function updateMediaSession() {
+    if (!msSupported) return;
+    const t = currentIndex >= 0 ? playlist[currentIndex] : null;
+    if (!t) {
+      navigator.mediaSession.metadata = null;
+      return;
+    }
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: t.title,
+      artist: t.artist,
+      album: t.album,
+      artwork: [
+        // Stable (non-cache-busted) URLs so the OS can cache artwork
+        { src: coverUrl(t.path, "thumb", false), sizes: "200x200", type: "image/webp" },
+        { src: coverUrl(t.path, "full", false), sizes: "800x800", type: "image/webp" },
+      ],
+    });
+  }
+
+  /** Report position/duration so the OS shows an accurate seek bar. */
+  function updatePositionState() {
+    if (!msSupported || typeof navigator.mediaSession.setPositionState !== "function") {
+      return;
+    }
+    const dur = audio.duration;
+    if (!Number.isFinite(dur) || dur <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: dur,
+        playbackRate: audio.playbackRate || 1,
+        position: Math.min(audio.currentTime, dur),
+      });
+    } catch {
+      /* ignore out-of-range positions */
+    }
+  }
+
+  if (msSupported) {
+    navigator.mediaSession.setActionHandler("play", () => {
+      if (currentIndex < 0 && playlist.length) playIndex(0);
+      else audio.play().catch(console.error);
+    });
+    navigator.mediaSession.setActionHandler("pause", () => audio.pause());
+    navigator.mediaSession.setActionHandler("previoustrack", playPrev);
+    navigator.mediaSession.setActionHandler("nexttrack", playNext);
+    navigator.mediaSession.setActionHandler("seekto", (details) => {
+      if (details.seekTime != null && Number.isFinite(audio.duration)) {
+        audio.currentTime = details.seekTime;
+      }
+    });
+  }
+
   // ── Playback ───────────────────────────────────────────────────────
   function rebuildShuffleOrder(keepCurrent) {
     const n = playlist.length;
@@ -493,6 +571,10 @@
     btnRepeat.dataset.mode = repeat;
     btnRepeat.setAttribute("aria-pressed", repeat !== "off" ? "true" : "false");
     setIcon(btnRepeat, repeat === "one" ? "repeat-one" : "repeat");
+    if (msSupported) {
+      navigator.mediaSession.playbackState =
+        currentIndex >= 0 ? (playing ? "playing" : "paused") : "none";
+    }
     plList.querySelectorAll(".eq").forEach((eq) => {
       eq.classList.toggle("paused", !playing);
     });
@@ -508,6 +590,7 @@
       npArtistFull.textContent = "No track";
       coverArt.src = PLACEHOLDER_COVER;
       coverArtFull.src = PLACEHOLDER_COVER;
+      updateMediaSession();
       return;
     }
     const sub = [t.artist, t.album].filter(Boolean).join(" — ") || "Unknown";
@@ -518,6 +601,7 @@
     // Mini player: small server-side thumbnail; sheet: full extracted art
     coverArt.src = coverUrl(t.path, "thumb");
     coverArtFull.src = coverUrl(t.path, "full");
+    updateMediaSession();
   }
 
   function stopPlayback() {
@@ -643,9 +727,11 @@
       timeTotal.textContent = formatTime(dur);
       seek.value = String(Math.round((cur / dur) * 1000));
     }
+    updatePositionState();
   });
   audio.addEventListener("loadedmetadata", () => {
     timeTotal.textContent = formatTime(audio.duration);
+    updatePositionState();
     if (currentIndex >= 0 && playlist[currentIndex] && !playlist[currentIndex].duration) {
       playlist[currentIndex].duration = audio.duration;
       renderPlaylist();
@@ -742,6 +828,11 @@
     streamCodec = v;
     saveStreamCodec();
     closeSettings();
+    // Re-transcode the whole playlist with the new codec: drop stale-codec
+    // pending jobs (replace) and requeue everything in playlist order. The
+    // playIndex reload below makes the current track urgent, so it goes first.
+    preparedKeys.clear();
+    requestPrepare(playlist.map((t) => t.path), { replace: true });
     // Reload current track so the user gets the new codec stream.
     if (currentIndex >= 0 && currentIndex < playlist.length) {
       playIndex(currentIndex);
