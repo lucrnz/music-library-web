@@ -128,6 +128,7 @@ class _Job:
     out_path: Path | None = None
     proc: subprocess.Popen | None = None
     cancel_requested: bool = False
+    purged: bool = False  # set by clear_cache(): never re-queue this job
 
 
 class Transcoder:
@@ -418,6 +419,43 @@ class Transcoder:
             logger.info("Dropped %d pending prewarm job(s)", dropped)
         return dropped
 
+    def clear_cache(self) -> int:
+        """Drop every queued job, cancel any running encode, and wipe the
+        cache directory contents. Returns the number of entries removed."""
+        if self._temp_dir is None:
+            raise RuntimeError("Transcoder is shut down")
+
+        with self._queue_cond:
+            for queue in (self._urgent, self._prewarm):
+                while queue:
+                    job = queue.popleft()
+                    self._jobs.pop(job.key, None)
+                    job.error = RuntimeError("Cache cleared")
+                    job.done.set()
+            current = self._current
+            if current is not None:
+                # Cancel and mark purged so the worker fails it instead of
+                # re-queueing it at the head of the prewarm tier.
+                current.purged = True
+                self._request_cancel(current)
+            while self._current is not None:
+                self._queue_cond.wait(timeout=5)
+
+        removed = 0
+        for child in self.temp_dir.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                try:
+                    child.unlink()
+                except OSError:
+                    continue
+            removed += 1
+        logger.info(
+            "Cleared transcode cache: %s (%d entries)", self.temp_dir, removed
+        )
+        return removed
+
     def ensure_stream(
         self,
         source: Path,
@@ -516,6 +554,10 @@ class Transcoder:
                     if self._closed:
                         job.error = RuntimeError("Transcoder is shut down")
                         job.done.set()
+                    elif job.purged:
+                        # Cache was cleared: fail the job, never re-queue it.
+                        job.error = RuntimeError("Cache cleared")
+                        job.done.set()
                     else:
                         # Re-arm and restart at the head of the prewarm tier
                         # once urgent work drains (ffmpeg restarts the file).
@@ -524,7 +566,7 @@ class Transcoder:
                         job.urgent = False
                         self._jobs[job.key] = job
                         self._prewarm.appendleft(job)
-                        self._queue_cond.notify()
+                    self._queue_cond.notify_all()
             except Exception as exc:
                 logger.warning(
                     "Transcode failed for %s (%s): %s",
@@ -535,12 +577,14 @@ class Transcoder:
                 with self._queue_cond:
                     self._current = None
                     self._jobs.pop(job.key, None)
+                    self._queue_cond.notify_all()
                 job.error = exc
                 job.done.set()
             else:
                 with self._queue_cond:
                     self._current = None
                     self._jobs.pop(job.key, None)
+                    self._queue_cond.notify_all()
                 job.done.set()
 
     def _run_job(self, job: _Job) -> None:

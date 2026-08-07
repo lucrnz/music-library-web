@@ -384,6 +384,9 @@
     renderPlaylist();
     savePlaylist();
     stopPlayback();
+    // Cached transcodes only exist to serve the playlist — wipe them too.
+    preparedKeys.clear();
+    fetch("/api/cache/clear", { method: "POST" }).catch(() => {});
   }
 
   function renderPlaylist() {

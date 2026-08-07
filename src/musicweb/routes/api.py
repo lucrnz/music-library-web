@@ -181,6 +181,22 @@ async def transcode_prepare(request: Request, payload: PrepareRequest) -> dict:
     return counts
 
 
+@router.post("/cache/clear")
+async def cache_clear(request: Request) -> dict:
+    """
+    Drop every queued/running transcode and wipe the cache directory.
+
+    Called when the playlist is cleared (single-user app): the prewarmed
+    files only exist to serve the current playlist, so they are deleted.
+    """
+    transcoder = _transcoder(request)
+    try:
+        removed = await run_in_threadpool(transcoder.clear_cache)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"removed": removed}
+
+
 @router.get("/cover")
 async def cover(
     request: Request,
