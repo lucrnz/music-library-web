@@ -50,7 +50,7 @@ Tools   :
   - flac encoder: flac
 ```
 
-Press **Ctrl+C** for a clean shutdown. The temporary transcode cache is always deleted on exit.
+Press **Ctrl+C** for a clean shutdown. Temporary caches live under one process root (`streams/` + `covers/`) and are always deleted on exit.
 
 ## Configuration (`.env`)
 
@@ -70,14 +70,16 @@ Press **Ctrl+C** for a clean shutdown. The temporary transcode cache is always d
 - Cover art: embedded (ffmpeg) or folder `cover.jpg` / `cover.png` / etc., always served as WebP
   - Now-playing sheet: 800×800 lossless WebP (LANCZOS resize) via `/api/cover?path=…&size=full`
   - Mini-player / playlist thumbnails: 200×200 WebP quality 90 via `/api/cover?path=…&size=thumb`
+  - **Album-keyed process cache**: tracks that share the same album *title* tag share one full + thumbnail WebP pair (extracted once, ready to serve). No album tag → per-file key. Stored under the process cache `covers/` subdir (same root as streams; wiped on shutdown)
 - Tags via mutagen (title, artist, album, duration)
 - Selectable **Codec** profiles (player bar; default AAC):
-  - **`aac_256_44100`** — AAC-LC VBR ~256 kbps @ **44.1 kHz**
-  - **`opus_192_48000`** — Opus VBR 192 kbps @ **48 kHz**
-  - **`opus_160_48000`** — Opus VBR 160 kbps @ **48 kHz**
-  - **`flac_16_44100`** — FLAC 16-bit @ **44.1 kHz** (lossless stream)
-  - **`flac_16_48000`** — FLAC 16-bit @ **48 kHz** (lossless stream)
-- On-demand single-pass ffmpeg encode; process cache wiped on shutdown
+  - **`aac_256_44100`** — AAC 256k 44.1kHz
+  - **`opus_192_48000`** — Opus 192k 48kHz
+  - **`opus_160_48000`** — Opus 160k 48kHz
+  - **`flac_16_44100`** — FLAC 44.1kHz
+  - **`flac_16_48000`** — FLAC 48kHz
+- On-demand single-pass ffmpeg encode into `<cache>/streams/`; process cache wiped on shutdown
+- Session caches share one root (`streams/`, `covers/`). Scoped clear: `POST /api/cache/clear?scope=streams` (playlist clear), `?scope=covers`, or both (`?scope=streams&scope=covers`)
 - No authentication (LAN trust only — do not expose to the public internet)
 
 ## Notes
@@ -91,7 +93,8 @@ Press **Ctrl+C** for a clean shutdown. The temporary transcode cache is always d
   2. Force 16-bit + profile sample rate (`-sample_fmt s16 -ar …`)
   3. Encode AAC, Opus, or FLAC into a tagged cache file (FLAC uses ffmpeg default compression; level is not set)
   4. When the source sample rate already matches the target, ffmpeg **skips** the rate-conversion step (format/dither may still apply)
-- Cache filenames include the profile tag, e.g. `{hash}.aac_256_44100.m4a`, `{hash}.opus_192_48000.opus`, `{hash}.flac_16_44100.flac`
+- Stream cache filenames live under `<cache>/streams/` and include the profile tag, e.g. `{hash}.aac_256_44100.m4a`, `{hash}.opus_192_48000.opus`, `{hash}.flac_16_44100.flac`
+- **Cache clear:** `POST /api/cache/clear?scope=streams` and/or `?scope=covers` (required; repeat for both). Response: `{"removed": {"streams": N, …}, "scopes": […]}`
 - Concurrent requests for the same track+profile share one encode
 - All encodes run on a single background worker (serial by design — encodes are CPU-bound) fed by a two-tier queue: play requests first (newest first), then prewarm requests (FIFO). A play request promotes its queued job, or preempts a running prewarm encode — the `.partial` file is deleted (never renamed, so nothing corrupt is ever served) and the canceled job restarts after the urgent work
 - Seeking uses HTTP Range on completed cache files
