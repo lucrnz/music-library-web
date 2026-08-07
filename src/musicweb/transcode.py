@@ -12,7 +12,8 @@ High-quality rate/bit-depth conversion uses libsoxr through aresample
 sample rate already matches the target, ffmpeg skips the rate-conversion
 step automatically.
 
-Cache files live under a process temp dir and are wiped on shutdown.
+Cache files live under the process cache ``streams/`` subdirectory and are
+wiped with the process root on shutdown (or via scoped ``/api/cache/clear``).
 
 All encodes run on a single background worker fed by a two-tier priority
 queue: play requests (urgent, newest first) ahead of playlist prewarm
@@ -28,7 +29,6 @@ import logging
 import re
 import shutil
 import subprocess
-import tempfile
 import threading
 from collections import deque
 from dataclasses import dataclass, field
@@ -54,49 +54,58 @@ class StreamProfile:
     extension: str
     media_type: str
     kind: str  # "aac" | "opus" | "flac"
+    label: str  # short UI label
 
 
 PROFILES: dict[str, StreamProfile] = {
-    "aac_256_44100": StreamProfile(
-        tag="aac_256_44100",
-        sample_rate=44100,
-        bitrate_kbps=256,
-        extension="m4a",
-        media_type="audio/mp4",
-        kind="aac",
-    ),
-    "opus_192_48000": StreamProfile(
-        tag="opus_192_48000",
-        sample_rate=48000,
-        bitrate_kbps=192,
-        extension="opus",
-        media_type="audio/ogg",
-        kind="opus",
-    ),
-    "opus_160_48000": StreamProfile(
-        tag="opus_160_48000",
-        sample_rate=48000,
-        bitrate_kbps=160,
-        extension="opus",
-        media_type="audio/ogg",
-        kind="opus",
-    ),
-    "flac_16_44100": StreamProfile(
-        tag="flac_16_44100",
-        sample_rate=44100,
-        bitrate_kbps=0,
-        extension="flac",
-        media_type="audio/flac",
-        kind="flac",
-    ),
-    "flac_16_48000": StreamProfile(
-        tag="flac_16_48000",
-        sample_rate=48000,
-        bitrate_kbps=0,
-        extension="flac",
-        media_type="audio/flac",
-        kind="flac",
-    ),
+    p.tag: p
+    for p in [
+        StreamProfile(
+            tag="aac_256_44100",
+            sample_rate=44100,
+            bitrate_kbps=256,
+            extension="m4a",
+            media_type="audio/mp4",
+            kind="aac",
+            label="AAC 256k 44.1kHz",
+        ),
+        StreamProfile(
+            tag="opus_192_48000",
+            sample_rate=48000,
+            bitrate_kbps=192,
+            extension="opus",
+            media_type="audio/ogg",
+            kind="opus",
+            label="Opus 192k 48kHz",
+        ),
+        StreamProfile(
+            tag="opus_160_48000",
+            sample_rate=48000,
+            bitrate_kbps=160,
+            extension="opus",
+            media_type="audio/ogg",
+            kind="opus",
+            label="Opus 160k 48kHz",
+        ),
+        StreamProfile(
+            tag="flac_16_44100",
+            sample_rate=44100,
+            bitrate_kbps=0,
+            extension="flac",
+            media_type="audio/flac",
+            kind="flac",
+            label="FLAC 44.1kHz",
+        ),
+        StreamProfile(
+            tag="flac_16_48000",
+            sample_rate=48000,
+            bitrate_kbps=0,
+            extension="flac",
+            media_type="audio/flac",
+            kind="flac",
+            label="FLAC 48kHz",
+        ),
+    ]
 }
 
 
@@ -147,8 +156,6 @@ class Transcoder:
 
     def __init__(self) -> None:
         self._temp_dir: Path | None = None
-        self._active: dict[str, subprocess.Popen] = {}
-        self._active_guard = threading.Lock()
         self._closed = False
         # Job queue: all guarded by _queue_cond
         self._queue_cond = threading.Condition()
@@ -178,53 +185,54 @@ class Transcoder:
             raise ValueError(f"Unsupported AAC encoder: {aac_encoder}")
         self._aac_encoder = aac_encoder
 
-    def start(self) -> Path:
+    def start(self, cache_dir: Path) -> Path:
+        """Use an existing streams/ directory and start the encode worker."""
         if self._temp_dir is not None:
             return self._temp_dir
-        self._temp_dir = Path(tempfile.mkdtemp(prefix="musicweb-"))
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        self._temp_dir = cache_dir
         self._closed = False
         self._worker = threading.Thread(
             target=self._worker_loop, name="transcode-worker", daemon=True
         )
         self._worker.start()
-        logger.info("Transcode cache directory: %s", self._temp_dir)
+        logger.info("Stream cache directory: %s", self._temp_dir)
         return self._temp_dir
 
     def shutdown(self) -> None:
-        """Fail pending jobs, kill in-flight processes, remove the temp dir."""
+        """Fail pending jobs and kill in-flight processes.
+
+        Disk is owned by ProcessCache (wiped on its shutdown).
+        """
         self._closed = True
         with self._queue_cond:
-            for queue in (self._urgent, self._prewarm):
-                while queue:
-                    job = queue.popleft()
-                    self._jobs.pop(job.key, None)
-                    job.error = RuntimeError("Transcoder is shut down")
-                    job.done.set()
+            self._drain_queues(
+                RuntimeError("Transcoder is shut down"),
+                self._urgent,
+                self._prewarm,
+            )
             if self._current is not None:
-                self._current.cancel_requested = True
+                # Sets cancel_requested and terminates the job's process.
+                self._request_cancel(self._current)
             self._queue_cond.notify_all()
-
-        with self._active_guard:
-            procs = list(self._active.items())
-            self._active.clear()
-        for key, proc in procs:
-            if proc.poll() is None:
-                logger.info("Terminating process for %s (pid=%s)", key, proc.pid)
-                proc.terminate()
-                try:
-                    proc.wait(timeout=3)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    proc.wait(timeout=2)
 
         if self._worker is not None:
             self._worker.join(timeout=5)
             self._worker = None
 
-        if self._temp_dir is not None and self._temp_dir.exists():
-            logger.info("Cleaning up transcode cache: %s", self._temp_dir)
-            shutil.rmtree(self._temp_dir, ignore_errors=True)
-            self._temp_dir = None
+        self._temp_dir = None
+
+    def _drain_queues(self, error: Exception, *queues: deque[_Job]) -> int:
+        """Fail every job in the given queues. Call with _queue_cond held."""
+        drained = 0
+        for queue in queues:
+            while queue:
+                job = queue.popleft()
+                self._jobs.pop(job.key, None)
+                job.error = error
+                job.done.set()
+                drained += 1
+        return drained
 
     def _cache_key(self, relative_path: str, profile_tag: str) -> str:
         payload = f"{relative_path}\0{profile_tag}".encode("utf-8")
@@ -243,13 +251,13 @@ class Transcoder:
         cmd: list[str],
         *,
         label: str,
-        job: _Job | None = None,
+        job: _Job,
     ) -> None:
-        """Run a subprocess, tracking it for clean shutdown; raise on failure.
+        """Run a subprocess, exposing the handle on the job; raise on failure.
 
-        When ``job`` is given, the process handle is exposed on it so the job
-        can be preempted; a canceled job raises TranscodeCanceled instead of a
-        generic ffmpeg error (SIGTERM makes the exit code non-zero).
+        The process handle is stored on the job so it can be preempted; a
+        canceled job raises TranscodeCanceled instead of a generic ffmpeg
+        error (SIGTERM makes the exit code non-zero).
         """
         if self._closed:
             raise RuntimeError("Transcoder is shut down")
@@ -266,19 +274,10 @@ class Transcoder:
                 f"{cmd[0]} not found on PATH (needed for {label})."
             ) from exc
 
-        track_key = f"{key}:{label}"
-        with self._active_guard:
-            self._active[track_key] = proc
-        if job is not None:
-            job.proc = proc
+        job.proc = proc
+        _, stderr = proc.communicate()
 
-        try:
-            _, stderr = proc.communicate()
-        finally:
-            with self._active_guard:
-                self._active.pop(track_key, None)
-
-        if job is not None and job.cancel_requested:
+        if job.cancel_requested:
             raise TranscodeCanceled(f"{label} preempted for {key}")
         if self._closed:
             raise RuntimeError("Transcoder is shut down")
@@ -335,7 +334,7 @@ class Transcoder:
                         "1",
                     ]
                 )
-            cmd.extend(["-f", "mp4", str(dest_partial)])
+            fmt = "mp4"
         elif profile.kind == "opus":
             cmd.extend(
                 [
@@ -345,25 +344,17 @@ class Transcoder:
                     f"{profile.bitrate_kbps}k",
                     "-vbr",
                     "on",
-                    "-f",
-                    "opus",
-                    str(dest_partial),
                 ]
             )
+            fmt = "opus"
         elif profile.kind == "flac":
             # 16-bit + sample rate set above; leave compression at ffmpeg default
-            cmd.extend(
-                [
-                    "-c:a",
-                    "flac",
-                    "-f",
-                    "flac",
-                    str(dest_partial),
-                ]
-            )
+            cmd.extend(["-c:a", "flac"])
+            fmt = "flac"
         else:
             raise ValueError(f"Unknown profile kind: {profile.kind}")
 
+        cmd.extend(["-f", fmt, str(dest_partial)])
         return cmd
 
     def prepare(
@@ -408,13 +399,9 @@ class Transcoder:
     def drop_pending_prewarm(self) -> int:
         """Drop all pending prewarm jobs (e.g. codec changed). Returns count."""
         with self._queue_cond:
-            dropped = 0
-            while self._prewarm:
-                job = self._prewarm.popleft()
-                self._jobs.pop(job.key, None)
-                job.error = RuntimeError("Prewarm request dropped")
-                job.done.set()
-                dropped += 1
+            dropped = self._drain_queues(
+                RuntimeError("Prewarm request dropped"), self._prewarm
+            )
         if dropped:
             logger.info("Dropped %d pending prewarm job(s)", dropped)
         return dropped
@@ -426,12 +413,9 @@ class Transcoder:
             raise RuntimeError("Transcoder is shut down")
 
         with self._queue_cond:
-            for queue in (self._urgent, self._prewarm):
-                while queue:
-                    job = queue.popleft()
-                    self._jobs.pop(job.key, None)
-                    job.error = RuntimeError("Cache cleared")
-                    job.done.set()
+            self._drain_queues(
+                RuntimeError("Cache cleared"), self._urgent, self._prewarm
+            )
             current = self._current
             if current is not None:
                 # Cancel and mark purged so the worker fails it instead of
@@ -452,7 +436,7 @@ class Transcoder:
                     continue
             removed += 1
         logger.info(
-            "Cleared transcode cache: %s (%d entries)", self.temp_dir, removed
+            "Cleared stream cache: %s (%d entries)", self.temp_dir, removed
         )
         return removed
 
@@ -587,21 +571,23 @@ class Transcoder:
                     self._queue_cond.notify_all()
                 job.done.set()
 
+    def _encoder_label(self, profile: StreamProfile) -> str:
+        """Human label for the encoder a profile encodes with."""
+        if profile.kind == "aac":
+            return self.aac_encoder
+        if profile.kind == "opus":
+            return "libopus"
+        return "flac"
+
     def _run_job(self, job: _Job) -> None:
         """Encode one job: ffmpeg into a .partial, atomic rename on success."""
         profile = job.profile
         out_path = self._out_path(job.key, profile)
-        if profile.kind == "aac":
-            encoder_label = self.aac_encoder
-        elif profile.kind == "opus":
-            encoder_label = "libopus"
-        else:
-            encoder_label = "flac"
         logger.info(
             "Transcode %s → profile=%s encoder=%s ar=%s%s",
             job.relative_path,
             profile.tag,
-            encoder_label,
+            self._encoder_label(profile),
             profile.sample_rate,
             " (urgent)" if job.urgent else "",
         )
@@ -731,11 +717,19 @@ def resolve_aac_encoder(encoders: set[str] | None = None) -> tuple[str, str]:
     )
 
 
-def check_dependencies() -> dict[str, str]:
+@dataclass(frozen=True)
+class DependencyReport:
+    """Startup dependency check results: banner labels + resolved encoders."""
+
+    tools: dict[str, str]
+    aac_encoder: str
+
+
+def check_dependencies() -> DependencyReport:
     """
     Ensure ffmpeg has libsoxr, a usable AAC encoder, libopus, and flac.
 
-    Returns a short label per dependency for the startup banner.
+    Returns banner labels per dependency plus the resolved AAC encoder name.
     Raises RuntimeError on any missing requirement (fail fast).
     """
     ffmpeg_ver = _require_tool(
@@ -765,16 +759,13 @@ def check_dependencies() -> dict[str, str]:
     logger.info("FLAC encoder: flac")
     logger.info("Resampler: %s", soxr_label)
 
-    return {
-        "ffmpeg": ffmpeg_ver,
-        "libsoxr": soxr_label,
-        "aac encoder": aac_label,
-        "opus encoder": "libopus",
-        "flac encoder": "flac",
-        "_aac_encoder_name": aac_name,  # consumed by lifespan; not for display
-    }
-
-
-def check_ffmpeg() -> None:
-    """Back-compat alias."""
-    check_dependencies()
+    return DependencyReport(
+        tools={
+            "ffmpeg": ffmpeg_ver,
+            "libsoxr": soxr_label,
+            "aac encoder": aac_label,
+            "opus encoder": "libopus",
+            "flac encoder": "flac",
+        },
+        aac_encoder=aac_name,
+    )
