@@ -37,6 +37,8 @@
   const plBody = $("playlist-body");
   const audio = $("audio");
   const coverArt = $("cover-art");
+  const libraryCoverArt = $("library-cover-art");
+  const libraryCoverPanel = $("library-cover-panel");
   const npTitle = $("np-title");
   const npArtist = $("np-artist");
   const timeCur = $("time-cur");
@@ -58,6 +60,11 @@
 
   function encodePath(path) {
     return encodeURIComponent(path);
+  }
+
+  /** @param {string} path @param {'full'|'thumb'} size */
+  function coverUrl(path, size) {
+    return `/api/cover?path=${encodePath(path)}&size=${size}&t=${Date.now()}`;
   }
 
   async function apiGet(url) {
@@ -450,12 +457,16 @@
       npTitle.textContent = "—";
       npArtist.textContent = "No track";
       coverArt.src = PLACEHOLDER_COVER;
+      libraryCoverArt.src = PLACEHOLDER_COVER;
       return;
     }
     const t = playlist[currentIndex];
     npTitle.textContent = t.title;
     npArtist.textContent = [t.artist, t.album].filter(Boolean).join(" — ") || "Unknown";
-    coverArt.src = `/api/cover?path=${encodePath(t.path)}&t=${Date.now()}`;
+    // Player bar: fixed thumbnail (200×200 JPEG from server)
+    coverArt.src = coverUrl(t.path, "thumb");
+    // Library panel: full extracted art (no server-side downscale)
+    libraryCoverArt.src = coverUrl(t.path, "full");
   }
 
   function stopPlayback() {
@@ -702,7 +713,7 @@
   $("btn-remove").addEventListener("click", removeSelectedFromPlaylist);
   $("btn-clear").addEventListener("click", clearPlaylist);
 
-  // ── Resizable splitter ─────────────────────────────────────────────
+  // ── Resizable splitters ────────────────────────────────────────────
   const splitter = $("splitter");
   const libraryPane = document.querySelector(".library-pane");
   let dragging = false;
@@ -721,6 +732,51 @@
   });
   splitter.addEventListener("pointerup", () => {
     dragging = false;
+  });
+
+  // Vertical splitter: resize full cover panel under the file tree
+  const COVER_HEIGHT_KEY = "musicweb.coverPanelHeight";
+  const vSplitter = $("library-v-splitter");
+  let vDragging = false;
+
+  try {
+    const saved = localStorage.getItem(COVER_HEIGHT_KEY);
+    if (saved) {
+      const h = Number(saved);
+      if (Number.isFinite(h) && h >= 80) {
+        libraryCoverPanel.style.height = `${h}px`;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  vSplitter.addEventListener("pointerdown", (e) => {
+    vDragging = true;
+    vSplitter.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  vSplitter.addEventListener("pointermove", (e) => {
+    if (!vDragging) return;
+    const paneRect = libraryPane.getBoundingClientRect();
+    // Cover panel sits at the bottom; height = distance from pointer to pane bottom
+    // minus half the splitter (pointer is on the splitter above the panel)
+    const fromBottom = paneRect.bottom - e.clientY;
+    const maxH = Math.max(80, paneRect.height - 120); // leave room for header + tree
+    const h = Math.min(maxH, Math.max(80, fromBottom));
+    libraryCoverPanel.style.height = `${h}px`;
+  });
+  vSplitter.addEventListener("pointerup", () => {
+    if (!vDragging) return;
+    vDragging = false;
+    try {
+      localStorage.setItem(
+        COVER_HEIGHT_KEY,
+        String(libraryCoverPanel.getBoundingClientRect().height)
+      );
+    } catch {
+      /* ignore quota */
+    }
   });
 
   // ── Boot ───────────────────────────────────────────────────────────

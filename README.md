@@ -65,6 +65,8 @@ Press **Ctrl+C** for a clean shutdown. The temporary transcode cache is always d
 - Play / pause / next / prev, seek, volume
 - Shuffle, repeat off / one / all
 - Cover art: embedded (ffmpeg) or folder `cover.jpg` / `cover.png` / etc.
+  - Full panel under the library tree (resizable height): raw extracted image via `/api/cover?path=…&size=full`
+  - Player-bar thumbnail (fixed): 200×200 JPEG quality 90 via `/api/cover?path=…&size=thumb`
 - Tags via mutagen (title, artist, album, duration)
 - Selectable **Codec** profiles (player bar):
   - **`aac_256_44100`** — AAC-LC VBR ~256 kbps @ **44.1 kHz** (recommended for desktop)

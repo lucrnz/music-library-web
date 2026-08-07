@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import subprocess
 import tempfile
 from pathlib import Path
 
+from PIL import Image, ImageOps
+
 logger = logging.getLogger(__name__)
+
+THUMB_SIZE = 200
+THUMB_JPEG_QUALITY = 90
 
 FOLDER_COVER_NAMES = (
     "cover.jpg",
@@ -76,6 +82,7 @@ def get_cover_bytes(audio_path: Path) -> tuple[bytes, str]:
     Return (image_bytes, media_type) for the given audio file.
 
     Order: embedded art → folder cover → SVG placeholder.
+    Full-size path: raw extracted bytes only — no conversion or downscale.
     """
     # 1) Embedded via ffmpeg (write to a temp file then read)
     with tempfile.TemporaryDirectory(prefix="musicweb-cover-") as tmp:
@@ -102,3 +109,56 @@ def get_cover_bytes(audio_path: Path) -> tuple[bytes, str]:
 
     # 3) Placeholder
     return PLACEHOLDER_SVG, "image/svg+xml"
+
+
+def _placeholder_thumb_jpeg() -> bytes:
+    """Solid dark 200×200 JPEG used when no cover art exists."""
+    img = Image.new("RGB", (THUMB_SIZE, THUMB_SIZE), (42, 42, 46))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=THUMB_JPEG_QUALITY, optimize=True)
+    return buf.getvalue()
+
+
+def get_cover_thumbnail(audio_path: Path) -> tuple[bytes, str]:
+    """
+    Return a fixed 200×200 JPEG (quality 90) thumbnail for the given audio file.
+
+    Uses the same art sources as get_cover_bytes, then converts with Pillow.
+    """
+    data, media_type = get_cover_bytes(audio_path)
+    if media_type == "image/svg+xml":
+        return _placeholder_thumb_jpeg(), "image/jpeg"
+
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            # Center-crop to square and resize to exact 200×200
+            fitted = ImageOps.fit(
+                img,
+                (THUMB_SIZE, THUMB_SIZE),
+                method=Image.Resampling.LANCZOS,
+                centering=(0.5, 0.5),
+            )
+            if fitted.mode in ("RGBA", "LA", "P"):
+                background = Image.new("RGB", fitted.size, (42, 42, 46))
+                if fitted.mode == "P":
+                    fitted = fitted.convert("RGBA")
+                alpha = fitted.split()[-1] if fitted.mode in ("RGBA", "LA") else None
+                if alpha is not None:
+                    background.paste(fitted.convert("RGB"), mask=alpha)
+                else:
+                    background.paste(fitted.convert("RGB"))
+                fitted = background
+            elif fitted.mode != "RGB":
+                fitted = fitted.convert("RGB")
+
+            buf = io.BytesIO()
+            fitted.save(
+                buf,
+                format="JPEG",
+                quality=THUMB_JPEG_QUALITY,
+                optimize=True,
+            )
+            return buf.getvalue(), "image/jpeg"
+    except Exception as exc:
+        logger.debug("cover thumbnail conversion failed: %s", exc)
+        return _placeholder_thumb_jpeg(), "image/jpeg"

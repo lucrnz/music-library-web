@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
-from musicweb.cover import get_cover_bytes
+from musicweb.cover import get_cover_bytes, get_cover_thumbnail
 from musicweb.library import PathEscapeError
 from musicweb.metadata import read_metadata
 from musicweb.transcode import DEFAULT_PROFILE_TAG, PROFILES, get_profile
@@ -131,6 +131,10 @@ async def stream(
 async def cover(
     request: Request,
     path: str = Query(..., description="Library-relative audio file path"),
+    size: str = Query(
+        default="full",
+        description="full = raw extracted art; thumb = 200×200 JPEG quality 90",
+    ),
 ) -> Response:
     lib = _library(request)
     try:
@@ -141,7 +145,17 @@ async def cover(
     if not resolved.is_file() or not lib.is_audio(resolved):
         raise HTTPException(status_code=404, detail="Audio file not found")
 
-    data, media_type = get_cover_bytes(resolved)
+    if size not in ("full", "thumb"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported size {size!r}; allowed: full, thumb",
+        )
+
+    if size == "thumb":
+        data, media_type = get_cover_thumbnail(resolved)
+    else:
+        data, media_type = get_cover_bytes(resolved)
+
     return Response(
         content=data,
         media_type=media_type,
