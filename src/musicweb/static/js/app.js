@@ -1,5 +1,7 @@
 /**
- * Foobar-style music client: lazy file tree + session playlist + HTML5 player.
+ * Modern streaming-app client: drill-down library + playlist + HTML5 player.
+ * Mobile-first: tabs + mini-player/now-playing sheet on phones, two-pane
+ * layout + persistent player bar on desktop (via CSS min-width queries).
  * Playlist state is client-only (sessionStorage).
  */
 (() => {
@@ -8,13 +10,14 @@
   const STORAGE_KEY = "musicweb.playlist.v1";
   const CODEC_STORAGE_KEY = "musicweb.streamCodec";
   const PLACEHOLDER_COVER = "/static/img/placeholder.svg";
-  const ALLOWED_CODECS = new Set([
-    "aac_256_44100",
-    "opus_192_48000",
-    "opus_160_48000",
-    "flac_16_44100",
-    "flac_16_48000",
-  ]);
+  const CODEC_OPTIONS = [
+    { id: "aac_256_44100", label: "AAC 256k", detail: "44.1 kHz" },
+    { id: "opus_192_48000", label: "Opus 192k", detail: "48 kHz" },
+    { id: "opus_160_48000", label: "Opus 160k", detail: "48 kHz" },
+    { id: "flac_16_44100", label: "FLAC", detail: "44.1 kHz · lossless" },
+    { id: "flac_16_48000", label: "FLAC", detail: "48 kHz · lossless" },
+  ];
+  const ALLOWED_CODECS = new Set(CODEC_OPTIONS.map((o) => o.id));
   const DEFAULT_CODEC = "aac_256_44100";
 
   // ── State ──────────────────────────────────────────────────────────
@@ -31,30 +34,47 @@
   /** Stream profile tag for /api/stream (?codec=). */
   let streamCodec = DEFAULT_CODEC;
 
-  /** Tree selection: path -> 'dir' | 'file' */
-  const treeSelected = new Map();
-  /** Playlist row selection: Set of indices */
-  const plSelected = new Set();
-  let plLastClicked = -1;
+  /** Library navigation stack: [{ path, name }] — empty means library root. */
+  let navStack = [];
+  /** Desktop multi-select in the library: path -> 'dir' | 'file' */
+  const libSelected = new Map();
+  /** Playlist edit mode (delete / reorder / clear). */
+  let plEditing = false;
+
+  const desktopMQ = window.matchMedia("(min-width: 900px)");
 
   // ── DOM ────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
-  const treeEl = $("tree");
-  const plBody = $("playlist-body");
+  const dirList = $("dir-list");
+  const plList = $("pl-list");
   const audio = $("audio");
+  const player = $("player");
   const coverArt = $("cover-art");
-  const libraryCoverArt = $("library-cover-art");
-  const libraryCoverPanel = $("library-cover-panel");
+  const coverArtFull = $("cover-art-full");
   const npTitle = $("np-title");
   const npArtist = $("np-artist");
+  const npTitleFull = $("np-title-full");
+  const npArtistFull = $("np-artist-full");
   const timeCur = $("time-cur");
   const timeTotal = $("time-total");
   const seek = $("seek");
   const volume = $("volume");
-  const streamCodecEl = $("stream-codec");
+  const settingsModal = $("settings-modal");
+  const codecList = $("codec-list");
   const btnPlay = $("btn-play");
+  const btnPlayMini = $("btn-play-mini");
   const btnShuffle = $("btn-shuffle");
   const btnRepeat = $("btn-repeat");
+  const btnBack = $("btn-back");
+  const btnAddAll = $("btn-add-all");
+  const btnAddSelected = $("btn-add-selected");
+  const btnEdit = $("btn-edit");
+  const btnClear = $("btn-clear");
+  const libraryTitle = $("library-title");
+  const viewLibrary = $("view-library");
+  const viewPlaylist = $("view-playlist");
+  const tabLibrary = $("tab-library");
+  const tabPlaylist = $("tab-playlist");
 
   // ── Helpers ────────────────────────────────────────────────────────
   function formatTime(sec) {
@@ -68,9 +88,18 @@
     return encodeURIComponent(path);
   }
 
-  /** @param {string} path @param {'full'|'thumb'} size */
-  function coverUrl(path, size) {
-    return `/api/cover?path=${encodePath(path)}&size=${size}&t=${Date.now()}`;
+  /** @param {string} path @param {'full'|'thumb'} size @param {boolean} bust cache-bust with a timestamp */
+  function coverUrl(path, size, bust = true) {
+    const base = `/api/cover?path=${encodePath(path)}&size=${size}`;
+    return bust ? `${base}&t=${Date.now()}` : base;
+  }
+
+  function icon(name) {
+    return `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+  }
+
+  function setIcon(btn, name) {
+    btn.querySelector("use").setAttribute("href", `#i-${name}`);
   }
 
   async function apiGet(url) {
@@ -109,158 +138,122 @@
     }
   }
 
-  // ── Tree (lazy, filesystem-agnostic) ───────────────────────────────
-  function clearTreeSelection() {
-    treeSelected.clear();
-    treeEl.querySelectorAll(".tree-node.selected").forEach((el) => {
+  // ── Tabs (mobile) ──────────────────────────────────────────────────
+  function switchTab(name) {
+    tabLibrary.classList.toggle("active", name === "library");
+    tabPlaylist.classList.toggle("active", name === "playlist");
+    viewLibrary.classList.toggle("hidden", name !== "library");
+    viewPlaylist.classList.toggle("hidden", name !== "playlist");
+  }
+
+  tabLibrary.addEventListener("click", () => switchTab("library"));
+  tabPlaylist.addEventListener("click", () => switchTab("playlist"));
+
+  // ── Library (drill-down) ───────────────────────────────────────────
+  function currentPath() {
+    return navStack.length ? navStack[navStack.length - 1].path : "";
+  }
+
+  function clearLibSelection() {
+    libSelected.clear();
+    dirList.querySelectorAll(".row.selected").forEach((el) => {
       el.classList.remove("selected");
     });
+    syncLibActions();
   }
 
-  function setTreeNodeSelected(nodeEl, path, kind, multi) {
-    if (!multi) clearTreeSelection();
-    if (treeSelected.has(path) && multi) {
-      treeSelected.delete(path);
-      nodeEl.classList.remove("selected");
-    } else {
-      treeSelected.set(path, kind);
-      nodeEl.classList.add("selected");
-    }
+  function syncLibActions() {
+    btnAddSelected.classList.toggle("hidden", libSelected.size === 0);
   }
 
-  function makeIndent(depth) {
-    return `${8 + depth * 14}px`;
-  }
+  async function renderDir() {
+    const path = currentPath();
+    libSelected.clear();
+    syncLibActions();
+    btnBack.classList.toggle("hidden", navStack.length === 0);
+    libraryTitle.textContent = navStack.length
+      ? navStack[navStack.length - 1].name
+      : "Library";
+    dirList.innerHTML = "";
 
-  /**
-   * @param {HTMLElement} container
-   * @param {string} parentPath
-   * @param {number} depth
-   */
-  async function loadChildren(container, parentPath, depth) {
-    container.innerHTML = "";
     let data;
     try {
-      data = await apiGet(`/api/browse?path=${encodePath(parentPath)}`);
+      data = await apiGet(`/api/browse?path=${encodePath(path)}`);
     } catch (err) {
+      dirList.innerHTML = "";
       const errEl = document.createElement("div");
-      errEl.className = "tree-empty";
+      errEl.className = "list-empty";
       errEl.textContent = `Error: ${err.message}`;
-      container.appendChild(errEl);
+      dirList.appendChild(errEl);
       return;
     }
 
     if (!data.dirs.length && !data.files.length) {
       const empty = document.createElement("div");
-      empty.className = "tree-empty";
-      empty.style.paddingLeft = makeIndent(depth);
-      empty.textContent = "(empty)";
-      container.appendChild(empty);
+      empty.className = "list-empty";
+      empty.textContent = "This folder is empty";
+      dirList.appendChild(empty);
       return;
     }
 
     for (const dir of data.dirs) {
-      container.appendChild(createDirNode(dir, depth));
+      dirList.appendChild(createDirRow(dir));
     }
     for (const file of data.files) {
-      container.appendChild(createFileNode(file, depth));
+      dirList.appendChild(createFileRow(file));
     }
   }
 
-  function createDirNode(dir, depth) {
-    const wrap = document.createElement("div");
-    wrap.className = "tree-dir";
-    wrap.dataset.path = dir.path;
+  /** Desktop Ctrl/Cmd-click multi-select; returns true if the click was a selection. */
+  function maybeSelectRow(row, path, kind, e) {
+    if (!(e.metaKey || e.ctrlKey)) return false;
+    if (libSelected.has(path)) {
+      libSelected.delete(path);
+      row.classList.remove("selected");
+    } else {
+      libSelected.set(path, kind);
+      row.classList.add("selected");
+    }
+    syncLibActions();
+    return true;
+  }
 
+  function createDirRow(dir) {
     const row = document.createElement("div");
-    row.className = "tree-node";
-    row.style.paddingLeft = makeIndent(depth);
-    row.setAttribute("role", "treeitem");
+    row.className = "row";
     row.dataset.path = dir.path;
-    row.dataset.kind = "dir";
-
-    const toggle = document.createElement("span");
-    toggle.className = "tree-toggle";
-    toggle.textContent = "▸";
-
-    const icon = document.createElement("span");
-    icon.className = "tree-icon";
-    icon.textContent = "📁";
-
-    const label = document.createElement("span");
-    label.className = "tree-label";
-    label.textContent = dir.name;
-
-    row.append(toggle, icon, label);
-
-    const children = document.createElement("div");
-    children.className = "tree-children";
-    children.dataset.loaded = "0";
-
-    let expanded = false;
-
-    async function expand() {
-      if (!expanded) {
-        if (children.dataset.loaded !== "1") {
-          await loadChildren(children, dir.path, depth + 1);
-          children.dataset.loaded = "1";
-        }
-        children.classList.add("open");
-        toggle.textContent = "▾";
-        expanded = true;
-      } else {
-        children.classList.remove("open");
-        toggle.textContent = "▸";
-        expanded = false;
-      }
-    }
-
-    toggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      expand();
-    });
+    row.innerHTML = `
+      <span class="row-icon">${icon("folder")}</span>
+      <span class="row-meta">
+        <span class="row-title"></span>
+      </span>
+      <span class="row-chevron">${icon("chevron-right")}</span>
+    `;
+    row.querySelector(".row-title").textContent = dir.name;
 
     row.addEventListener("click", (e) => {
-      setTreeNodeSelected(row, dir.path, "dir", e.metaKey || e.ctrlKey);
+      if (maybeSelectRow(row, dir.path, "dir", e)) return;
+      navStack.push({ path: dir.path, name: dir.name });
+      renderDir();
     });
-
-    row.addEventListener("dblclick", (e) => {
-      e.preventDefault();
-      expand();
-    });
-
-    wrap.append(row, children);
-    return wrap;
+    return row;
   }
 
-  function createFileNode(file, depth) {
+  function createFileRow(file) {
     const row = document.createElement("div");
-    row.className = "tree-node";
-    row.style.paddingLeft = makeIndent(depth);
-    row.setAttribute("role", "treeitem");
+    row.className = "row";
     row.dataset.path = file.path;
-    row.dataset.kind = "file";
+    row.innerHTML = `
+      <span class="row-icon">${icon("note")}</span>
+      <span class="row-meta">
+        <span class="row-title"></span>
+      </span>
+      <button type="button" class="icon-btn row-add" title="Add to playlist" aria-label="Add to playlist">${icon("plus")}</button>
+    `;
+    row.querySelector(".row-title").textContent = file.name;
 
-    const toggle = document.createElement("span");
-    toggle.className = "tree-toggle empty";
-    toggle.textContent = "·";
-
-    const icon = document.createElement("span");
-    icon.className = "tree-icon";
-    icon.textContent = "🎵";
-
-    const label = document.createElement("span");
-    label.className = "tree-label";
-    label.textContent = file.name;
-
-    row.append(toggle, icon, label);
-
-    row.addEventListener("click", (e) => {
-      setTreeNodeSelected(row, file.path, "file", e.metaKey || e.ctrlKey);
-    });
-
-    row.addEventListener("dblclick", async (e) => {
-      e.preventDefault();
+    row.addEventListener("click", async (e) => {
+      if (maybeSelectRow(row, file.path, "file", e)) return;
       const startPlay = playlist.length === 0 || audio.paused;
       await addPathsToPlaylist([file.path]);
       if (startPlay) {
@@ -268,13 +261,46 @@
       }
     });
 
+    row.querySelector(".row-add").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await addPathsToPlaylist([file.path]);
+    });
     return row;
   }
 
-  async function initTree() {
-    treeEl.innerHTML = "";
-    await loadChildren(treeEl, "", 0);
-  }
+  btnBack.addEventListener("click", () => {
+    if (!navStack.length) return;
+    navStack.pop();
+    renderDir();
+  });
+
+  btnAddAll.addEventListener("click", async () => {
+    try {
+      const data = await apiGet(`/api/collect?path=${encodePath(currentPath())}`);
+      await addPathsToPlaylist(data.files);
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  btnAddSelected.addEventListener("click", async () => {
+    if (!libSelected.size) return;
+    const files = [];
+    for (const [p, kind] of libSelected) {
+      if (kind === "dir") {
+        try {
+          const data = await apiGet(`/api/collect?path=${encodePath(p)}`);
+          files.push(...data.files);
+        } catch (err) {
+          console.error(err);
+        }
+      } else {
+        files.push(p);
+      }
+    }
+    clearLibSelection();
+    await addPathsToPlaylist(files);
+  });
 
   // ── Playlist ───────────────────────────────────────────────────────
   async function fetchMeta(path) {
@@ -295,9 +321,6 @@
   async function addPathsToPlaylist(paths) {
     if (!paths.length) return;
     for (const path of paths) {
-      if (playlist.some((t) => t.path === path)) {
-        // Allow duplicates? Foobar allows them — allow.
-      }
       const meta = await fetchMeta(path);
       playlist.push({
         path,
@@ -309,109 +332,18 @@
     }
     rebuildShuffleOrder(false);
     renderPlaylist();
+    updateNowPlaying();
     savePlaylist();
   }
 
-  function renderPlaylist() {
-    plBody.innerHTML = "";
-    if (!playlist.length) {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 5;
-      td.className = "playlist-empty";
-      td.textContent = "Playlist empty — double-click tracks or use Add selected / Add folder";
-      tr.appendChild(td);
-      plBody.appendChild(tr);
-      return;
-    }
-
-    playlist.forEach((track, index) => {
-      const tr = document.createElement("tr");
-      tr.dataset.index = String(index);
-      tr.draggable = true;
-      if (plSelected.has(index)) tr.classList.add("selected");
-      if (index === currentIndex) tr.classList.add("playing");
-
-      tr.innerHTML = `
-        <td class="col-num">${index + 1}</td>
-        <td class="col-title"></td>
-        <td class="col-artist"></td>
-        <td class="col-album"></td>
-        <td class="col-dur"></td>
-      `;
-      tr.children[1].textContent = track.title;
-      tr.children[2].textContent = track.artist;
-      tr.children[3].textContent = track.album;
-      tr.children[4].textContent = formatTime(track.duration);
-
-      tr.addEventListener("click", (e) => {
-        if (e.shiftKey && plLastClicked >= 0) {
-          const a = Math.min(plLastClicked, index);
-          const b = Math.max(plLastClicked, index);
-          if (!(e.metaKey || e.ctrlKey)) plSelected.clear();
-          for (let i = a; i <= b; i++) plSelected.add(i);
-        } else if (e.metaKey || e.ctrlKey) {
-          if (plSelected.has(index)) plSelected.delete(index);
-          else plSelected.add(index);
-          plLastClicked = index;
-        } else {
-          plSelected.clear();
-          plSelected.add(index);
-          plLastClicked = index;
-        }
-        renderPlaylist();
-      });
-
-      tr.addEventListener("dblclick", () => {
-        playIndex(index);
-      });
-
-      // Drag reorder
-      tr.addEventListener("dragstart", (e) => {
-        e.dataTransfer.setData("text/plain", String(index));
-        e.dataTransfer.effectAllowed = "move";
-        tr.classList.add("dragging");
-      });
-      tr.addEventListener("dragend", () => tr.classList.remove("dragging"));
-      tr.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-      });
-      tr.addEventListener("drop", (e) => {
-        e.preventDefault();
-        const from = Number(e.dataTransfer.getData("text/plain"));
-        const to = index;
-        if (!Number.isFinite(from) || from === to) return;
-        reorderPlaylist(from, to);
-      });
-
-      plBody.appendChild(tr);
-    });
-  }
-
-  function reorderPlaylist(from, to) {
-    const [item] = playlist.splice(from, 1);
-    playlist.splice(to, 0, item);
-    if (currentIndex === from) currentIndex = to;
-    else if (from < currentIndex && to >= currentIndex) currentIndex -= 1;
-    else if (from > currentIndex && to <= currentIndex) currentIndex += 1;
-    plSelected.clear();
-    plSelected.add(to);
-    rebuildShuffleOrder(true);
-    renderPlaylist();
-    savePlaylist();
-  }
-
-  function removeSelectedFromPlaylist() {
-    if (!plSelected.size) return;
-    const indices = [...plSelected].sort((a, b) => b - a);
-    const removingCurrent = plSelected.has(currentIndex);
-    for (const i of indices) {
+  function removeIndices(indices) {
+    if (!indices.length) return;
+    const removingCurrent = indices.includes(currentIndex);
+    for (const i of [...indices].sort((a, b) => b - a)) {
       playlist.splice(i, 1);
       if (i < currentIndex) currentIndex -= 1;
       else if (i === currentIndex) currentIndex = -1;
     }
-    plSelected.clear();
     if (currentIndex >= playlist.length) currentIndex = playlist.length - 1;
     rebuildShuffleOrder(true);
     renderPlaylist();
@@ -425,13 +357,118 @@
   function clearPlaylist() {
     playlist = [];
     currentIndex = -1;
-    plSelected.clear();
     shuffleOrder = [];
     shufflePos = -1;
     renderPlaylist();
     savePlaylist();
     stopPlayback();
   }
+
+  function renderPlaylist() {
+    plList.innerHTML = "";
+    plList.classList.toggle("editing", plEditing);
+    btnEdit.querySelector("span").textContent = plEditing ? "Done" : "Edit";
+    btnClear.classList.toggle("hidden", !plEditing || !playlist.length);
+
+    if (!playlist.length) {
+      const empty = document.createElement("div");
+      empty.className = "list-empty";
+      empty.textContent = plEditing
+        ? "Playlist is empty"
+        : "Playlist empty — tap tracks in the Library to add them";
+      plList.appendChild(empty);
+      return;
+    }
+
+    playlist.forEach((track, index) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.dataset.index = String(index);
+      if (index === currentIndex) row.classList.add("playing");
+
+      const sub = [track.artist, track.album].filter(Boolean).join(" — ");
+      row.innerHTML = `
+        <button type="button" class="icon-btn row-delete" title="Remove" aria-label="Remove from playlist">${icon("trash")}</button>
+        <span class="row-cover-wrap">
+          <img class="row-cover" src="${coverUrl(track.path, "thumb", false)}" alt="" loading="lazy" />
+          ${index === currentIndex
+            ? `<span class="eq${audio.paused ? " paused" : ""}"><span></span><span></span><span></span></span>`
+            : ""}
+        </span>
+        <span class="row-meta">
+          <span class="row-title"></span>
+          <span class="row-sub"></span>
+        </span>
+        <span class="row-dur">${formatTime(track.duration)}</span>
+        <span class="row-drag" title="Drag to reorder" aria-label="Drag to reorder">${icon("drag")}</span>
+      `;
+      row.querySelector(".row-title").textContent = track.title;
+      row.querySelector(".row-sub").textContent = sub;
+
+      row.addEventListener("click", (e) => {
+        if (plEditing) return;
+        if (e.target.closest(".row-delete") || e.target.closest(".row-drag")) return;
+        playIndex(index);
+      });
+
+      row.querySelector(".row-delete").addEventListener("click", () => {
+        removeIndices([index]);
+      });
+
+      row.querySelector(".row-drag").addEventListener("pointerdown", (e) => {
+        startDragReorder(e, row, index);
+      });
+
+      plList.appendChild(row);
+    });
+  }
+
+  /** Pointer-based drag reorder — works for touch and mouse. */
+  function startDragReorder(e, row, fromIndex) {
+    e.preventDefault();
+    let targetIndex = fromIndex;
+    let marked = null;
+    row.classList.add("dragging");
+
+    const onMove = (ev) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const over = el ? el.closest(".row") : null;
+      if (marked && marked !== over) marked.classList.remove("drop-target");
+      marked = null;
+      if (over && over.parentElement === plList && over !== row) {
+        targetIndex = Number(over.dataset.index);
+        over.classList.add("drop-target");
+        marked = over;
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      row.classList.remove("dragging");
+      if (marked) marked.classList.remove("drop-target");
+      if (targetIndex !== fromIndex) reorderPlaylist(fromIndex, targetIndex);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }
+
+  function reorderPlaylist(from, to) {
+    const [item] = playlist.splice(from, 1);
+    playlist.splice(to, 0, item);
+    if (currentIndex === from) currentIndex = to;
+    else if (from < currentIndex && to >= currentIndex) currentIndex -= 1;
+    else if (from > currentIndex && to <= currentIndex) currentIndex += 1;
+    rebuildShuffleOrder(true);
+    renderPlaylist();
+    savePlaylist();
+  }
+
+  btnEdit.addEventListener("click", () => {
+    plEditing = !plEditing;
+    renderPlaylist();
+  });
+
+  btnClear.addEventListener("click", clearPlaylist);
 
   // ── Playback ───────────────────────────────────────────────────────
   function rebuildShuffleOrder(keepCurrent) {
@@ -449,30 +486,38 @@
   }
 
   function updateTransportUI() {
-    btnPlay.textContent = audio.paused ? "▶" : "⏸";
+    const playing = !audio.paused;
+    setIcon(btnPlay, playing ? "pause" : "play");
+    setIcon(btnPlayMini, playing ? "pause" : "play");
     btnShuffle.setAttribute("aria-pressed", shuffle ? "true" : "false");
     btnRepeat.dataset.mode = repeat;
     btnRepeat.setAttribute("aria-pressed", repeat !== "off" ? "true" : "false");
-    if (repeat === "off") btnRepeat.textContent = "Repeat";
-    else if (repeat === "one") btnRepeat.textContent = "Repeat 1";
-    else btnRepeat.textContent = "Repeat All";
+    setIcon(btnRepeat, repeat === "one" ? "repeat-one" : "repeat");
+    plList.querySelectorAll(".eq").forEach((eq) => {
+      eq.classList.toggle("paused", !playing);
+    });
   }
 
   function updateNowPlaying() {
-    if (currentIndex < 0 || !playlist[currentIndex]) {
+    const t = currentIndex >= 0 ? playlist[currentIndex] : null;
+    player.classList.toggle("hidden", !t && playlist.length === 0);
+    if (!t) {
       npTitle.textContent = "—";
       npArtist.textContent = "No track";
+      npTitleFull.textContent = "—";
+      npArtistFull.textContent = "No track";
       coverArt.src = PLACEHOLDER_COVER;
-      libraryCoverArt.src = PLACEHOLDER_COVER;
+      coverArtFull.src = PLACEHOLDER_COVER;
       return;
     }
-    const t = playlist[currentIndex];
+    const sub = [t.artist, t.album].filter(Boolean).join(" — ") || "Unknown";
     npTitle.textContent = t.title;
-    npArtist.textContent = [t.artist, t.album].filter(Boolean).join(" — ") || "Unknown";
-    // Player bar: fixed thumbnail (200×200 JPEG from server)
+    npArtist.textContent = sub;
+    npTitleFull.textContent = t.title;
+    npArtistFull.textContent = sub;
+    // Mini player: small server-side thumbnail; sheet: full extracted art
     coverArt.src = coverUrl(t.path, "thumb");
-    // Library panel: full extracted art (no server-side downscale)
-    libraryCoverArt.src = coverUrl(t.path, "full");
+    coverArtFull.src = coverUrl(t.path, "full");
   }
 
   function stopPlayback() {
@@ -505,8 +550,9 @@
     try {
       await audio.play();
     } catch (err) {
+      // Benign cases (e.g. transcode still warming up, autoplay policy)
+      // surface here; the audio element retries/recovers on its own.
       console.error("Playback failed", err);
-      npArtist.textContent = "Playback failed (see console)";
     }
     updateTransportUI();
   }
@@ -630,13 +676,18 @@
 
   function loadStreamCodec() {
     try {
-      const raw = sessionStorage.getItem(CODEC_STORAGE_KEY);
+      let raw = localStorage.getItem(CODEC_STORAGE_KEY);
       if (raw == null) {
-        // One-time map from legacy sample-rate preference
-        const legacy = sessionStorage.getItem("musicweb.sampleRate");
-        if (legacy === "48000") streamCodec = "opus_192_48000";
-        else if (legacy === "44100") streamCodec = "aac_256_44100";
-        return;
+        // One-time migration from legacy sessionStorage preferences
+        raw = sessionStorage.getItem(CODEC_STORAGE_KEY);
+        if (raw == null) {
+          const legacy = sessionStorage.getItem("musicweb.sampleRate");
+          if (legacy === "48000") raw = "opus_192_48000";
+          else if (legacy === "44100") raw = "aac_256_44100";
+        }
+        if (raw != null && ALLOWED_CODECS.has(raw)) {
+          localStorage.setItem(CODEC_STORAGE_KEY, raw);
+        }
       }
       if (ALLOWED_CODECS.has(raw)) streamCodec = raw;
     } catch {
@@ -646,37 +697,81 @@
 
   function saveStreamCodec() {
     try {
-      sessionStorage.setItem(CODEC_STORAGE_KEY, streamCodec);
+      localStorage.setItem(CODEC_STORAGE_KEY, streamCodec);
     } catch {
       /* ignore quota */
     }
   }
 
-  streamCodecEl.addEventListener("change", () => {
-    const v = streamCodecEl.value;
+  // ── Settings modal (codec selection) ─────────────────────────────
+  function renderCodecList() {
+    codecList.innerHTML = "";
+    for (const opt of CODEC_OPTIONS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "codec-option";
+      btn.setAttribute("role", "radio");
+      btn.setAttribute("aria-checked", String(opt.id === streamCodec));
+      btn.innerHTML =
+        `<span><span class="codec-label"></span> <span class="codec-detail"></span></span>` +
+        `<svg class="icon codec-check" aria-hidden="true"><use href="#i-check"></use></svg>`;
+      btn.querySelector(".codec-label").textContent = opt.label;
+      btn.querySelector(".codec-detail").textContent = opt.detail;
+      btn.addEventListener("click", () => setStreamCodec(opt.id));
+      codecList.appendChild(btn);
+    }
+  }
+
+  function openSettings() {
+    renderCodecList();
+    settingsModal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+  }
+
+  function closeSettings() {
+    settingsModal.classList.add("hidden");
+    document.body.classList.remove("modal-open");
+  }
+
+  function setStreamCodec(v) {
     if (!ALLOWED_CODECS.has(v)) return;
-    if (v === streamCodec) return;
+    if (v === streamCodec) {
+      closeSettings();
+      return;
+    }
     streamCodec = v;
     saveStreamCodec();
+    closeSettings();
     // Reload current track so the user gets the new codec stream.
     if (currentIndex >= 0 && currentIndex < playlist.length) {
       playIndex(currentIndex);
     }
+  }
+
+  $("btn-settings").addEventListener("click", openSettings);
+  $("btn-settings-close").addEventListener("click", closeSettings);
+  $("settings-backdrop").addEventListener("click", closeSettings);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !settingsModal.classList.contains("hidden")) {
+      closeSettings();
+    }
   });
 
-  // ── Toolbar buttons ────────────────────────────────────────────────
-  $("btn-play").addEventListener("click", togglePlay);
+  // ── Transport buttons ──────────────────────────────────────────────
+  btnPlay.addEventListener("click", togglePlay);
+  btnPlayMini.addEventListener("click", togglePlay);
   $("btn-next").addEventListener("click", playNext);
+  $("btn-next-mini").addEventListener("click", playNext);
   $("btn-prev").addEventListener("click", playPrev);
 
-  $("btn-shuffle").addEventListener("click", () => {
+  btnShuffle.addEventListener("click", () => {
     shuffle = !shuffle;
     if (shuffle) rebuildShuffleOrder(true);
     updateTransportUI();
     savePlaylist();
   });
 
-  $("btn-repeat").addEventListener("click", () => {
+  btnRepeat.addEventListener("click", () => {
     if (repeat === "off") repeat = "all";
     else if (repeat === "all") repeat = "one";
     else repeat = "off";
@@ -684,114 +779,53 @@
     savePlaylist();
   });
 
-  $("btn-add-selected").addEventListener("click", async () => {
-    if (!treeSelected.size) return;
-    const files = [];
-    for (const [p, kind] of treeSelected) {
-      if (kind === "dir") {
-        try {
-          const data = await apiGet(`/api/collect?path=${encodePath(p)}`);
-          files.push(...data.files);
-        } catch (err) {
-          console.error(err);
-        }
-      } else {
-        files.push(p);
-      }
-    }
-    await addPathsToPlaylist(files);
+  // ── Now-playing sheet (mobile expand / collapse) ───────────────────
+  $("btn-expand").addEventListener("click", () => {
+    if (desktopMQ.matches) return;
+    player.classList.add("expanded");
   });
 
-  $("btn-add-folder").addEventListener("click", async () => {
-    if (!treeSelected.size) return;
-    const files = [];
-    for (const [p] of treeSelected) {
-      try {
-        const data = await apiGet(`/api/collect?path=${encodePath(p)}`);
-        files.push(...data.files);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    await addPathsToPlaylist(files);
-  });
-
-  $("btn-remove").addEventListener("click", removeSelectedFromPlaylist);
-  $("btn-clear").addEventListener("click", clearPlaylist);
-
-  // ── Resizable splitters ────────────────────────────────────────────
-  const splitter = $("splitter");
-  const libraryPane = document.querySelector(".library-pane");
-  let dragging = false;
-
-  splitter.addEventListener("pointerdown", (e) => {
-    dragging = true;
-    splitter.setPointerCapture(e.pointerId);
-  });
-  splitter.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    const main = document.querySelector(".main-panes");
-    const rect = main.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const pct = Math.min(60, Math.max(15, (x / rect.width) * 100));
-    libraryPane.style.width = `${pct}%`;
-  });
-  splitter.addEventListener("pointerup", () => {
-    dragging = false;
-  });
-
-  // Vertical splitter: resize full cover panel under the file tree
-  const COVER_HEIGHT_KEY = "musicweb.coverPanelHeight";
-  const vSplitter = $("library-v-splitter");
-  let vDragging = false;
-
-  try {
-    const saved = localStorage.getItem(COVER_HEIGHT_KEY);
-    if (saved) {
-      const h = Number(saved);
-      if (Number.isFinite(h) && h >= 80) {
-        libraryCoverPanel.style.height = `${h}px`;
-      }
-    }
-  } catch {
-    /* ignore */
+  function collapseSheet() {
+    player.classList.remove("expanded");
+    player.style.transform = "";
   }
 
-  vSplitter.addEventListener("pointerdown", (e) => {
-    vDragging = true;
-    vSplitter.setPointerCapture(e.pointerId);
-    e.preventDefault();
+  $("btn-collapse").addEventListener("click", collapseSheet);
+
+  // Swipe-down to dismiss the sheet
+  const sheetGrab = $("sheet-grab");
+  let sheetDragY = null;
+
+  sheetGrab.addEventListener("pointerdown", (e) => {
+    sheetDragY = e.clientY;
+    player.classList.add("dragging");
+    sheetGrab.setPointerCapture(e.pointerId);
   });
-  vSplitter.addEventListener("pointermove", (e) => {
-    if (!vDragging) return;
-    const paneRect = libraryPane.getBoundingClientRect();
-    // Cover panel sits at the bottom; height = distance from pointer to pane bottom
-    // minus half the splitter (pointer is on the splitter above the panel)
-    const fromBottom = paneRect.bottom - e.clientY;
-    const maxH = Math.max(80, paneRect.height - 120); // leave room for header + tree
-    const h = Math.min(maxH, Math.max(80, fromBottom));
-    libraryCoverPanel.style.height = `${h}px`;
+  sheetGrab.addEventListener("pointermove", (e) => {
+    if (sheetDragY === null) return;
+    const dy = Math.max(0, e.clientY - sheetDragY);
+    player.style.transform = `translateY(${dy}px)`;
   });
-  vSplitter.addEventListener("pointerup", () => {
-    if (!vDragging) return;
-    vDragging = false;
-    try {
-      localStorage.setItem(
-        COVER_HEIGHT_KEY,
-        String(libraryCoverPanel.getBoundingClientRect().height)
-      );
-    } catch {
-      /* ignore quota */
-    }
+  sheetGrab.addEventListener("pointerup", (e) => {
+    if (sheetDragY === null) return;
+    const dy = e.clientY - sheetDragY;
+    sheetDragY = null;
+    player.classList.remove("dragging");
+    if (dy > 100) collapseSheet();
+    else player.style.transform = "";
+  });
+
+  // Collapse the sheet if the viewport grows to desktop width
+  desktopMQ.addEventListener("change", (e) => {
+    if (e.matches) collapseSheet();
   });
 
   // ── Boot ───────────────────────────────────────────────────────────
   loadStreamCodec();
-  streamCodecEl.value = streamCodec;
   loadPlaylist();
   renderPlaylist();
   updateTransportUI();
   updateNowPlaying();
   audio.volume = Number(volume.value);
-  initTree().catch(console.error);
+  renderDir().catch(console.error);
 })();

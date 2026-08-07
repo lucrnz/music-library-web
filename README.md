@@ -1,6 +1,6 @@
 # Music Library Web Server
 
-Browse and stream a lossless music library over your LAN. Foobar2000-inspired UI: **filesystem tree on the left**, **playlist on the right**, with live multi-codec transcoding via **ffmpeg** (libsoxr HQ resample + AAC, Opus, or FLAC).
+Browse and stream a lossless music library over your LAN. Modern mobile-first web UI (Spotify/YT-Music style): **drill-down library browser**, **playlist**, a mini-player that expands into a full now-playing sheet on phones, and a two-pane layout with a persistent player bar on desktop. Live multi-codec transcoding via **ffmpeg** (libsoxr HQ resample + AAC, Opus, or FLAC).
 
 The library browser is **filesystem-agnostic**: it only needs `MUSIC_LIBRARY_PATH`. It discovers whatever directories and audio files exist under that root (lazy tree, one level at a time). No hard-coded folder names or library schema.
 
@@ -62,13 +62,14 @@ Press **Ctrl+C** for a clean shutdown. The temporary transcode cache is always d
 
 ## Features
 
-- Lazy file-tree browser (dirs + `.flac` / `.m4a` only)
-- Browser session playlist (multi-select, drag reorder, remove, clear)
+- Mobile-first responsive UI: bottom tabs + mini-player/now-playing sheet on phones; side-by-side library/playlist panes + player bar on desktop (≥900px)
+- Drill-down folder browser (dirs + `.flac` / `.m4a` only); tap-to-play, per-row add, "Add all" per folder, desktop Ctrl/Cmd multi-select
+- Browser session playlist (tap to play, edit mode: remove, touch/mouse drag reorder, clear)
 - Play / pause / next / prev, seek, volume
 - Shuffle, repeat off / one / all
-- Cover art: embedded (ffmpeg) or folder `cover.jpg` / `cover.png` / etc.
-  - Full panel under the library tree (resizable height): raw extracted image via `/api/cover?path=…&size=full`
-  - Player-bar thumbnail (fixed): 200×200 JPEG quality 90 via `/api/cover?path=…&size=thumb`
+- Cover art: embedded (ffmpeg) or folder `cover.jpg` / `cover.png` / etc., always served as WebP
+  - Now-playing sheet: 800×800 lossless WebP (LANCZOS resize) via `/api/cover?path=…&size=full`
+  - Mini-player / playlist thumbnails: 200×200 WebP quality 90 via `/api/cover?path=…&size=thumb`
 - Tags via mutagen (title, artist, album, duration)
 - Selectable **Codec** profiles (player bar; default AAC):
   - **`aac_256_44100`** — AAC-LC VBR ~256 kbps @ **44.1 kHz**

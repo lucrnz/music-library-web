@@ -1,4 +1,4 @@
-"""Cover art extraction via ffmpeg and folder fallbacks."""
+"""Cover art extraction via ffmpeg and folder fallbacks, WebP encoding via Pillow."""
 
 from __future__ import annotations
 
@@ -13,7 +13,10 @@ from PIL import Image, ImageOps
 logger = logging.getLogger(__name__)
 
 THUMB_SIZE = 200
-THUMB_JPEG_QUALITY = 90
+FULL_SIZE = 800
+THUMB_WEBP_QUALITY = 90
+FULL_WEBP_QUALITY = 100
+WEBP_METHOD = 6
 
 FOLDER_COVER_NAMES = (
     "cover.jpg",
@@ -77,12 +80,11 @@ def _extract_embedded(audio_path: Path, dest: Path) -> bool:
     return proc.returncode == 0 and dest.is_file() and dest.stat().st_size > 0
 
 
-def get_cover_bytes(audio_path: Path) -> tuple[bytes, str]:
+def _cover_source(audio_path: Path) -> tuple[bytes, str]:
     """
-    Return (image_bytes, media_type) for the given audio file.
+    Return raw (image_bytes, media_type) for the given audio file.
 
-    Order: embedded art → folder cover → SVG placeholder.
-    Full-size path: raw extracted bytes only — no conversion or downscale.
+    Order: embedded art → folder cover → SVG placeholder (sentinel for "no art").
     """
     # 1) Embedded via ffmpeg (write to a temp file then read)
     with tempfile.TemporaryDirectory(prefix="musicweb-cover-") as tmp:
@@ -111,54 +113,74 @@ def get_cover_bytes(audio_path: Path) -> tuple[bytes, str]:
     return PLACEHOLDER_SVG, "image/svg+xml"
 
 
-def _placeholder_thumb_jpeg() -> bytes:
-    """Solid dark 200×200 JPEG used when no cover art exists."""
-    img = Image.new("RGB", (THUMB_SIZE, THUMB_SIZE), (42, 42, 46))
+def _flatten_rgb(img: Image.Image) -> Image.Image:
+    """Composite alpha modes onto a dark background; ensure RGB output."""
+    if img.mode in ("RGBA", "LA", "P"):
+        background = Image.new("RGB", img.size, (42, 42, 46))
+        if img.mode == "P":
+            img = img.convert("RGBA")
+        alpha = img.split()[-1] if img.mode in ("RGBA", "LA") else None
+        if alpha is not None:
+            background.paste(img.convert("RGB"), mask=alpha)
+        else:
+            background.paste(img.convert("RGB"))
+        return background
+    if img.mode != "RGB":
+        return img.convert("RGB")
+    return img
+
+
+def _placeholder_webp(size: int, **save_kwargs) -> bytes:
+    """Solid dark square WebP used when no cover art exists."""
+    img = Image.new("RGB", (size, size), (42, 42, 46))
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=THUMB_JPEG_QUALITY, optimize=True)
+    img.save(buf, format="WEBP", **save_kwargs)
     return buf.getvalue()
 
 
-def get_cover_thumbnail(audio_path: Path) -> tuple[bytes, str]:
+def _cover_webp(audio_path: Path, size: int, **save_kwargs) -> tuple[bytes, str]:
     """
-    Return a fixed 200×200 JPEG (quality 90) thumbnail for the given audio file.
+    Return a fixed square WebP (center-crop + LANCZOS resize) for the audio file.
 
-    Uses the same art sources as get_cover_bytes, then converts with Pillow.
+    Uses the same art sources as _cover_source, then converts with Pillow.
     """
-    data, media_type = get_cover_bytes(audio_path)
+    data, media_type = _cover_source(audio_path)
     if media_type == "image/svg+xml":
-        return _placeholder_thumb_jpeg(), "image/jpeg"
+        return _placeholder_webp(size, **save_kwargs), "image/webp"
 
     try:
         with Image.open(io.BytesIO(data)) as img:
-            # Center-crop to square and resize to exact 200×200
             fitted = ImageOps.fit(
                 img,
-                (THUMB_SIZE, THUMB_SIZE),
+                (size, size),
                 method=Image.Resampling.LANCZOS,
                 centering=(0.5, 0.5),
             )
-            if fitted.mode in ("RGBA", "LA", "P"):
-                background = Image.new("RGB", fitted.size, (42, 42, 46))
-                if fitted.mode == "P":
-                    fitted = fitted.convert("RGBA")
-                alpha = fitted.split()[-1] if fitted.mode in ("RGBA", "LA") else None
-                if alpha is not None:
-                    background.paste(fitted.convert("RGB"), mask=alpha)
-                else:
-                    background.paste(fitted.convert("RGB"))
-                fitted = background
-            elif fitted.mode != "RGB":
-                fitted = fitted.convert("RGB")
-
+            fitted = _flatten_rgb(fitted)
             buf = io.BytesIO()
-            fitted.save(
-                buf,
-                format="JPEG",
-                quality=THUMB_JPEG_QUALITY,
-                optimize=True,
-            )
-            return buf.getvalue(), "image/jpeg"
+            fitted.save(buf, format="WEBP", **save_kwargs)
+            return buf.getvalue(), "image/webp"
     except Exception as exc:
-        logger.debug("cover thumbnail conversion failed: %s", exc)
-        return _placeholder_thumb_jpeg(), "image/jpeg"
+        logger.debug("cover webp conversion failed: %s", exc)
+        return _placeholder_webp(size, **save_kwargs), "image/webp"
+
+
+def get_cover_thumbnail(audio_path: Path) -> tuple[bytes, str]:
+    """200×200 WebP thumbnail (quality 90, method 6)."""
+    return _cover_webp(
+        audio_path,
+        THUMB_SIZE,
+        quality=THUMB_WEBP_QUALITY,
+        method=WEBP_METHOD,
+    )
+
+
+def get_cover_full(audio_path: Path) -> tuple[bytes, str]:
+    """800×800 WebP full art (LANCZOS resize; lossless, quality 100, method 6)."""
+    return _cover_webp(
+        audio_path,
+        FULL_SIZE,
+        lossless=True,
+        quality=FULL_WEBP_QUALITY,
+        method=WEBP_METHOD,
+    )

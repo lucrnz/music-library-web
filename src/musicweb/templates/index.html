@@ -2,117 +2,205 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>{{ title }}</title>
   <link rel="stylesheet" href="/static/css/app.css" />
 </head>
 <body>
-  <div id="app">
-    <header class="toolbar">
-      <div class="toolbar-left">
-        <span class="app-title">Music Library</span>
-      </div>
-      <div class="toolbar-actions">
-        <button type="button" id="btn-add-selected" title="Add selected tree items to playlist">Add selected</button>
-        <button type="button" id="btn-add-folder" title="Add all audio under selected folder">Add folder</button>
-        <button type="button" id="btn-remove" title="Remove selected playlist rows">Remove</button>
-        <button type="button" id="btn-clear" title="Clear playlist">Clear</button>
-      </div>
-    </header>
+  <!-- Inline SVG icon sprite -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display: none" aria-hidden="true">
+    <symbol id="i-play" viewBox="0 0 24 24">
+      <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l10.5-6.86a1.03 1.03 0 0 0 0-1.76L9.56 4.26A1.03 1.03 0 0 0 8 5.14z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24">
+      <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+      <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-next" viewBox="0 0 24 24">
+      <path d="M6 6.7v10.6c0 .74.8 1.2 1.44.8l7.6-5.3a.97.97 0 0 0 0-1.6l-7.6-5.3A.97.97 0 0 0 6 6.7z" fill="currentColor"/>
+      <rect x="16" y="5" width="2.5" height="14" rx="1" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24">
+      <path d="M18 6.7v10.6c0 .74-.8 1.2-1.44.8l-7.6-5.3a.97.97 0 0 1 0-1.6l7.6-5.3c.63-.4 1.44.06 1.44.8z" fill="currentColor"/>
+      <rect x="5.5" y="5" width="2.5" height="14" rx="1" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24">
+      <path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24">
+      <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-repeat-one" viewBox="0 0 24 24">
+      <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" fill="currentColor"/>
+      <text x="12" y="15.5" text-anchor="middle" font-size="8" font-weight="700" fill="currentColor" font-family="system-ui">1</text>
+    </symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24">
+      <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-note" viewBox="0 0 24 24">
+      <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24">
+      <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24">
+      <path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24">
+      <path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12l-4.58 4.59z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24">
+      <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24">
+      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24">
+      <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-drag" viewBox="0 0 24 24">
+      <path d="M11 18a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm0-7a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm0-7a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm7 14a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm0-7a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm0-7a2 2 0 1 1 0 4 2 2 0 0 1 0-4z" fill="currentColor" transform="translate(-3.5 -2) scale(0.9)"/>
+    </symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24">
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.47 4.47 0 0 0 16.5 12zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-library" viewBox="0 0 24 24">
+      <path d="M20 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-2 5h-3v5.5a2.5 2.5 0 1 1-2-2.45V5h5v2zM4 6H2v14a2 2 0 0 0 2 2h14v-2H4V6z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-queue" viewBox="0 0 24 24">
+      <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18a3 3 0 1 0 2 2.82V8h3V6h-5z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24">
+      <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24">
+      <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/>
+    </symbol>
+  </svg>
 
-    <main class="main-panes">
-      <section class="pane library-pane" aria-label="Library file tree">
-        <div class="pane-header">Library</div>
-        <div id="tree" class="tree" role="tree"></div>
-        <div
-          class="library-v-splitter"
-          id="library-v-splitter"
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize cover art"
-        ></div>
-        <div class="library-cover-panel" id="library-cover-panel">
-          <img
-            id="library-cover-art"
-            class="library-cover-art"
-            src="/static/img/placeholder.svg"
-            alt="Album cover"
-          />
+  <div id="app">
+    <main>
+      <section id="view-library" class="view" aria-label="Library">
+        <div class="view-bar">
+          <button type="button" id="btn-back" class="icon-btn hidden" title="Back" aria-label="Back">
+            <svg class="icon"><use href="#i-chevron-left" /></svg>
+          </button>
+          <div class="view-title" id="library-title">Library</div>
+          <div class="view-actions">
+            <button type="button" id="btn-add-selected" class="pill hidden">Add selected</button>
+            <button type="button" id="btn-add-all" class="pill">Add all</button>
+          </div>
         </div>
+        <div id="dir-list" class="row-list"></div>
       </section>
 
-      <div class="splitter" id="splitter" role="separator" aria-orientation="vertical"></div>
-
-      <section class="pane playlist-pane" aria-label="Playlist">
-        <div class="pane-header">Playlist</div>
-        <div class="playlist-scroll">
-          <table class="playlist-table" id="playlist-table">
-            <thead>
-              <tr>
-                <th class="col-num">#</th>
-                <th class="col-title">Title</th>
-                <th class="col-artist">Artist</th>
-                <th class="col-album">Album</th>
-                <th class="col-dur">Duration</th>
-              </tr>
-            </thead>
-            <tbody id="playlist-body"></tbody>
-          </table>
+      <section id="view-playlist" class="view hidden" aria-label="Playlist">
+        <div class="view-bar">
+          <div class="view-title">Playlist</div>
+          <div class="view-actions">
+            <button type="button" id="btn-clear" class="pill danger hidden">Clear all</button>
+            <button type="button" id="btn-edit" class="pill">
+              <svg class="icon"><use href="#i-edit" /></svg><span>Edit</span>
+            </button>
+          </div>
         </div>
+        <div id="pl-list" class="row-list"></div>
       </section>
     </main>
 
-    <footer class="player-bar">
-      <div class="now-playing">
-        <img id="cover-art" class="cover-art" src="/static/img/placeholder.svg" alt="" />
-        <div class="track-meta">
-          <div id="np-title" class="np-title">—</div>
-          <div id="np-artist" class="np-artist">No track</div>
-        </div>
+    <div id="player" class="hidden">
+      <!-- Compact bar (mobile) -->
+      <div class="player-mini" id="player-mini">
+        <img id="cover-art" class="mini-cover" src="/static/img/placeholder.svg" alt="" />
+        <button type="button" class="mini-meta" id="btn-expand" aria-label="Open now playing">
+          <span id="np-title" class="np-title">—</span>
+          <span id="np-artist" class="np-artist">No track</span>
+        </button>
+        <button type="button" id="btn-play-mini" class="icon-btn" title="Play / Pause" aria-label="Play / Pause">
+          <svg class="icon"><use href="#i-play" /></svg>
+        </button>
+        <button type="button" id="btn-next-mini" class="icon-btn" title="Next" aria-label="Next">
+          <svg class="icon"><use href="#i-next" /></svg>
+        </button>
       </div>
 
-      <div class="transport">
-        <div class="transport-buttons">
-          <button type="button" id="btn-prev" title="Previous">⏮</button>
-          <button type="button" id="btn-play" title="Play / Pause">▶</button>
-          <button type="button" id="btn-next" title="Next">⏭</button>
+      <!-- Full layout: now-playing sheet on mobile, player bar on desktop -->
+      <div class="player-full" id="player-full">
+        <div class="sheet-grab" id="sheet-grab">
+          <button type="button" id="btn-collapse" class="icon-btn" title="Close" aria-label="Close now playing">
+            <svg class="icon"><use href="#i-chevron-down" /></svg>
+          </button>
         </div>
+
+        <div class="full-cover-wrap">
+          <img id="cover-art-full" class="full-cover" src="/static/img/placeholder.svg" alt="Album cover" />
+        </div>
+
+        <div class="full-meta">
+          <div id="np-title-full" class="np-title">—</div>
+          <div id="np-artist-full" class="np-artist">No track</div>
+        </div>
+
         <div class="seek-row">
           <span id="time-cur" class="time">0:00</span>
-          <input type="range" id="seek" min="0" max="1000" value="0" step="1" />
+          <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="Seek" />
           <span id="time-total" class="time">0:00</span>
         </div>
-      </div>
 
-      <div class="player-extras">
-        <label class="vol-label" title="Volume">
-          Vol
-          <input type="range" id="volume" min="0" max="1" step="0.01" value="1" />
-        </label>
-        <label class="codec-label" title="Stream codec and sample rate">
-          Codec
-          <select id="stream-codec" aria-label="Stream codec">
-            <option value="aac_256_44100" selected>
-              AAC-LC VBR 256kbps 44.1kHz
-            </option>
-            <option value="opus_192_48000">
-              OPUS 192kbps 48kHz
-            </option>
-            <option value="opus_160_48000">
-              OPUS 160kbps 48kHz
-            </option>
-            <option value="flac_16_44100">
-              FLAC 44.1kHz
-            </option>
-            <option value="flac_16_48000">
-              FLAC 48kHz
-            </option>
-          </select>
-        </label>
-        <button type="button" id="btn-shuffle" class="toggle" title="Shuffle" aria-pressed="false">Shuffle</button>
-        <button type="button" id="btn-repeat" class="toggle" title="Repeat" data-mode="off" aria-pressed="false">Repeat</button>
+        <div class="transport-buttons">
+          <button type="button" id="btn-shuffle" class="icon-btn toggle" title="Shuffle" aria-pressed="false" aria-label="Shuffle">
+            <svg class="icon"><use href="#i-shuffle" /></svg>
+          </button>
+          <button type="button" id="btn-prev" class="icon-btn" title="Previous" aria-label="Previous">
+            <svg class="icon"><use href="#i-prev" /></svg>
+          </button>
+          <button type="button" id="btn-play" class="icon-btn primary" title="Play / Pause" aria-label="Play / Pause">
+            <svg class="icon"><use href="#i-play" /></svg>
+          </button>
+          <button type="button" id="btn-next" class="icon-btn" title="Next" aria-label="Next">
+            <svg class="icon"><use href="#i-next" /></svg>
+          </button>
+          <button type="button" id="btn-repeat" class="icon-btn toggle" title="Repeat" data-mode="off" aria-pressed="false" aria-label="Repeat">
+            <svg class="icon"><use href="#i-repeat" /></svg>
+          </button>
+        </div>
+
+        <div class="player-extras">
+          <label class="vol-label" title="Volume">
+            <svg class="icon"><use href="#i-volume" /></svg>
+            <input type="range" id="volume" min="0" max="1" step="0.01" value="1" aria-label="Volume" />
+          </label>
+          <button type="button" id="btn-settings" class="icon-btn" title="Settings" aria-label="Settings" aria-haspopup="dialog">
+            <svg class="icon"><use href="#i-settings" /></svg>
+          </button>
+        </div>
       </div>
-    </footer>
+    </div>
+
+    <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="modal-backdrop" id="settings-backdrop"></div>
+      <div class="modal-sheet">
+        <div class="modal-head">
+          <div class="modal-title" id="settings-title">Settings</div>
+          <button type="button" id="btn-settings-close" class="icon-btn" title="Close" aria-label="Close settings">
+            <svg class="icon"><use href="#i-chevron-down" /></svg>
+          </button>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Streaming quality</div>
+          <div id="codec-list" class="codec-list" role="radiogroup" aria-label="Stream codec"></div>
+        </div>
+      </div>
+    </div>
+
+    <nav id="tab-bar" aria-label="Views">
+      <button type="button" id="tab-library" class="tab active" aria-label="Library">
+        <svg class="icon"><use href="#i-library" /></svg><span>Library</span>
+      </button>
+      <button type="button" id="tab-playlist" class="tab" aria-label="Playlist">
+        <svg class="icon"><use href="#i-queue" /></svg><span>Playlist</span>
+      </button>
+    </nav>
   </div>
 
   <audio id="audio" preload="metadata"></audio>
