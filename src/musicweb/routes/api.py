@@ -81,7 +81,8 @@ async def stream(
     codec: str = Query(
         default=DEFAULT_PROFILE_TAG,
         description=(
-            "Stream profile tag: aac_256_44100 | opus_192_48000"
+            "Stream profile tag: aac_256_44100 | opus_192_48000 | "
+            "opus_160_48000 | flac_16_44100 | flac_16_48000"
         ),
     ),
 ) -> FileResponse:

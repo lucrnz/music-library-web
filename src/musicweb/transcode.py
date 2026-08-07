@@ -1,8 +1,11 @@
-"""On-demand dual-codec streaming via a single ffmpeg encode.
+"""On-demand multi-codec streaming via a single ffmpeg encode.
 
 Profiles:
   - aac_256_44100  → AAC-LC @ 44.1 kHz (aac_at preferred, else libfdk_aac)
   - opus_192_48000 → Opus VBR 192 kbps @ 48 kHz (libopus)
+  - opus_160_48000 → Opus VBR 160 kbps @ 48 kHz (libopus)
+  - flac_16_44100  → FLAC 16-bit @ 44.1 kHz (ffmpeg default compression)
+  - flac_16_48000  → FLAC 16-bit @ 48 kHz (ffmpeg default compression)
 
 High-quality rate/bit-depth conversion uses libsoxr through aresample
 (precision=28 ≈ SoX rate -v, Shibata dither ≈ dither -s). When the input
@@ -40,10 +43,10 @@ class StreamProfile:
 
     tag: str
     sample_rate: int
-    bitrate_kbps: int
+    bitrate_kbps: int  # unused (0) for lossless FLAC
     extension: str
     media_type: str
-    kind: str  # "aac" | "opus"
+    kind: str  # "aac" | "opus" | "flac"
 
 
 PROFILES: dict[str, StreamProfile] = {
@@ -63,6 +66,30 @@ PROFILES: dict[str, StreamProfile] = {
         media_type="audio/ogg",
         kind="opus",
     ),
+    "opus_160_48000": StreamProfile(
+        tag="opus_160_48000",
+        sample_rate=48000,
+        bitrate_kbps=160,
+        extension="opus",
+        media_type="audio/ogg",
+        kind="opus",
+    ),
+    "flac_16_44100": StreamProfile(
+        tag="flac_16_44100",
+        sample_rate=44100,
+        bitrate_kbps=0,
+        extension="flac",
+        media_type="audio/flac",
+        kind="flac",
+    ),
+    "flac_16_48000": StreamProfile(
+        tag="flac_16_48000",
+        sample_rate=48000,
+        bitrate_kbps=0,
+        extension="flac",
+        media_type="audio/flac",
+        kind="flac",
+    ),
 }
 
 
@@ -77,7 +104,7 @@ def get_profile(tag: str) -> StreamProfile:
 
 
 class Transcoder:
-    """Transcode library audio into tagged cache files (AAC or Opus)."""
+    """Transcode library audio into tagged cache files (AAC, Opus, or FLAC)."""
 
     def __init__(self) -> None:
         self._temp_dir: Path | None = None
@@ -249,6 +276,17 @@ class Transcoder:
                     str(dest_partial),
                 ]
             )
+        elif profile.kind == "flac":
+            # 16-bit + sample rate set above; leave compression at ffmpeg default
+            cmd.extend(
+                [
+                    "-c:a",
+                    "flac",
+                    "-f",
+                    "flac",
+                    str(dest_partial),
+                ]
+            )
         else:
             raise ValueError(f"Unknown profile kind: {profile.kind}")
 
@@ -264,8 +302,8 @@ class Transcoder:
         """
         Return path to a cached stream file, encoding if needed.
 
-        Cache keys and filenames include the profile tag so AAC and Opus
-        variants of the same track never collide.
+        Cache keys and filenames include the profile tag so AAC, Opus, and
+        FLAC variants of the same track never collide.
         """
         if self._closed or self._temp_dir is None:
             raise RuntimeError("Transcoder is shut down")
@@ -286,9 +324,12 @@ class Transcoder:
             if out_path.is_file() and out_path.stat().st_size > 0:
                 return out_path
 
-            encoder_label = (
-                self.aac_encoder if profile.kind == "aac" else "libopus"
-            )
+            if profile.kind == "aac":
+                encoder_label = self.aac_encoder
+            elif profile.kind == "opus":
+                encoder_label = "libopus"
+            else:
+                encoder_label = "flac"
             logger.info(
                 "Transcode %s → profile=%s encoder=%s ar=%s",
                 relative_path,
@@ -351,7 +392,7 @@ def _ffmpeg_encoder_names() -> set[str]:
     except FileNotFoundError as exc:
         raise RuntimeError(
             "ffmpeg not found on PATH. Install ffmpeg with libsoxr, "
-            "libopus, and aac_at or libfdk_aac."
+            "libopus, flac, and aac_at or libfdk_aac."
         ) from exc
     if proc.returncode != 0:
         err = (proc.stderr or b"").decode("utf-8", errors="replace").strip()
@@ -422,7 +463,7 @@ def resolve_aac_encoder(encoders: set[str] | None = None) -> tuple[str, str]:
 
 def check_dependencies() -> dict[str, str]:
     """
-    Ensure ffmpeg has libsoxr, a usable AAC encoder, and libopus.
+    Ensure ffmpeg has libsoxr, a usable AAC encoder, libopus, and flac.
 
     Returns a short label per dependency for the startup banner.
     Raises RuntimeError on any missing requirement (fail fast).
@@ -431,7 +472,8 @@ def check_dependencies() -> dict[str, str]:
         "ffmpeg",
         ["-version"],
         hint=(
-            "Install ffmpeg with libsoxr, libopus, and aac_at or libfdk_aac."
+            "Install ffmpeg with libsoxr, libopus, flac, "
+            "and aac_at or libfdk_aac."
         ),
     )
     soxr_label = _require_libsoxr()
@@ -441,10 +483,16 @@ def check_dependencies() -> dict[str, str]:
             "ffmpeg is missing the libopus encoder. "
             "Install/rebuild ffmpeg with --enable-libopus."
         )
+    if "flac" not in encoders:
+        raise RuntimeError(
+            "ffmpeg is missing the flac encoder. "
+            "Install a standard ffmpeg build that includes FLAC."
+        )
     aac_name, aac_label = resolve_aac_encoder(encoders)
 
     logger.info("AAC encoder selected: %s", aac_label)
     logger.info("Opus encoder: libopus")
+    logger.info("FLAC encoder: flac")
     logger.info("Resampler: %s", soxr_label)
 
     return {
@@ -452,6 +500,7 @@ def check_dependencies() -> dict[str, str]:
         "libsoxr": soxr_label,
         "aac encoder": aac_label,
         "opus encoder": "libopus",
+        "flac encoder": "flac",
         "_aac_encoder_name": aac_name,  # consumed by lifespan; not for display
     }
 

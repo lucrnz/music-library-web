@@ -1,6 +1,6 @@
 # Music Library Web Server
 
-Browse and stream a lossless music library over your LAN. Foobar2000-inspired UI: **filesystem tree on the left**, **playlist on the right**, with live dual-codec transcoding via **ffmpeg** (libsoxr HQ resample + AAC or Opus).
+Browse and stream a lossless music library over your LAN. Foobar2000-inspired UI: **filesystem tree on the left**, **playlist on the right**, with live multi-codec transcoding via **ffmpeg** (libsoxr HQ resample + AAC, Opus, or FLAC).
 
 The library browser is **filesystem-agnostic**: it only needs `MUSIC_LIBRARY_PATH`. It discovers whatever directories and audio files exist under that root (lazy tree, one level at a time). No hard-coded folder names or library schema.
 
@@ -10,10 +10,11 @@ The library browser is **filesystem-agnostic**: it only needs `MUSIC_LIBRARY_PAT
 - [uv](https://github.com/astral-sh/uv)
 - [ffmpeg](https://ffmpeg.org/) on your `PATH`, built with:
   - **libsoxr** (`--enable-libsoxr`) — high-quality resampling
-  - **libopus** — mobile Opus profile
-  - **aac_at** (macOS AudioToolbox) **or** **libfdk_aac** (`--enable-libfdk-aac --enable-nonfree`) — desktop AAC profile
+  - **libopus** — Opus profile
+  - **flac** — lossless FLAC profiles (built into standard ffmpeg)
+  - **aac_at** (macOS AudioToolbox) **or** **libfdk_aac** (`--enable-libfdk-aac --enable-nonfree`) — AAC profile
 
-On macOS with Homebrew, a non-free ffmpeg build that includes FDK + libsoxr is typical. The server **refuses to start** if libsoxr, libopus, or a usable AAC encoder is missing. It does **not** require a separate SoX package.
+On macOS with Homebrew, a non-free ffmpeg build that includes FDK + libsoxr is typical. The server **refuses to start** if libsoxr, libopus, flac, or a usable AAC encoder is missing. It does **not** require a separate SoX package.
 
 ## Setup
 
@@ -46,6 +47,7 @@ Tools   :
   - libsoxr: enabled (aresample resampler=soxr)
   - aac encoder: aac_at (Apple AudioToolbox)
   - opus encoder: libopus
+  - flac encoder: flac
 ```
 
 Press **Ctrl+C** for a clean shutdown. The temporary transcode cache is always deleted on exit.
@@ -68,22 +70,25 @@ Press **Ctrl+C** for a clean shutdown. The temporary transcode cache is always d
   - Full panel under the library tree (resizable height): raw extracted image via `/api/cover?path=…&size=full`
   - Player-bar thumbnail (fixed): 200×200 JPEG quality 90 via `/api/cover?path=…&size=thumb`
 - Tags via mutagen (title, artist, album, duration)
-- Selectable **Codec** profiles (player bar):
-  - **`aac_256_44100`** — AAC-LC VBR ~256 kbps @ **44.1 kHz** (recommended for desktop)
-  - **`opus_192_48000`** — Opus VBR 192 kbps @ **48 kHz** (recommended for mobile)
+- Selectable **Codec** profiles (player bar; default AAC):
+  - **`aac_256_44100`** — AAC-LC VBR ~256 kbps @ **44.1 kHz**
+  - **`opus_192_48000`** — Opus VBR 192 kbps @ **48 kHz**
+  - **`opus_160_48000`** — Opus VBR 160 kbps @ **48 kHz**
+  - **`flac_16_44100`** — FLAC 16-bit @ **44.1 kHz** (lossless stream)
+  - **`flac_16_48000`** — FLAC 16-bit @ **48 kHz** (lossless stream)
 - On-demand single-pass ffmpeg encode; process cache wiped on shutdown
 - No authentication (LAN trust only — do not expose to the public internet)
 
 ## Notes
 
 - Source library is expected to be lossless (FLAC, ALAC in `.m4a`).
-- **Stream URL:** `/api/stream?path=…&codec=aac_256_44100|opus_192_48000`
+- **Stream URL:** `/api/stream?path=…&codec=aac_256_44100|opus_192_48000|opus_160_48000|flac_16_44100|flac_16_48000`
 - **AAC encoder selection** (startup): prefer **`aac_at`** (Apple) when present, else **`libfdk_aac`**. Fail if neither is available. The chosen encoder is logged in the startup banner.
 - **Transcode path** (one ffmpeg process):
   1. `aresample=resampler=soxr:precision=28:cutoff=0.95:dither_method=shibata` (≈ SoX `rate -v` + Shibata dither)
   2. Force 16-bit + profile sample rate (`-sample_fmt s16 -ar …`)
-  3. Encode AAC or Opus into a tagged cache file
+  3. Encode AAC, Opus, or FLAC into a tagged cache file (FLAC uses ffmpeg default compression; level is not set)
   4. When the source sample rate already matches the target, ffmpeg **skips** the rate-conversion step (format/dither may still apply)
-- Cache filenames include the profile tag, e.g. `{hash}.aac_256_44100.m4a`, `{hash}.opus_192_48000.opus`
+- Cache filenames include the profile tag, e.g. `{hash}.aac_256_44100.m4a`, `{hash}.opus_192_48000.opus`, `{hash}.flac_16_44100.flac`
 - Concurrent requests for the same track+profile share one encode
 - Seeking uses HTTP Range on completed cache files
