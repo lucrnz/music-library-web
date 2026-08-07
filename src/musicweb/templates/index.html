@@ -89,6 +89,9 @@
           <div class="view-actions">
             <button type="button" id="btn-add-selected" class="pill hidden">Add selected</button>
             <button type="button" id="btn-add-all" class="pill">Add all</button>
+            <button type="button" id="btn-settings-lib" class="icon-btn" title="Settings" aria-label="Settings" aria-haspopup="dialog">
+              <svg class="icon"><use href="#i-settings" /></svg>
+            </button>
           </div>
         </div>
         <div id="dir-list" class="row-list"></div>
@@ -110,7 +113,7 @@
 
     <div id="player" class="hidden">
       <!-- Compact bar (mobile) -->
-      <div class="player-mini" id="player-mini">
+      <div class="player-mini">
         <img id="cover-art" class="mini-cover" src="/static/img/placeholder.svg" alt="" />
         <button type="button" class="mini-meta" id="btn-expand" aria-label="Open now playing">
           <span id="np-title" class="np-title">—</span>
@@ -125,7 +128,7 @@
       </div>
 
       <!-- Full layout: now-playing sheet on mobile, player bar on desktop -->
-      <div class="player-full" id="player-full">
+      <div class="player-full">
         <div class="sheet-grab" id="sheet-grab">
           <button type="button" id="btn-collapse" class="icon-btn" title="Close" aria-label="Close now playing">
             <svg class="icon"><use href="#i-chevron-down" /></svg>
@@ -160,7 +163,7 @@
           <button type="button" id="btn-next" class="icon-btn" title="Next" aria-label="Next">
             <svg class="icon"><use href="#i-next" /></svg>
           </button>
-          <button type="button" id="btn-repeat" class="icon-btn toggle" title="Repeat" data-mode="off" aria-pressed="false" aria-label="Repeat">
+          <button type="button" id="btn-repeat" class="icon-btn toggle" title="Repeat" aria-pressed="false" aria-label="Repeat">
             <svg class="icon"><use href="#i-repeat" /></svg>
           </button>
         </div>
@@ -204,6 +207,6 @@
   </div>
 
   <audio id="audio" preload="metadata"></audio>
-  <script src="/static/js/app.js"></script>
+  <script type="module" src="/static/js/ui.js"></script>
 </body>
 </html>
