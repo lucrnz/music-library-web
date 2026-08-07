@@ -1,4 +1,10 @@
-"""Cover art extraction via ffmpeg and folder fallbacks, WebP encoding via Pillow."""
+"""Cover art extraction via ffmpeg and folder fallbacks, WebP encoding via Pillow.
+
+Rendered covers are stored under the process cache ``covers/`` subdirectory
+in an album-keyed CoverCache (a TempKVCache): tracks sharing an album tag
+title share one cached full + thumbnail WebP, rendered from a single ffmpeg
+extraction.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +15,8 @@ import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageOps
+
+from musicweb.cache import TempKVCache
 
 logger = logging.getLogger(__name__)
 
@@ -32,16 +40,6 @@ FOLDER_COVER_NAMES = (
     "front.jpeg",
     "front.png",
 )
-
-PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" fill="#2a2a2e"/>
-  <circle cx="128" cy="118" r="48" fill="none" stroke="#666" stroke-width="6"/>
-  <circle cx="128" cy="118" r="12" fill="#666"/>
-  <rect x="168" y="70" width="10" height="96" rx="3" fill="#666"/>
-  <text x="128" y="220" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="14">No cover</text>
-</svg>
-"""
 
 
 def _folder_cover(directory: Path) -> Path | None:
@@ -80,11 +78,11 @@ def _extract_embedded(audio_path: Path, dest: Path) -> bool:
     return proc.returncode == 0 and dest.is_file() and dest.stat().st_size > 0
 
 
-def _cover_source(audio_path: Path) -> tuple[bytes, str]:
+def _cover_source(audio_path: Path) -> tuple[bytes, str] | None:
     """
     Return raw (image_bytes, media_type) for the given audio file.
 
-    Order: embedded art → folder cover → SVG placeholder (sentinel for "no art").
+    Order: embedded art → folder cover → None (no art).
     """
     # 1) Embedded via ffmpeg (write to a temp file then read)
     with tempfile.TemporaryDirectory(prefix="musicweb-cover-") as tmp:
@@ -109,25 +107,18 @@ def _cover_source(audio_path: Path) -> tuple[bytes, str]:
         except OSError:
             pass
 
-    # 3) Placeholder
-    return PLACEHOLDER_SVG, "image/svg+xml"
+    # 3) No art
+    return None
 
 
 def _flatten_rgb(img: Image.Image) -> Image.Image:
     """Composite alpha modes onto a dark background; ensure RGB output."""
-    if img.mode in ("RGBA", "LA", "P"):
-        background = Image.new("RGB", img.size, (42, 42, 46))
-        if img.mode == "P":
-            img = img.convert("RGBA")
-        alpha = img.split()[-1] if img.mode in ("RGBA", "LA") else None
-        if alpha is not None:
-            background.paste(img.convert("RGB"), mask=alpha)
-        else:
-            background.paste(img.convert("RGB"))
-        return background
-    if img.mode != "RGB":
-        return img.convert("RGB")
-    return img
+    if img.mode == "RGB":
+        return img
+    img = img.convert("RGBA")
+    background = Image.new("RGB", img.size, (42, 42, 46))
+    background.paste(img, mask=img.split()[-1])
+    return background
 
 
 def _placeholder_webp(size: int, **save_kwargs) -> bytes:
@@ -138,16 +129,14 @@ def _placeholder_webp(size: int, **save_kwargs) -> bytes:
     return buf.getvalue()
 
 
-def _cover_webp(audio_path: Path, size: int, **save_kwargs) -> tuple[bytes, str]:
-    """
-    Return a fixed square WebP (center-crop + LANCZOS resize) for the audio file.
+def _render_webp(
+    source: tuple[bytes, str] | None, size: int, **save_kwargs
+) -> bytes:
+    """Render a fixed square WebP (center-crop + LANCZOS) from a cover source."""
+    if source is None:
+        return _placeholder_webp(size, **save_kwargs)
 
-    Uses the same art sources as _cover_source, then converts with Pillow.
-    """
-    data, media_type = _cover_source(audio_path)
-    if media_type == "image/svg+xml":
-        return _placeholder_webp(size, **save_kwargs), "image/webp"
-
+    data, _media_type = source
     try:
         with Image.open(io.BytesIO(data)) as img:
             fitted = ImageOps.fit(
@@ -159,28 +148,93 @@ def _cover_webp(audio_path: Path, size: int, **save_kwargs) -> tuple[bytes, str]
             fitted = _flatten_rgb(fitted)
             buf = io.BytesIO()
             fitted.save(buf, format="WEBP", **save_kwargs)
-            return buf.getvalue(), "image/webp"
+            return buf.getvalue()
     except Exception as exc:
         logger.debug("cover webp conversion failed: %s", exc)
-        return _placeholder_webp(size, **save_kwargs), "image/webp"
+        return _placeholder_webp(size, **save_kwargs)
 
 
-def get_cover_thumbnail(audio_path: Path) -> tuple[bytes, str]:
-    """200×200 WebP thumbnail (quality 90, method 6)."""
-    return _cover_webp(
-        audio_path,
-        THUMB_SIZE,
-        quality=THUMB_WEBP_QUALITY,
-        method=WEBP_METHOD,
-    )
+class CoverCache(TempKVCache):
+    """Album-keyed cache of ready-to-serve WebP cover art.
 
+    Keys derive from the album tag title (same album ⇒ same art); files
+    without an album tag fall back to a per-file key. On a first miss both
+    sizes are rendered from a single ffmpeg extraction and stored as
+    ``<key>.full.webp`` / ``<key>.thumb.webp``.
+    """
 
-def get_cover_full(audio_path: Path) -> tuple[bytes, str]:
-    """800×800 WebP full art (LANCZOS resize; lossless, quality 100, method 6)."""
-    return _cover_webp(
-        audio_path,
-        FULL_SIZE,
-        lossless=True,
-        quality=FULL_WEBP_QUALITY,
-        method=WEBP_METHOD,
-    )
+    def __init__(self) -> None:
+        super().__init__("covers")
+
+    @staticmethod
+    def key_for(album: str | None, relative_path: str) -> str:
+        """Base cache key: normalized album title when tagged, else the path."""
+        if album:
+            normalized = " ".join(album.split()).lower()
+            if normalized:
+                return TempKVCache.digest("album", normalized)
+        return TempKVCache.digest("file", relative_path)
+
+    def _entry_key(self, base_key: str, size: str) -> str:
+        return f"{base_key}.{size}.webp"
+
+    def cover_path(self, base_key: str, size: str) -> Path | None:
+        """Return the on-disk path for a ready WebP, or None on a miss."""
+        path = self._path(self._entry_key(base_key, size))
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return path
+        except OSError:
+            pass
+        return None
+
+    def get_cover(self, base_key: str, size: str) -> bytes | None:
+        """Return cached WebP bytes for key+size ("full"/"thumb"), or None."""
+        return self.get(self._entry_key(base_key, size))
+
+    def get_or_fill(self, base_key: str, audio_path: Path) -> dict[str, bytes]:
+        """
+        Return {"full": ..., "thumb": ...} WebP bytes for the key.
+
+        On a cache miss the cover source is extracted once and both sizes are
+        rendered and stored. Per-key locks serialize concurrent misses for the
+        same album; other albums fill in parallel. Waiters re-check and serve
+        the winner's output.
+        """
+        full = self.get_cover(base_key, "full")
+        thumb = self.get_cover(base_key, "thumb")
+        if full is not None and thumb is not None:
+            return {"full": full, "thumb": thumb}
+
+        # One lock per album base key so full+thumb fill atomically together
+        # (parent get_or_set is per entry key and would extract twice).
+        lock = self._lock_for(base_key)
+        with lock:
+            try:
+                full = self.get_cover(base_key, "full")
+                thumb = self.get_cover(base_key, "thumb")
+                if full is not None and thumb is not None:
+                    return {"full": full, "thumb": thumb}
+
+                source = _cover_source(audio_path)
+                full = _render_webp(
+                    source,
+                    FULL_SIZE,
+                    lossless=True,
+                    quality=FULL_WEBP_QUALITY,
+                    method=WEBP_METHOD,
+                )
+                thumb = _render_webp(
+                    source,
+                    THUMB_SIZE,
+                    quality=THUMB_WEBP_QUALITY,
+                    method=WEBP_METHOD,
+                )
+                try:
+                    self.set(self._entry_key(base_key, "full"), full)
+                    self.set(self._entry_key(base_key, "thumb"), thumb)
+                except OSError as exc:
+                    logger.debug("cover cache write failed: %s", exc)
+                return {"full": full, "thumb": thumb}
+            finally:
+                self._release_lock(base_key, lock)
