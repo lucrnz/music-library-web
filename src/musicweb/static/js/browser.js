@@ -12,7 +12,7 @@ import {
   icon,
   showEmpty,
 } from "./dom.js";
-import { apiGet } from "./api.js";
+import { apiGet, apiPost, coverUrl } from "./api.js";
 import { pl } from "./state.js";
 import { playIndex } from "./player.js";
 import { addPathsToPlaylist } from "./playlist.js";
@@ -26,6 +26,20 @@ const libSelected = new Map();
 
 function currentPath() {
   return navStack.length ? navStack[navStack.length - 1].path : "";
+}
+
+/**
+ * "%tracknumber%. %title% - %albumname% [%artist]" for browser file rows.
+ * Track number is zero-padded to two digits (01…99); larger values stay as-is.
+ * When track is missing, the numeric prefix is omitted.
+ */
+function formatTrackLabel({ track, title, album, artist }) {
+  const body = `${title || ""} - ${album || ""} [${artist || ""}]`;
+  if (track == null || !Number.isFinite(Number(track))) return body;
+  const n = Math.trunc(Number(track));
+  if (n < 0) return body;
+  const num = String(n).padStart(2, "0");
+  return `${num}. ${body}`;
 }
 
 function clearLibSelection() {
@@ -69,8 +83,28 @@ export async function renderDir() {
   for (const dir of data.dirs) {
     dirList.appendChild(createDirRow(dir));
   }
+
+  /** @type {Map<string, HTMLElement>} path -> .row-title element */
+  const fileTitleEls = new Map();
   for (const file of data.files) {
-    dirList.appendChild(createFileRow(file));
+    const row = createFileRow(file);
+    fileTitleEls.set(file.path, row.querySelector(".row-title"));
+    dirList.appendChild(row);
+  }
+
+  if (!fileTitleEls.size) return;
+  try {
+    const meta = await apiPost("/api/meta", {
+      paths: [...fileTitleEls.keys()],
+    });
+    if (seq !== renderDirSeq) return;
+    for (const m of meta.results || []) {
+      const el = fileTitleEls.get(m.path);
+      if (el) el.textContent = formatTrackLabel(m);
+    }
+  } catch (err) {
+    // Keep filename labels on meta failure.
+    console.error(err);
   }
 }
 
@@ -114,7 +148,9 @@ function createFileRow(file) {
   row.className = "row";
   row.dataset.path = file.path;
   row.innerHTML = `
-    <span class="row-icon">${icon("note")}</span>
+    <span class="row-cover-wrap">
+      <img class="row-cover" src="${coverUrl(file.path, "thumb", false)}" alt="" loading="lazy" />
+    </span>
     <span class="row-meta">
       <span class="row-title"></span>
     </span>
