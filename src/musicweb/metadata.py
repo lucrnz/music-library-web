@@ -12,7 +12,12 @@ def _first(tags: dict | None, *keys: str) -> str | None:
     if not tags:
         return None
     for key in keys:
-        value = tags.get(key)
+        try:
+            value = tags.get(key)
+        except ValueError:
+            # Vorbis tags reject MP4-style fallback keys (e.g. "\xa9alb")
+            # with ValueError instead of returning None — treat as missing.
+            continue
         if value is None:
             continue
         if isinstance(value, list):
@@ -44,7 +49,6 @@ def read_metadata(path: Path) -> dict:
     """
     stem = path.stem
     result = {
-        "path": path.name,
         "title": stem,
         "artist": "",
         "album": "",

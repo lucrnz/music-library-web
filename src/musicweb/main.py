@@ -8,11 +8,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from musicweb.cache import CACHE_COVERS, CACHE_STREAMS, ProcessCache
 from musicweb.config import Settings, load_settings
-from musicweb.library import Library
+from musicweb.cover import CoverCache
+from musicweb.library import Library, PathEscapeError
 from musicweb.routes import api, pages
 from musicweb.transcode import Transcoder, check_dependencies
 
@@ -33,14 +36,16 @@ def _guess_lan_ip() -> str | None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings: Settings = app.state.settings
+    process_cache: ProcessCache = app.state.process_cache
     transcoder: Transcoder = app.state.transcoder
+    cover_cache: CoverCache = app.state.cover_cache
 
-    tool_versions = check_dependencies()
-    aac_encoder = tool_versions.pop("_aac_encoder_name", None)
-    if aac_encoder:
-        transcoder.configure_encoders(aac_encoder)
+    report = check_dependencies()
+    transcoder.configure_encoders(report.aac_encoder)
     settings.validate_library()
-    transcoder.start()
+    process_cache.start()
+    transcoder.start(process_cache.path(CACHE_STREAMS))
+    cover_cache.start(process_cache.path(CACHE_COVERS))
 
     lan = _guess_lan_ip()
     print()
@@ -50,21 +55,44 @@ async def lifespan(app: FastAPI):
     print(f"  Listening on http://{settings.listen}:{settings.port}")
     if lan and settings.listen in ("0.0.0.0", "::"):
         print(f"  LAN URL : http://{lan}:{settings.port}")
-    print(f"  Cache   : {transcoder.temp_dir}")
+    print(f"  Cache   : {process_cache.root}  ({CACHE_STREAMS}/, {CACHE_COVERS}/)")
     print("  Tools   :")
-    for name, ver in tool_versions.items():
+    for name, ver in report.tools.items():
         print(f"    - {name}: {ver[:72]}")
     print("=" * 60)
-    print("  Press Ctrl+C for clean shutdown (temp cache deleted)")
+    print("  Press Ctrl+C for clean shutdown (temp caches deleted)")
     print("=" * 60)
     print()
 
     try:
         yield
     finally:
-        logger.info("Shutting down — cleaning transcode cache")
+        logger.info("Shutting down — cleaning caches")
         transcoder.shutdown()
-        print("Transcode cache cleaned up. Goodbye.")
+        cover_cache.shutdown()
+        process_cache.shutdown()
+        print("Caches cleaned up. Goodbye.")
+
+
+# Route-level exceptions mapped to HTTP responses (body: {"detail": str(exc)}).
+# PathEscapeError subclasses ValueError; both map to 400.
+_EXCEPTION_STATUS: list[tuple[type[Exception], int]] = [
+    (PathEscapeError, 400),
+    (FileNotFoundError, 404),
+    (NotADirectoryError, 400),
+    (PermissionError, 403),
+    (ValueError, 400),
+    (RuntimeError, 500),
+]
+
+
+def _make_exception_handler(status_code: int):
+    async def handler(request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse(
+            status_code=status_code, content={"detail": str(exc)}
+        )
+
+    return handler
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -72,7 +100,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Music Library", lifespan=lifespan)
     app.state.settings = settings
     app.state.library = Library(settings.music_library_path)
+    app.state.process_cache = ProcessCache()
     app.state.transcoder = Transcoder()
+    app.state.cover_cache = CoverCache()
+
+    for exc_type, status_code in _EXCEPTION_STATUS:
+        app.add_exception_handler(exc_type, _make_exception_handler(status_code))
 
     app.include_router(pages.router)
     app.include_router(api.router)

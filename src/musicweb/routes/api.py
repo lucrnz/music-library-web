@@ -1,21 +1,30 @@
-"""JSON / media API routes."""
+"""JSON / media API routes.
+
+Error mapping lives in app-level exception handlers (see main.create_app):
+PathEscapeError/NotADirectoryError/ValueError → 400, FileNotFoundError → 404,
+PermissionError → 403, RuntimeError → 500. Routes stay straight-line; only
+genuine flow-control HTTPExceptions (e.g. 404 in _resolve_audio) remain.
+"""
 
 from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from musicweb.cover import get_cover_full, get_cover_thumbnail
-from musicweb.library import PathEscapeError
+from musicweb.cover import CoverCache
+from musicweb.library import Library, PathEscapeError
 from musicweb.metadata import read_metadata
 from musicweb.transcode import DEFAULT_PROFILE_TAG, PROFILES, get_profile
 
 router = APIRouter(prefix="/api")
 
 
-def _library(request: Request):
+def _library(request: Request) -> Library:
     return request.app.state.library
 
 
@@ -23,22 +32,24 @@ def _transcoder(request: Request):
     return request.app.state.transcoder
 
 
+def _cover_cache(request: Request) -> CoverCache:
+    return request.app.state.cover_cache
+
+
+def _resolve_audio(lib: Library, path: str) -> Path:
+    """Resolve a library-relative path to an existing audio file or 404."""
+    resolved = lib.resolve(path)
+    if not resolved.is_file() or not lib.is_audio(resolved):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    return resolved
+
+
 @router.get("/browse")
 async def browse(
     request: Request,
     path: str = Query(default="", description="Library-relative path (empty = root)"),
 ) -> dict:
-    lib = _library(request)
-    try:
-        return lib.browse(path)
-    except PathEscapeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except NotADirectoryError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return _library(request).browse(path)
 
 
 @router.get("/collect")
@@ -48,13 +59,8 @@ async def collect(
 ) -> dict:
     """Recursively list audio paths under a folder (for 'add folder to playlist')."""
     lib = _library(request)
-    try:
-        files = lib.collect_audio(path)
-        return {"path": path, "files": files}
-    except PathEscapeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    files = lib.collect_audio(path)
+    return {"path": path, "files": files}
 
 
 @router.get("/meta")
@@ -62,18 +68,56 @@ async def meta(
     request: Request,
     path: str = Query(..., description="Library-relative audio file path"),
 ) -> dict:
-    lib = _library(request)
-    try:
-        resolved = lib.resolve(path)
-    except PathEscapeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if not resolved.is_file() or not lib.is_audio(resolved):
-        raise HTTPException(status_code=404, detail="Audio file not found")
-
+    resolved = _resolve_audio(_library(request), path)
     data = read_metadata(resolved)
     data["path"] = path
     return data
+
+
+class MetaRequest(BaseModel):
+    """Batch metadata request: one entry per path that resolves to audio."""
+
+    paths: list[str] = Field(default_factory=list, max_length=1000)
+
+
+def _read_metadata_batch(lib: Library, paths: list[str]) -> list[dict]:
+    """Best-effort metadata reads, in request order; skips non-audio paths."""
+    results: list[dict] = []
+    for rel_path in paths:
+        try:
+            resolved = lib.resolve(rel_path)
+        except PathEscapeError:
+            continue
+        if not resolved.is_file() or not lib.is_audio(resolved):
+            continue
+        data = read_metadata(resolved)
+        data["path"] = rel_path
+        results.append(data)
+    return results
+
+
+@router.post("/meta")
+async def meta_batch(request: Request, payload: MetaRequest) -> dict:
+    """
+    Best-effort batch metadata (like /api/transcode/prepare): one metadata
+    dict per request path, in request order, for paths that resolve to audio
+    files; unresolvable/non-audio paths are skipped silently.
+    """
+    lib = _library(request)
+    results = await run_in_threadpool(_read_metadata_batch, lib, payload.paths)
+    return {"results": results}
+
+
+@router.get("/codecs")
+async def codecs() -> dict:
+    """List stream profiles (single source of truth: the PROFILES table)."""
+    return {
+        "codecs": [
+            {"id": p.tag, "label": p.label}
+            for p in PROFILES.values()
+        ],
+        "default": DEFAULT_PROFILE_TAG,
+    }
 
 
 @router.get("/stream")
@@ -90,35 +134,11 @@ async def stream(
 ) -> FileResponse:
     lib = _library(request)
     transcoder = _transcoder(request)
-    try:
-        resolved = lib.resolve(path)
-    except PathEscapeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if not resolved.is_file() or not lib.is_audio(resolved):
-        raise HTTPException(status_code=404, detail="Audio file not found")
-
-    if codec not in PROFILES:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Unsupported codec profile {codec!r}; "
-                f"allowed: {sorted(PROFILES)}"
-            ),
-        )
-
+    resolved = _resolve_audio(lib, path)
     profile = get_profile(codec)
-    try:
-        media_path = await run_in_threadpool(
-            transcoder.ensure_stream, resolved, path, profile_tag=codec
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
+    media_path = await run_in_threadpool(
+        transcoder.ensure_stream, resolved, path, profile_tag=codec
+    )
     return FileResponse(
         path=media_path,
         media_type=profile.media_type,
@@ -150,84 +170,101 @@ async def transcode_prepare(request: Request, payload: PrepareRequest) -> dict:
     lib = _library(request)
     transcoder = _transcoder(request)
 
-    if payload.codec not in PROFILES:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Unsupported codec profile {payload.codec!r}; "
-                f"allowed: {sorted(PROFILES)}"
-            ),
-        )
+    get_profile(payload.codec)  # validate before any queue mutation
 
     if payload.replace:
         transcoder.drop_pending_prewarm()
 
     counts = {"queued": 0, "already": 0, "ready": 0, "skipped": 0}
     for rel_path in payload.paths:
-        try:
-            resolved = lib.resolve(rel_path)
-        except PathEscapeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        resolved = lib.resolve(rel_path)
         if not lib.is_audio(resolved):
             counts["skipped"] += 1
             continue
-        try:
-            result = transcoder.prepare(
-                resolved, rel_path, profile_tag=payload.codec
-            )
-        except RuntimeError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        result = transcoder.prepare(
+            resolved, rel_path, profile_tag=payload.codec
+        )
         counts[result] += 1
     return counts
 
 
-@router.post("/cache/clear")
-async def cache_clear(request: Request) -> dict:
-    """
-    Drop every queued/running transcode and wipe the cache directory.
+CacheScope = Literal["streams", "covers"]
 
-    Called when the playlist is cleared (single-user app): the prewarmed
-    files only exist to serve the current playlist, so they are deleted.
+
+@router.post("/cache/clear")
+async def cache_clear(
+    request: Request,
+    scope: list[CacheScope] = Query(
+        ...,
+        description=(
+            "Cache subtree(s) to wipe. Repeat for multiple: "
+            "?scope=streams&scope=covers"
+        ),
+    ),
+) -> dict:
     """
-    transcoder = _transcoder(request)
-    try:
-        removed = await run_in_threadpool(transcoder.clear_cache)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {"removed": removed}
+    Wipe one or more process-cache subtrees.
+
+    ``scope=streams`` drops queued/running encodes and clears ``streams/``.
+    ``scope=covers`` clears ``covers/``. Repeat the param to clear both.
+    Playlist clear uses ``?scope=streams`` only.
+    """
+    scopes = set(scope)
+    removed: dict[str, int] = {}
+    if "streams" in scopes:
+        removed["streams"] = await run_in_threadpool(
+            _transcoder(request).clear_cache
+        )
+    if "covers" in scopes:
+        removed["covers"] = await run_in_threadpool(_cover_cache(request).clear)
+    return {"removed": removed, "scopes": sorted(scopes)}
+
+
+_COVER_HEADERS = {"Cache-Control": "private, max-age=86400"}
+
+
+def _cover_result(
+    cache: CoverCache, resolved: Path, rel_path: str, size: str
+) -> Path | bytes:
+    """Resolve cover art for an audio file.
+
+    Returns a Path to a ready WebP on a cache hit (caller can FileResponse it),
+    or raw bytes after a fill. Runs in a threadpool: hit cost is a mutagen tag
+    read + path check; miss extracts once and caches both sizes.
+    """
+    album = read_metadata(resolved).get("album") or None
+    key = cache.key_for(album, rel_path)
+    hit = cache.cover_path(key, size)
+    if hit is not None:
+        return hit
+    data = cache.get_or_fill(key, resolved)[size]
+    # Prefer the on-disk file when the fill wrote successfully (zero-copy serve).
+    written = cache.cover_path(key, size)
+    return written if written is not None else data
 
 
 @router.get("/cover")
 async def cover(
     request: Request,
     path: str = Query(..., description="Library-relative audio file path"),
-    size: str = Query(
+    size: Literal["full", "thumb"] = Query(
         default="full",
         description="full = 800×800 lossless WebP; thumb = 200×200 WebP quality 90",
     ),
 ) -> Response:
     lib = _library(request)
-    try:
-        resolved = lib.resolve(path)
-    except PathEscapeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if not resolved.is_file() or not lib.is_audio(resolved):
-        raise HTTPException(status_code=404, detail="Audio file not found")
-
-    if size not in ("full", "thumb"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported size {size!r}; allowed: full, thumb",
+    resolved = _resolve_audio(lib, path)
+    result = await run_in_threadpool(
+        _cover_result, _cover_cache(request), resolved, path, size
+    )
+    if isinstance(result, Path):
+        return FileResponse(
+            result,
+            media_type="image/webp",
+            headers=_COVER_HEADERS,
         )
-
-    if size == "thumb":
-        data, media_type = get_cover_thumbnail(resolved)
-    else:
-        data, media_type = get_cover_full(resolved)
-
     return Response(
-        content=data,
-        media_type=media_type,
-        headers={"Cache-Control": "private, max-age=86400"},
+        content=result,
+        media_type="image/webp",
+        headers=_COVER_HEADERS,
     )

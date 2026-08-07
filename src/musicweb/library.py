@@ -116,7 +116,7 @@ class Library:
             return []
 
         results: list[str] = []
-        for path in sorted(target.rglob("*"), key=lambda p: _natural_key(str(p))):
+        for path in target.rglob("*"):
             if path.name.startswith("."):
                 continue
             if self.is_audio(path):
