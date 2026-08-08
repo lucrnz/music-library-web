@@ -37,6 +37,15 @@ const npPairs = [
 
 let seeking = false;
 
+/** Paint the played/selected portion of a range input via --range-fill. */
+export function setRangeFill(el) {
+  const min = Number(el.min) || 0;
+  const max = Number(el.max) || 100;
+  const val = Number(el.value);
+  const pct = max === min ? 0 : ((val - min) / (max - min)) * 100;
+  el.style.setProperty("--range-fill", `${pct}%`);
+}
+
 // ── Media Session ────────────────────────────────────────────────────
 const msSupported = "mediaSession" in navigator;
 
@@ -133,6 +142,7 @@ export function stopPlayback() {
   audio.load();
   pl.index = -1;
   seek.value = "0";
+  setRangeFill(seek);
   timeCur.textContent = "0:00";
   timeTotal.textContent = "0:00";
   commit();
@@ -204,6 +214,7 @@ audio.addEventListener("timeupdate", () => {
   if (Number.isFinite(dur)) {
     timeTotal.textContent = formatTime(dur);
     seek.value = String(Math.round((cur / dur) * 1000));
+    setRangeFill(seek);
   }
   updatePositionState();
 });
@@ -228,6 +239,7 @@ seek.addEventListener("pointerup", () => {
   }
 });
 seek.addEventListener("input", () => {
+  setRangeFill(seek);
   const dur = audio.duration;
   if (Number.isFinite(dur)) {
     timeCur.textContent = formatTime((Number(seek.value) / 1000) * dur);
@@ -236,6 +248,7 @@ seek.addEventListener("input", () => {
 
 volume.addEventListener("input", () => {
   audio.volume = Number(volume.value);
+  setRangeFill(volume);
 });
 
 // ── Transport buttons ──────────────────────────────────────────────────

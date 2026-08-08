@@ -694,7 +694,7 @@ body.modal-open {
   overflow: hidden;
 }
 
-/* Range inputs */
+/* Range inputs — track fill via --range-fill (set from JS) */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -702,12 +702,19 @@ input[type="range"] {
   background: transparent;
   cursor: pointer;
   margin: 0;
+  --range-fill: 0%;
 }
 
 input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: var(--surface-2);
+  background: linear-gradient(
+    to right,
+    var(--accent) 0,
+    var(--accent) var(--range-fill),
+    var(--surface-2) var(--range-fill),
+    var(--surface-2) 100%
+  );
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -718,6 +725,12 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--text);
   margin-top: -6px;
   border: none;
+  transition: background 0.15s;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb,
+input[type="range"]:active::-webkit-slider-thumb {
+  background: var(--accent-bright);
 }
 
 input[type="range"]::-moz-range-track {
@@ -726,12 +739,23 @@ input[type="range"]::-moz-range-track {
   background: var(--surface-2);
 }
 
+input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
 input[type="range"]::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
   background: var(--text);
   border: none;
+}
+
+input[type="range"]:hover::-moz-range-thumb,
+input[type="range"]:active::-moz-range-thumb {
+  background: var(--accent-bright);
 }
 
 /* ── Tab bar (mobile only) ───────────────────────────────────────── */

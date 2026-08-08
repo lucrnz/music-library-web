@@ -16,9 +16,10 @@ import {
   player,
   audio,
   volume,
+  seek,
 } from "./dom.js";
 import { render, loadPlaylist } from "./state.js";
-import { updateNowPlaying, updateTransportUI } from "./player.js";
+import { updateNowPlaying, updateTransportUI, setRangeFill } from "./player.js";
 import { renderPlaylist } from "./playlist.js";
 import { renderDir } from "./browser.js";
 import { loadCodecs } from "./settings.js";
@@ -92,5 +93,7 @@ render.playlist = renderPlaylist;
 loadPlaylist();
 render.sync();
 audio.volume = Number(volume.value);
+setRangeFill(volume);
+setRangeFill(seek);
 renderDir().catch(console.error);
 loadCodecs();
