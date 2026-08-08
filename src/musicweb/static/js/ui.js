@@ -14,12 +14,10 @@ import {
   viewLibrary,
   viewPlaylist,
   player,
-  audio,
-  volume,
   seek,
 } from "./dom.js";
 import { render, loadPlaylist } from "./state.js";
-import { updateNowPlaying, updateTransportUI, setRangeFill } from "./player.js";
+import { updateNowPlaying, updateTransportUI, setRangeFill, applyVolume } from "./player.js";
 import { renderPlaylist } from "./playlist.js";
 import { renderDir } from "./browser.js";
 import { loadCodecs } from "./settings.js";
@@ -92,8 +90,7 @@ render.playlist = renderPlaylist;
 
 loadPlaylist();
 render.sync();
-audio.volume = Number(volume.value);
-setRangeFill(volume);
+applyVolume();
 setRangeFill(seek);
 renderDir().catch(console.error);
 loadCodecs();

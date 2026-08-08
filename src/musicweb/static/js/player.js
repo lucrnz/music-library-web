@@ -246,9 +246,39 @@ seek.addEventListener("input", () => {
   }
 });
 
+const VOLUME_STORAGE_KEY = "musicweb.volume";
+
+function loadVolume() {
+  try {
+    const raw = localStorage.getItem(VOLUME_STORAGE_KEY);
+    if (raw == null) return;
+    const v = Number(raw);
+    if (!Number.isFinite(v) || v < 0 || v > 1) return;
+    volume.value = String(v);
+  } catch {
+    /* ignore private-mode / blocked storage */
+  }
+}
+
+function saveVolume() {
+  try {
+    localStorage.setItem(VOLUME_STORAGE_KEY, volume.value);
+  } catch {
+    /* ignore quota */
+  }
+}
+
+/** Apply stored volume (or the HTML default) to the slider and audio element. */
+export function applyVolume() {
+  loadVolume();
+  audio.volume = Number(volume.value);
+  setRangeFill(volume);
+}
+
 volume.addEventListener("input", () => {
   audio.volume = Number(volume.value);
   setRangeFill(volume);
+  saveVolume();
 });
 
 // ── Transport buttons ──────────────────────────────────────────────────
