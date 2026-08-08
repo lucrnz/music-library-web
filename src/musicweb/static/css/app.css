@@ -210,6 +210,41 @@ main {
   padding: 0 8px 12px;
 }
 
+/* ── Themed scrollbars (lists, player sheet, modal) ─────────────── */
+
+.row-list,
+#player.expanded,
+.modal-sheet {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.row-list::-webkit-scrollbar,
+#player.expanded::-webkit-scrollbar,
+.modal-sheet::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.row-list::-webkit-scrollbar-track,
+#player.expanded::-webkit-scrollbar-track,
+.modal-sheet::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.row-list::-webkit-scrollbar-thumb,
+#player.expanded::-webkit-scrollbar-thumb,
+.modal-sheet::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.row-list::-webkit-scrollbar-thumb:hover,
+#player.expanded::-webkit-scrollbar-thumb:hover,
+.modal-sheet::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
 /* ── Rows (library + playlist) ───────────────────────────────────── */
 
 .row {
