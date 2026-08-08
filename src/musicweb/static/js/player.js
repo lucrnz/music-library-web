@@ -55,7 +55,7 @@ function updateMediaSession() {
     artwork: [
       // Stable (non-cache-busted) URLs so the OS can cache artwork
       { src: coverUrl(t.path, "thumb", false), sizes: "200x200", type: "image/webp" },
-      { src: coverUrl(t.path, "full", false), sizes: "800x800", type: "image/webp" },
+      { src: coverUrl(t.path, "full", false), sizes: "1000x1000", type: "image/webp" },
     ],
   });
 }

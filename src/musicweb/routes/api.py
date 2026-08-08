@@ -249,7 +249,7 @@ async def cover(
     path: str = Query(..., description="Library-relative audio file path"),
     size: Literal["full", "thumb"] = Query(
         default="full",
-        description="full = 800×800 lossless WebP; thumb = 200×200 WebP quality 90",
+        description="full = 1000×1000 lossless WebP; thumb = 200×200 WebP quality 90",
     ),
 ) -> Response:
     lib = _library(request)

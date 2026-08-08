@@ -21,7 +21,7 @@ from musicweb.cache import TempKVCache
 logger = logging.getLogger(__name__)
 
 THUMB_SIZE = 200
-FULL_SIZE = 800
+FULL_SIZE = 1000
 THUMB_WEBP_QUALITY = 90
 FULL_WEBP_QUALITY = 100
 WEBP_METHOD = 6
