@@ -152,7 +152,11 @@ export const pl = new Playlist();
  */
 export const codec = {
   stream: DEFAULT_CODEC,
-  /** @type {{ id: string, label: string }[]} */
+  /**
+   * Catalog entries from GET /api/codecs, already filtered to formats this
+   * browser can decode (silent fixture probes in codecSupport.js).
+   * @type {{ id: string, label: string, kind?: string, media_type?: string, can_play?: string }[]}
+   */
   options: [{ id: DEFAULT_CODEC, label: "AAC 256k 44.1kHz" }],
   default: DEFAULT_CODEC,
 };

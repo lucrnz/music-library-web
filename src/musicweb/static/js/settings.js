@@ -7,19 +7,31 @@ import { $, settingsModal, codecList } from "./dom.js";
 import { apiGet, apiPost, requestPrepare, preparedKeys } from "./api.js";
 import { pl, codec } from "./state.js";
 import { playIndex } from "./player.js";
+import { filterCodecsByDecodeSupport } from "./codecSupport.js";
 
 const CODEC_STORAGE_KEY = "musicweb.streamCodec";
 let scanPollTimer = null;
 
-/** Validate the stored preference against the fetched codec catalog. */
+/**
+ * Validate the stored preference against the filtered (decode-supported)
+ * codec catalog. Falls back to server default, then first available option.
+ */
 function loadStreamCodec() {
+  const ids = new Set(codec.options.map((o) => o.id));
+  const pickDefault = () =>
+    (ids.has(codec.default) ? codec.default : null) ||
+    codec.options[0]?.id ||
+    codec.default;
+
   try {
     const raw = localStorage.getItem(CODEC_STORAGE_KEY);
-    codec.stream =
-      raw != null && codec.options.some((o) => o.id === raw) ? raw : codec.default;
+    codec.stream = raw != null && ids.has(raw) ? raw : pickDefault();
   } catch {
-    codec.stream = codec.default;
+    codec.stream = pickDefault();
   }
+  // Persist the resolved choice when we had to fall back (e.g. ALAC saved on
+  // Safari, then opened in Chrome).
+  saveStreamCodec();
 }
 
 function saveStreamCodec() {
@@ -30,12 +42,16 @@ function saveStreamCodec() {
   }
 }
 
-/** Fetch the codec catalog once at boot, then apply the stored preference. */
+/**
+ * Fetch the codec catalog once at boot, drop formats this browser cannot
+ * actually decode (silent fixture probes — not canPlayType / UA), then apply
+ * the stored preference.
+ */
 export async function loadCodecs() {
   try {
     const data = await apiGet("/api/codecs");
     if (Array.isArray(data.codecs) && data.codecs.length) {
-      codec.options = data.codecs;
+      codec.options = await filterCodecsByDecodeSupport(data.codecs);
     }
     if (typeof data.default === "string" && data.default) {
       codec.default = data.default;
