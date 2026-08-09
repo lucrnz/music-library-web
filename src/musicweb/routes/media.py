@@ -21,7 +21,18 @@ from musicweb.transcode import DEFAULT_PROFILE_TAG, PROFILES, get_profile
 
 router = APIRouter(prefix="/api", tags=["media"])
 
+# Real art is durable under MUSICWEB_DATA_DIR; placeholders are ephemeral and
+# must not be cached or the browser will keep showing gray tiles after extract.
 _COVER_HEADERS = {"Cache-Control": "private, max-age=86400"}
+_PLACEHOLDER_HEADERS = {"Cache-Control": "no-store"}
+
+
+def _placeholder_response(size: str) -> Response:
+    return Response(
+        content=placeholder_webp(size),
+        media_type="image/webp",
+        headers=_PLACEHOLDER_HEADERS,
+    )
 
 
 def _resolve_track_file(lib: Library, track: Track) -> Path:
@@ -156,11 +167,7 @@ async def cover(
         )
 
     if not resolved_album_id:
-        return Response(
-            content=placeholder_webp(size),
-            media_type="image/webp",
-            headers=_COVER_HEADERS,
-        )
+        return _placeholder_response(size)
 
     hit = store.cover_path(resolved_album_id, size)
     if hit is not None:
@@ -176,10 +183,10 @@ async def cover(
         item = result[size]
         if isinstance(item, Path):
             return FileResponse(item, media_type="image/webp", headers=_COVER_HEADERS)
-        return Response(content=item, media_type="image/webp", headers=_COVER_HEADERS)
+        return Response(
+            content=item,
+            media_type="image/webp",
+            headers=_PLACEHOLDER_HEADERS,
+        )
 
-    return Response(
-        content=placeholder_webp(size),
-        media_type="image/webp",
-        headers=_COVER_HEADERS,
-    )
+    return _placeholder_response(size)
