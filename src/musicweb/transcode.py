@@ -1,16 +1,24 @@
 """On-demand multi-codec streaming via a single ffmpeg encode.
 
 Profiles:
-  - aac_256_44100  → AAC-LC @ 44.1 kHz (aac_at preferred, else libfdk_aac)
+  - aac_256_44100  → AAC-LC VBR ~256 kbps @ 44.1 kHz (aac_at preferred, else libfdk_aac)
+  - aac_256_48000  → AAC-LC VBR ~256 kbps @ 48 kHz (same encoder settings)
   - opus_192_48000 → Opus VBR 192 kbps @ 48 kHz (libopus)
   - opus_160_48000 → Opus VBR 160 kbps @ 48 kHz (libopus)
+  - alac_16_44100  → ALAC 16-bit @ 44.1 kHz
+  - alac_16_48000  → ALAC 16-bit @ 48 kHz
+  - alac_24_96000  → ALAC 24-bit @ 96 kHz
   - flac_16_44100  → FLAC 16-bit @ 44.1 kHz (ffmpeg default compression)
   - flac_16_48000  → FLAC 16-bit @ 48 kHz (ffmpeg default compression)
+  - flac_24_96000  → FLAC 24-bit @ 96 kHz (ffmpeg default compression)
 
-High-quality rate/bit-depth conversion uses libsoxr through aresample
-(precision=28 ≈ SoX rate -v, Shibata dither ≈ dither -s). When the input
-sample rate already matches the target, ffmpeg skips the rate-conversion
-step automatically.
+High-quality rate/bit-depth conversion uses libsoxr through aresample at
+SoX "very high quality" equivalents:
+  - precision=28 ≈ SoX ``rate -v``
+  - cutoff=0.95 (steep linear-phase low-pass)
+  - dither_method=shibata ≈ SoX ``dither -s``
+When the input sample rate already matches the target, ffmpeg skips the
+rate-conversion step automatically.
 
 Cache files live under the process cache ``streams/`` subdirectory and are
 wiped with the process root on shutdown (or via scoped ``/api/cache/clear``).
@@ -36,12 +44,18 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# SoX rate -v / dither -s equivalent via libsoxr
+# SoX rate -v / dither -s equivalent via libsoxr (best practical quality).
 ARESAMPLE_HQ = (
     "aresample=resampler=soxr:precision=28:cutoff=0.95:dither_method=shibata"
 )
 
 DEFAULT_PROFILE_TAG = "aac_256_44100"
+
+# MIME strings for HTMLMediaElement.canPlayType() on the client.
+_CAN_PLAY_AAC = 'audio/mp4; codecs="mp4a.40.2"'
+_CAN_PLAY_OPUS = 'audio/ogg; codecs="opus"'
+_CAN_PLAY_FLAC = "audio/flac"
+_CAN_PLAY_ALAC = 'audio/mp4; codecs="alac"'
 
 
 @dataclass(frozen=True)
@@ -50,11 +64,13 @@ class StreamProfile:
 
     tag: str
     sample_rate: int
-    bitrate_kbps: int  # unused (0) for lossless FLAC
+    bitrate_kbps: int  # unused (0) for lossless ALAC/FLAC
     extension: str
     media_type: str
-    kind: str  # "aac" | "opus" | "flac"
+    kind: str  # "aac" | "opus" | "alac" | "flac"
     label: str  # short UI label
+    bit_depth: int  # 16 or 24 (PCM width fed to the encoder)
+    can_play: str  # MIME probe string for browser capability checks
 
 
 PROFILES: dict[str, StreamProfile] = {
@@ -68,6 +84,19 @@ PROFILES: dict[str, StreamProfile] = {
             media_type="audio/mp4",
             kind="aac",
             label="AAC 256k 44.1kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_AAC,
+        ),
+        StreamProfile(
+            tag="aac_256_48000",
+            sample_rate=48000,
+            bitrate_kbps=256,
+            extension="m4a",
+            media_type="audio/mp4",
+            kind="aac",
+            label="AAC 256k 48kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_AAC,
         ),
         StreamProfile(
             tag="opus_192_48000",
@@ -77,6 +106,8 @@ PROFILES: dict[str, StreamProfile] = {
             media_type="audio/ogg",
             kind="opus",
             label="Opus 192k 48kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_OPUS,
         ),
         StreamProfile(
             tag="opus_160_48000",
@@ -86,6 +117,41 @@ PROFILES: dict[str, StreamProfile] = {
             media_type="audio/ogg",
             kind="opus",
             label="Opus 160k 48kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_OPUS,
+        ),
+        StreamProfile(
+            tag="alac_16_44100",
+            sample_rate=44100,
+            bitrate_kbps=0,
+            extension="m4a",
+            media_type="audio/mp4",
+            kind="alac",
+            label="ALAC 44.1kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_ALAC,
+        ),
+        StreamProfile(
+            tag="alac_16_48000",
+            sample_rate=48000,
+            bitrate_kbps=0,
+            extension="m4a",
+            media_type="audio/mp4",
+            kind="alac",
+            label="ALAC 48kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_ALAC,
+        ),
+        StreamProfile(
+            tag="alac_24_96000",
+            sample_rate=96000,
+            bitrate_kbps=0,
+            extension="m4a",
+            media_type="audio/mp4",
+            kind="alac",
+            label="ALAC 24-bit 96kHz",
+            bit_depth=24,
+            can_play=_CAN_PLAY_ALAC,
         ),
         StreamProfile(
             tag="flac_16_44100",
@@ -95,6 +161,8 @@ PROFILES: dict[str, StreamProfile] = {
             media_type="audio/flac",
             kind="flac",
             label="FLAC 44.1kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_FLAC,
         ),
         StreamProfile(
             tag="flac_16_48000",
@@ -104,6 +172,19 @@ PROFILES: dict[str, StreamProfile] = {
             media_type="audio/flac",
             kind="flac",
             label="FLAC 48kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_FLAC,
+        ),
+        StreamProfile(
+            tag="flac_24_96000",
+            sample_rate=96000,
+            bitrate_kbps=0,
+            extension="flac",
+            media_type="audio/flac",
+            kind="flac",
+            label="FLAC 24-bit 96kHz",
+            bit_depth=24,
+            can_play=_CAN_PLAY_FLAC,
         ),
     ]
 }
@@ -141,7 +222,7 @@ class _Job:
 
 
 class Transcoder:
-    """Transcode library audio into tagged cache files (AAC, Opus, or FLAC).
+    """Transcode library audio into tagged cache files (AAC, Opus, ALAC, or FLAC).
 
     All encodes flow through a single background worker with two priority
     tiers: urgent (play requests, newest first) and prewarm (FIFO). A play
@@ -286,6 +367,18 @@ class Transcoder:
             err = (stderr or b"").decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"{label} failed: {err or proc.returncode}")
 
+    @staticmethod
+    def _sample_fmt(profile: StreamProfile) -> str:
+        """PCM sample format for the profile's encoder + bit depth."""
+        if profile.kind == "alac":
+            # ALAC accepts planar PCM only: s16p (16-bit) or s32p (24-bit packed).
+            return "s32p" if profile.bit_depth >= 24 else "s16p"
+        if profile.kind == "flac":
+            # FLAC: s16 or s32 (+ bits_per_raw_sample for true 24-bit).
+            return "s32" if profile.bit_depth >= 24 else "s16"
+        # Lossy codecs: 16-bit intermediate is standard.
+        return "s16"
+
     def _encode_cmd(
         self,
         source: Path,
@@ -306,7 +399,7 @@ class Transcoder:
             "-af",
             ARESAMPLE_HQ,
             "-sample_fmt",
-            "s16",
+            self._sample_fmt(profile),
             "-ar",
             str(profile.sample_rate),
             "-vn",
@@ -347,9 +440,14 @@ class Transcoder:
                 ]
             )
             fmt = "opus"
+        elif profile.kind == "alac":
+            cmd.extend(["-c:a", "alac"])
+            fmt = "mp4"
         elif profile.kind == "flac":
-            # 16-bit + sample rate set above; leave compression at ffmpeg default
+            # Leave compression at ffmpeg default; set true 24-bit when needed.
             cmd.extend(["-c:a", "flac"])
+            if profile.bit_depth >= 24:
+                cmd.extend(["-bits_per_raw_sample", "24"])
             fmt = "flac"
         else:
             raise ValueError(f"Unknown profile kind: {profile.kind}")
@@ -577,6 +675,8 @@ class Transcoder:
             return self.aac_encoder
         if profile.kind == "opus":
             return "libopus"
+        if profile.kind == "alac":
+            return "alac"
         return "flac"
 
     def _run_job(self, job: _Job) -> None:
@@ -584,11 +684,12 @@ class Transcoder:
         profile = job.profile
         out_path = self._out_path(job.key, profile)
         logger.info(
-            "Transcode %s → profile=%s encoder=%s ar=%s%s",
+            "Transcode %s → profile=%s encoder=%s ar=%s bit=%s%s",
             job.relative_path,
             profile.tag,
             self._encoder_label(profile),
             profile.sample_rate,
+            profile.bit_depth,
             " (urgent)" if job.urgent else "",
         )
 
@@ -648,7 +749,7 @@ def _ffmpeg_encoder_names() -> set[str]:
     except FileNotFoundError as exc:
         raise RuntimeError(
             "ffmpeg not found on PATH. Install ffmpeg with libsoxr, "
-            "libopus, flac, and aac_at or libfdk_aac."
+            "libopus, flac, alac, and aac_at or libfdk_aac."
         ) from exc
     if proc.returncode != 0:
         err = (proc.stderr or b"").decode("utf-8", errors="replace").strip()
@@ -727,7 +828,7 @@ class DependencyReport:
 
 def check_dependencies() -> DependencyReport:
     """
-    Ensure ffmpeg on PATH has libsoxr, a usable AAC encoder, libopus, and flac.
+    Ensure ffmpeg on PATH has libsoxr, a usable AAC encoder, libopus, flac, and alac.
 
     Returns banner labels per dependency plus the resolved AAC encoder name.
     Raises RuntimeError on any missing requirement (fail fast).
@@ -736,7 +837,7 @@ def check_dependencies() -> DependencyReport:
         "ffmpeg",
         ["-version"],
         hint=(
-            "Install ffmpeg with libsoxr, libopus, flac, "
+            "Install ffmpeg with libsoxr, libopus, flac, alac, "
             "and aac_at or libfdk_aac."
         ),
     )
@@ -752,10 +853,16 @@ def check_dependencies() -> DependencyReport:
             "ffmpeg is missing the flac encoder. "
             "Install a standard ffmpeg build that includes FLAC."
         )
+    if "alac" not in encoders:
+        raise RuntimeError(
+            "ffmpeg is missing the alac encoder. "
+            "Install a standard ffmpeg build that includes ALAC."
+        )
     aac_name, aac_label = resolve_aac_encoder(encoders)
 
     logger.info("AAC encoder selected: %s", aac_label)
     logger.info("Opus encoder: libopus")
+    logger.info("ALAC encoder: alac")
     logger.info("FLAC encoder: flac")
     logger.info("Resampler: %s", soxr_label)
 
@@ -765,6 +872,7 @@ def check_dependencies() -> DependencyReport:
             "libsoxr": soxr_label,
             "aac encoder": aac_label,
             "opus encoder": "libopus",
+            "alac encoder": "alac",
             "flac encoder": "flac",
         },
         aac_encoder=aac_name,
