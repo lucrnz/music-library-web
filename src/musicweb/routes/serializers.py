@@ -32,6 +32,7 @@ def artist_dict(artist: Artist) -> dict:
         "sort_name": artist.sort_name,
         "album_count": artist.album_count,
         "track_count": artist.track_count,
+        "has_image": bool(artist.has_image),
     }
 
 

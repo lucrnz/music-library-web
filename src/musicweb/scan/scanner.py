@@ -12,10 +12,13 @@ from typing import Literal
 from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
+from musicweb.artist_image import ArtistImageStore
+from musicweb.artist_image_fetch import ArtistImageFetcher
+from musicweb.config import Settings
 from musicweb.cover import CoverStore
 from musicweb.db.engine import Database
 from musicweb.db.fts import fts_rebuild
-from musicweb.db.models import Album, ScanState, Track
+from musicweb.db.models import Album, Artist, ScanState, Track
 from musicweb.library import Library
 from musicweb.metadata import read_metadata
 from musicweb.scan.fingerprint import compute_fingerprint
@@ -40,10 +43,16 @@ class LibraryScanner:
         database: Database,
         library: Library,
         cover_store: CoverStore,
+        artist_image_store: ArtistImageStore,
+        settings: Settings,
     ) -> None:
         self._db = database
         self._library = library
         self._covers = cover_store
+        self._artist_images = artist_image_store
+        self._artist_fetcher = ArtistImageFetcher(
+            artist_image_store, library, settings
+        )
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._cancel = threading.Event()
@@ -379,6 +388,19 @@ class LibraryScanner:
             )
             self._extract_covers(cover_queue, force=(mode == "full"))
 
+        if not self._cancel.is_set():
+            with self._db.session() as session:
+                self._set_state(session, phase="artist_images")
+            self._log_progress(
+                mode=mode,
+                phase="artist_images",
+                files_seen=seen_count,
+                files_upserted=upserted,
+                files_missing=missing,
+                files_total_hint=total_hint,
+            )
+            self._fetch_artist_images()
+
     def _process_batch(
         self, paths: list[Path], mode: ScanMode
     ) -> tuple[int, int, dict[str, Path]]:
@@ -542,4 +564,91 @@ class LibraryScanner:
                 "Library scan: covers done · %s albums (%s extracted)",
                 total,
                 extracted,
+            )
+
+    def _fetch_artist_images(self) -> None:
+        """Fetch missing artist portraits (local then remote cascade)."""
+        with self._db.session() as session:
+            artists = list(
+                session.scalars(
+                    select(Artist)
+                    .where(Artist.album_count > 0)
+                    .order_by(Artist.sort_name, Artist.name)
+                ).all()
+            )
+            todo = [a for a in artists if self._artist_fetcher.needs_fetch(a)]
+
+        total = len(todo)
+        if total == 0:
+            logger.info("Library scan: artist_images · nothing to do")
+            return
+
+        processed = 0
+        ok_count = 0
+        local_count = 0
+        remote_count = 0
+        not_found = 0
+        errors = 0
+        logger.info("Library scan: artist_images · processing %s artists", total)
+
+        with self._db.session() as session:
+            for artist_id in [a.id for a in todo]:
+                if self._cancel.is_set():
+                    break
+                artist = session.get(Artist, artist_id)
+                if artist is None:
+                    continue
+                # Re-check after possible concurrent disk state.
+                if not self._artist_fetcher.needs_fetch(artist):
+                    processed += 1
+                    continue
+                result = self._artist_fetcher.fetch_one(
+                    session, artist, cancel=self._cancel.is_set
+                )
+                processed += 1
+                if result.ok:
+                    ok_count += 1
+                    if result.source == "local":
+                        local_count += 1
+                    else:
+                        remote_count += 1
+                elif result.status == "error":
+                    errors += 1
+                else:
+                    not_found += 1
+                if processed % 10 == 0 or processed == total:
+                    session.commit()
+                    logger.info(
+                        "Library scan: artist_images · %s/%s "
+                        "(%s ok: %s local, %s remote; %s not_found; %s error)",
+                        processed,
+                        total,
+                        ok_count,
+                        local_count,
+                        remote_count,
+                        not_found,
+                        errors,
+                    )
+            session.commit()
+
+        if self._cancel.is_set():
+            logger.info(
+                "Library scan: artist_images canceled · %s/%s "
+                "(%s ok, %s not_found, %s error)",
+                processed,
+                total,
+                ok_count,
+                not_found,
+                errors,
+            )
+        else:
+            logger.info(
+                "Library scan: artist_images done · %s artists "
+                "(%s ok: %s local, %s remote; %s not_found; %s error)",
+                total,
+                ok_count,
+                local_count,
+                remote_count,
+                not_found,
+                errors,
             )

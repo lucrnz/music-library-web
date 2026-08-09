@@ -12,6 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from musicweb.artist_image import ArtistImageStore
 from musicweb.cache import CACHE_STREAMS, ProcessCache
 from musicweb.config import Settings, load_settings
 from musicweb.cover import CoverStore
@@ -104,13 +105,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     database = init_database(settings.musicweb_data_dir)
     library = Library(settings.music_library_path)
     cover_store = CoverStore(settings.musicweb_data_dir)
-    scanner = LibraryScanner(database, library, cover_store)
+    artist_image_store = ArtistImageStore(settings.musicweb_data_dir)
+    scanner = LibraryScanner(
+        database, library, cover_store, artist_image_store, settings
+    )
 
     app = FastAPI(title="Music Library", lifespan=lifespan)
     app.state.settings = settings
     app.state.library = library
     app.state.database = database
     app.state.cover_store = cover_store
+    app.state.artist_image_store = artist_image_store
     app.state.scanner = scanner
     app.state.process_cache = ProcessCache()
     app.state.transcoder = Transcoder()

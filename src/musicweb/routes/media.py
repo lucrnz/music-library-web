@@ -12,11 +12,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from musicweb.cover import placeholder_webp
-from musicweb.db.models import Album, Track
+from musicweb.db.models import Album, Artist, Track
 from musicweb.db.repositories import tracks as tracks_repo
 from musicweb.db.session import get_db
 from musicweb.library import Library
-from musicweb.routes.deps import cover_store, library, transcoder
+from musicweb.routes.deps import artist_image_store, cover_store, library, transcoder
 from musicweb.transcode import (
     DEFAULT_PROFILE_TAG,
     PROFILES,
@@ -208,5 +208,28 @@ async def cover(
             media_type="image/webp",
             headers=_PLACEHOLDER_HEADERS,
         )
+
+    return _placeholder_response(size)
+
+
+@router.get("/artist-image")
+async def artist_image(
+    request: Request,
+    artist_id: str = Query(...),
+    size: Literal["full", "thumb"] = Query(default="full"),
+    db: Session = Depends(get_db),
+) -> Response:
+    store = artist_image_store(request)
+    artist = db.get(Artist, artist_id)
+    if artist is None:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    hit = store.image_path(artist_id, size)
+    if hit is not None:
+        return FileResponse(hit, media_type="image/webp", headers=_COVER_HEADERS)
+
+    # Keep DB flag honest if files were deleted externally.
+    if artist.has_image:
+        artist.has_image = store.has_image(artist_id)
 
     return _placeholder_response(size)
