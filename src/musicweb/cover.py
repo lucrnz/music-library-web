@@ -1,9 +1,8 @@
-"""Cover art extraction via ffmpeg and folder fallbacks, WebP encoding via Pillow.
+"""Cover art extraction and persisted WebP store under the data directory.
 
-Rendered covers are stored under the process cache ``covers/`` subdirectory
-in an album-keyed CoverCache (a TempKVCache): tracks sharing an album tag
-title share one cached full + thumbnail WebP, rendered from a single ffmpeg
-extraction.
+Covers live at ``$MUSICWEB_DATA_DIR/covers/albums/{album_id}.{full|thumb}.webp``
+and survive process restarts. Placeholders are never written to disk and never
+set ``has_cover``.
 """
 
 from __future__ import annotations
@@ -12,11 +11,10 @@ import io
 import logging
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 from PIL import Image, ImageOps
-
-from musicweb.cache import TempKVCache
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +45,6 @@ def _folder_cover(directory: Path) -> Path | None:
         candidate = directory / name
         if candidate.is_file():
             return candidate
-    # Any image file as last resort
     for pattern in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
         matches = sorted(directory.glob(pattern))
         if matches:
@@ -56,7 +53,6 @@ def _folder_cover(directory: Path) -> Path | None:
 
 
 def _extract_embedded(audio_path: Path, dest: Path) -> bool:
-    """Extract first embedded picture stream with ffmpeg. Returns True on success."""
     cmd = [
         "ffmpeg",
         "-hide_banner",
@@ -79,20 +75,12 @@ def _extract_embedded(audio_path: Path, dest: Path) -> bool:
 
 
 def _cover_source(audio_path: Path) -> tuple[bytes, str] | None:
-    """
-    Return raw (image_bytes, media_type) for the given audio file.
-
-    Order: embedded art → folder cover → None (no art).
-    """
-    # 1) Embedded via ffmpeg (write to a temp file then read)
     with tempfile.TemporaryDirectory(prefix="musicweb-cover-") as tmp:
-        # Try common image containers; ffmpeg picks based on stream
         for ext, media_type in ((".jpg", "image/jpeg"), (".png", "image/png")):
             dest = Path(tmp) / f"cover{ext}"
             if _extract_embedded(audio_path, dest):
                 return dest.read_bytes(), media_type
 
-    # 2) Folder sidecar
     folder = _folder_cover(audio_path.parent)
     if folder is not None:
         suffix = folder.suffix.lower()
@@ -106,13 +94,10 @@ def _cover_source(audio_path: Path) -> tuple[bytes, str] | None:
             return folder.read_bytes(), media_type
         except OSError:
             pass
-
-    # 3) No art
     return None
 
 
 def _flatten_rgb(img: Image.Image) -> Image.Image:
-    """Composite alpha modes onto a dark background; ensure RGB output."""
     if img.mode == "RGB":
         return img
     img = img.convert("RGBA")
@@ -121,21 +106,21 @@ def _flatten_rgb(img: Image.Image) -> Image.Image:
     return background
 
 
-def _placeholder_webp(size: int, **save_kwargs) -> bytes:
-    """Solid dark square WebP used when no cover art exists."""
-    img = Image.new("RGB", (size, size), (42, 42, 46))
+def placeholder_webp(size: str = "full") -> bytes:
+    """In-memory solid placeholder WebP (never persisted per album)."""
+    px = FULL_SIZE if size == "full" else THUMB_SIZE
+    kwargs: dict = {"method": WEBP_METHOD}
+    if size == "full":
+        kwargs.update(lossless=True, quality=FULL_WEBP_QUALITY)
+    else:
+        kwargs.update(quality=THUMB_WEBP_QUALITY)
+    img = Image.new("RGB", (px, px), (42, 42, 46))
     buf = io.BytesIO()
-    img.save(buf, format="WEBP", **save_kwargs)
+    img.save(buf, format="WEBP", **kwargs)
     return buf.getvalue()
 
 
-def _render_webp(
-    source: tuple[bytes, str] | None, size: int, **save_kwargs
-) -> bytes:
-    """Render a fixed square WebP (center-crop + LANCZOS) from a cover source."""
-    if source is None:
-        return _placeholder_webp(size, **save_kwargs)
-
+def _render_real_webp(source: tuple[bytes, str], size: int, **save_kwargs) -> bytes | None:
     data, _media_type = source
     try:
         with Image.open(io.BytesIO(data)) as img:
@@ -151,36 +136,46 @@ def _render_webp(
             return buf.getvalue()
     except Exception as exc:
         logger.debug("cover webp conversion failed: %s", exc)
-        return _placeholder_webp(size, **save_kwargs)
+        return None
 
 
-class CoverCache(TempKVCache):
-    """Album-keyed cache of ready-to-serve WebP cover art.
+class CoverStore:
+    """Persisted album-keyed WebP covers under the data directory."""
 
-    Keys derive from the album tag title (same album ⇒ same art); files
-    without an album tag fall back to a per-file key. On a first miss both
-    sizes are rendered from a single ffmpeg extraction and stored as
-    ``<key>.full.webp`` / ``<key>.thumb.webp``.
-    """
+    def __init__(self, data_dir: Path) -> None:
+        self.root = data_dir / "covers" / "albums"
+        self.root.mkdir(parents=True, exist_ok=True)
+        self._locks: dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
 
-    def __init__(self) -> None:
-        super().__init__("covers")
+    def _lock_for(self, album_id: str) -> threading.Lock:
+        with self._locks_guard:
+            lock = self._locks.get(album_id)
+            if lock is None:
+                lock = threading.Lock()
+                self._locks[album_id] = lock
+            return lock
 
-    @staticmethod
-    def key_for(album: str | None, relative_path: str) -> str:
-        """Base cache key: normalized album title when tagged, else the path."""
-        if album:
-            normalized = " ".join(album.split()).lower()
-            if normalized:
-                return TempKVCache.digest("album", normalized)
-        return TempKVCache.digest("file", relative_path)
+    def path_for(self, album_id: str, size: str) -> Path:
+        if size not in ("full", "thumb"):
+            raise ValueError(f"Invalid cover size: {size}")
+        return self.root / f"{album_id}.{size}.webp"
 
-    def _entry_key(self, base_key: str, size: str) -> str:
-        return f"{base_key}.{size}.webp"
+    def has_cover(self, album_id: str) -> bool:
+        full = self.path_for(album_id, "full")
+        thumb = self.path_for(album_id, "thumb")
+        try:
+            return (
+                full.is_file()
+                and full.stat().st_size > 0
+                and thumb.is_file()
+                and thumb.stat().st_size > 0
+            )
+        except OSError:
+            return False
 
-    def cover_path(self, base_key: str, size: str) -> Path | None:
-        """Return the on-disk path for a ready WebP, or None on a miss."""
-        path = self._path(self._entry_key(base_key, size))
+    def cover_path(self, album_id: str, size: str) -> Path | None:
+        path = self.path_for(album_id, size)
         try:
             if path.is_file() and path.stat().st_size > 0:
                 return path
@@ -188,53 +183,82 @@ class CoverCache(TempKVCache):
             pass
         return None
 
-    def get_cover(self, base_key: str, size: str) -> bytes | None:
-        """Return cached WebP bytes for key+size ("full"/"thumb"), or None."""
-        return self.get(self._entry_key(base_key, size))
+    def _atomic_write(self, path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        partial = path.with_suffix(path.suffix + ".partial")
+        partial.write_bytes(data)
+        partial.replace(path)
 
-    def get_or_fill(self, base_key: str, audio_path: Path) -> dict[str, bytes]:
-        """
-        Return {"full": ..., "thumb": ...} WebP bytes for the key.
-
-        On a cache miss the cover source is extracted once and both sizes are
-        rendered and stored. Per-key locks serialize concurrent misses for the
-        same album; other albums fill in parallel. Waiters re-check and serve
-        the winner's output.
-        """
-        full = self.get_cover(base_key, "full")
-        thumb = self.get_cover(base_key, "thumb")
-        if full is not None and thumb is not None:
-            return {"full": full, "thumb": thumb}
-
-        # One lock per album base key so full+thumb fill atomically together
-        # (parent get_or_set is per entry key and would extract twice).
-        lock = self._lock_for(base_key)
-        with lock:
+    def delete_album_cover(self, album_id: str) -> None:
+        for size in ("full", "thumb"):
+            path = self.path_for(album_id, size)
             try:
-                full = self.get_cover(base_key, "full")
-                thumb = self.get_cover(base_key, "thumb")
-                if full is not None and thumb is not None:
-                    return {"full": full, "thumb": thumb}
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
-                source = _cover_source(audio_path)
-                full = _render_webp(
-                    source,
-                    FULL_SIZE,
-                    lossless=True,
-                    quality=FULL_WEBP_QUALITY,
-                    method=WEBP_METHOD,
-                )
-                thumb = _render_webp(
-                    source,
-                    THUMB_SIZE,
-                    quality=THUMB_WEBP_QUALITY,
-                    method=WEBP_METHOD,
-                )
-                try:
-                    self.set(self._entry_key(base_key, "full"), full)
-                    self.set(self._entry_key(base_key, "thumb"), thumb)
-                except OSError as exc:
-                    logger.debug("cover cache write failed: %s", exc)
-                return {"full": full, "thumb": thumb}
-            finally:
-                self._release_lock(base_key, lock)
+    def ensure_album_cover(
+        self, album_id: str, audio_path: Path, *, force: bool = False
+    ) -> bool:
+        """
+        Extract real cover art for ``album_id`` from ``audio_path``.
+
+        Writes full+thumb WebP only when real art is found.
+        Returns True if files on disk represent real art.
+        Returns False when no art source exists (nothing written, or removed on force).
+        """
+        if not force and self.has_cover(album_id):
+            return True
+
+        lock = self._lock_for(album_id)
+        with lock:
+            if not force and self.has_cover(album_id):
+                return True
+
+            source = _cover_source(audio_path)
+            if source is None:
+                if force:
+                    self.delete_album_cover(album_id)
+                return False
+
+            full = _render_real_webp(
+                source,
+                FULL_SIZE,
+                lossless=True,
+                quality=FULL_WEBP_QUALITY,
+                method=WEBP_METHOD,
+            )
+            thumb = _render_real_webp(
+                source,
+                THUMB_SIZE,
+                quality=THUMB_WEBP_QUALITY,
+                method=WEBP_METHOD,
+            )
+            if full is None or thumb is None:
+                if force:
+                    self.delete_album_cover(album_id)
+                return False
+
+            try:
+                self._atomic_write(self.path_for(album_id, "full"), full)
+                self._atomic_write(self.path_for(album_id, "thumb"), thumb)
+            except OSError as exc:
+                logger.debug("cover store write failed: %s", exc)
+                return False
+            return True
+
+    def get_or_fill(
+        self, album_id: str, audio_path: Path
+    ) -> dict[str, Path | bytes]:
+        """Return full/thumb as Path when on disk, else try extract; else in-memory placeholder."""
+        if self.has_cover(album_id):
+            return {
+                "full": self.path_for(album_id, "full"),
+                "thumb": self.path_for(album_id, "thumb"),
+            }
+        self.ensure_album_cover(album_id, audio_path, force=False)
+        out: dict[str, Path | bytes] = {}
+        for size in ("full", "thumb"):
+            path = self.cover_path(album_id, size)
+            out[size] = path if path is not None else placeholder_webp(size)
+        return out

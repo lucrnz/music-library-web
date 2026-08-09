@@ -31,15 +31,21 @@ class Settings(BaseSettings):
         default=Path("../Library"),
         description="Root directory of the music library (filesystem-agnostic).",
     )
+    musicweb_data_dir: Path = Field(
+        default=Path("data"),
+        description=(
+            "Directory for library.db and persisted covers/ "
+            "(not a single SQLite file path)."
+        ),
+    )
     listen: str = Field(default="0.0.0.0", description="Bind address")
     port: int = Field(default=8765, ge=1, le=65535, description="Listen port")
 
-    @field_validator("music_library_path", mode="before")
+    @field_validator("music_library_path", "musicweb_data_dir", mode="before")
     @classmethod
     def expand_path(cls, value: object) -> Path:
         path = Path(str(value)).expanduser()
         if not path.is_absolute():
-            # Resolve relative to process cwd (typically WebServer/)
             path = (Path.cwd() / path).resolve()
         else:
             path = path.resolve()
@@ -54,6 +60,12 @@ class Settings(BaseSettings):
             raise NotADirectoryError(
                 f"MUSIC_LIBRARY_PATH is not a directory: {self.music_library_path}"
             )
+
+    def ensure_data_dir(self) -> Path:
+        """Create the data directory (and covers subtree) if needed."""
+        self.musicweb_data_dir.mkdir(parents=True, exist_ok=True)
+        (self.musicweb_data_dir / "covers" / "albums").mkdir(parents=True, exist_ok=True)
+        return self.musicweb_data_dir
 
 
 def load_settings() -> Settings:

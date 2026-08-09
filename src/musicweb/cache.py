@@ -1,14 +1,12 @@
-"""Process-scoped cache root and a generic key-value cache subdir.
+"""Process-scoped cache root for transcoded streams (wiped on shutdown).
 
-Layout (one temp root per process, wiped on shutdown)::
+Layout::
 
     /tmp/musicweb-<random>/
       streams/   # transcoded audio (owned by Transcoder)
-      covers/    # WebP cover art (owned by CoverCache / TempKVCache)
 
-TempKVCache stores byte blobs as files under a provided subdirectory; it does
-not create or delete the process root. Keys must be filename-safe — build them
-from arbitrary strings with TempKVCache.digest().
+Cover art is persisted under MUSICWEB_DATA_DIR (see CoverStore), not here.
+TempKVCache remains available for stream-related or generic byte caches.
 """
 
 from __future__ import annotations
@@ -25,8 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Named subdirectories under the process cache root.
 CACHE_STREAMS = "streams"
-CACHE_COVERS = "covers"
-CACHE_SUBDIRS = (CACHE_STREAMS, CACHE_COVERS)
+CACHE_SUBDIRS = (CACHE_STREAMS,)
 
 
 class ProcessCache:
