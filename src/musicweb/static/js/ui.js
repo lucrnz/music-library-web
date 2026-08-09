@@ -18,7 +18,7 @@ import {
 } from "./dom.js";
 import { render, loadPlaylist } from "./state.js";
 import { updateNowPlaying, updateTransportUI, setRangeFill, applyVolume } from "./player.js";
-import { renderPlaylist } from "./playlist.js";
+import { renderPlaylist, renderSavedPlaylists } from "./playlist.js";
 import { renderDir } from "./browser.js";
 import { loadCodecs } from "./settings.js";
 
@@ -35,7 +35,10 @@ function switchTab(name) {
 }
 
 tabLibrary.addEventListener("click", () => switchTab("library"));
-tabPlaylist.addEventListener("click", () => switchTab("playlist"));
+tabPlaylist.addEventListener("click", () => {
+  switchTab("playlist");
+  renderSavedPlaylists();
+});
 
 // ── Now-playing sheet (mobile expand / collapse) ─────────────────────
 $("btn-expand").addEventListener("click", () => {
@@ -93,4 +96,5 @@ render.sync();
 applyVolume();
 setRangeFill(seek);
 renderDir().catch(console.error);
+renderSavedPlaylists().catch(console.error);
 loadCodecs();

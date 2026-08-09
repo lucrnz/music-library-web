@@ -3,6 +3,7 @@
  * rendering, and pointer-based drag reorder.
  */
 import {
+  $,
   plList,
   btnEdit,
   btnClear,
@@ -13,7 +14,10 @@ import {
 } from "./dom.js";
 import { pl, codec, commit } from "./state.js";
 import {
+  apiGet,
   apiPost,
+  apiPut,
+  apiDelete,
   coverUrl,
   requestPrepare,
   preparedKeys,
@@ -21,45 +25,65 @@ import {
 } from "./api.js";
 import { playIndex, stopPlayback } from "./player.js";
 
-/** Filename-based entry for paths /api/meta couldn't resolve. */
-function fallbackTrack(path) {
-  const name = path.split("/").pop() || path;
+function normalizeTrack(meta) {
   return {
-    path,
-    title: name.replace(/\.[^.]+$/, ""),
-    artist: "",
-    album: "",
-    duration: null,
+    id: meta.id || null,
+    path: meta.path || null,
+    title: meta.title || "Unknown",
+    artist: meta.artist || "",
+    album: meta.album || "",
+    album_id: meta.album_id || null,
+    duration: meta.duration ?? null,
   };
 }
 
-export async function addPathsToPlaylist(paths) {
-  if (!paths.length) return;
-  // One batch request for all added paths; /api/meta omits unresolvable
-  // paths, so fall back to filename-based entries for those (and for the
-  // whole batch if the request itself fails).
-  let byPath = new Map();
-  try {
-    const data = await apiPost("/api/meta", { paths });
-    byPath = new Map((data.results || []).map((m) => [m.path, m]));
-  } catch (err) {
-    console.error(err);
+/**
+ * Add tracks to the session queue (id-primary).
+ * Accepts full track dicts from the API, or {id} / id strings.
+ */
+export async function addToQueue(entries) {
+  if (!entries?.length) return;
+
+  const ids = [];
+  const preloaded = [];
+
+  for (const entry of entries) {
+    if (typeof entry === "string") {
+      ids.push(entry);
+    } else if (entry && typeof entry === "object") {
+      if (entry.title && entry.id) {
+        preloaded.push(normalizeTrack(entry));
+      } else if (entry.id) {
+        ids.push(entry.id);
+      }
+    }
   }
-  const items = paths.map((path) => {
-    const meta = byPath.get(path);
-    if (!meta) return fallbackTrack(path);
-    return {
-      path,
-      title: meta.title || path,
-      artist: meta.artist || "",
-      album: meta.album || "",
-      duration: meta.duration ?? null,
-    };
-  });
-  pl.add(items);
+
+  const items = [...preloaded];
+
+  if (ids.length) {
+    try {
+      const data = await apiPost("/api/tracks/meta", { ids });
+      const byId = new Map((data.results || []).map((m) => [m.id, m]));
+      for (const id of ids) {
+        const meta = byId.get(id);
+        if (meta) items.push(normalizeTrack(meta));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  const playable = items.filter((t) => t.id);
+  if (!playable.length) return;
+  pl.add(playable);
   commit();
-  requestPrepare(paths, codec.stream);
+  requestPrepare(playable, codec.stream);
 }
+
+/** @deprecated use addToQueue */
+export const addPathsToPlaylist = addToQueue;
+export const addTracksToPlaylist = addToQueue;
 
 function removeIndices(indices) {
   if (!indices.length) return;
@@ -108,7 +132,7 @@ export function renderPlaylist() {
     row.innerHTML = `
       <button type="button" class="icon-btn row-delete" title="Remove" aria-label="Remove from playlist">${icon("trash")}</button>
       <span class="row-cover-wrap">
-        <img class="row-cover" src="${coverUrl(track.path, "thumb", false)}" alt="" loading="lazy" />
+        <img class="row-cover" src="${coverUrl(track, "thumb", false)}" alt="" loading="lazy" />
         ${index === pl.index
           ? `<span class="eq${audio.paused ? " paused" : ""}"><span></span><span></span><span></span></span>`
           : ""}
@@ -181,3 +205,83 @@ btnEdit.addEventListener("click", () => {
 });
 
 btnClear.addEventListener("click", clearPlaylist);
+
+// ── Saved playlists (server SQLite) ──────────────────────────────────
+const savedPlList = $("saved-pl-list");
+const btnSavePl = $("btn-save-pl");
+
+export async function renderSavedPlaylists() {
+  if (!savedPlList) return;
+  savedPlList.innerHTML = "";
+  let data;
+  try {
+    data = await apiGet("/api/playlists");
+  } catch (err) {
+    console.error(err);
+    return;
+  }
+  const items = data.items || [];
+  if (!items.length) {
+    const hint = document.createElement("div");
+    hint.className = "saved-pl-hint";
+    hint.textContent = "Saved playlists appear here (shared on the LAN).";
+    savedPlList.appendChild(hint);
+    return;
+  }
+  for (const sp of items) {
+    const row = document.createElement("div");
+    row.className = "saved-pl-row";
+    row.innerHTML = `
+      <button type="button" class="saved-pl-load">
+        <span class="saved-pl-name"></span>
+        <span class="saved-pl-count"></span>
+      </button>
+      <button type="button" class="icon-btn saved-pl-del" title="Delete playlist" aria-label="Delete playlist">${icon("trash")}</button>
+    `;
+    row.querySelector(".saved-pl-name").textContent = sp.name;
+    row.querySelector(".saved-pl-count").textContent = `${sp.track_count} tracks`;
+    row.querySelector(".saved-pl-load").addEventListener("click", async () => {
+      try {
+        const full = await apiGet(`/api/playlists/${encodeURIComponent(sp.id)}/tracks`);
+        const tracks = (full.items || []).filter((t) => !t.is_missing && t.id);
+        if (!tracks.length) return;
+        pl.clear();
+        await addToQueue(tracks);
+        if (pl.length) playIndex(0);
+      } catch (err) {
+        console.error(err);
+      }
+    });
+    row.querySelector(".saved-pl-del").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete playlist “${sp.name}”?`)) return;
+      try {
+        await apiDelete(`/api/playlists/${encodeURIComponent(sp.id)}`);
+        renderSavedPlaylists();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+    savedPlList.appendChild(row);
+  }
+}
+
+btnSavePl?.addEventListener("click", async () => {
+  const ids = pl.tracks.map((t) => t.id).filter(Boolean);
+  if (!ids.length) {
+    alert("Queue has no indexed tracks to save (wait for scan / use Artists or Albums).");
+    return;
+  }
+  const name = prompt("Playlist name", `Playlist ${new Date().toLocaleDateString()}`);
+  if (!name || !name.trim()) return;
+  try {
+    const created = await apiPost("/api/playlists", { name: name.trim() });
+    await apiPut(`/api/playlists/${encodeURIComponent(created.id)}/tracks`, {
+      track_ids: ids,
+    });
+    renderSavedPlaylists();
+  } catch (err) {
+    console.error(err);
+    alert(`Could not save playlist: ${err.message}`);
+  }
+});

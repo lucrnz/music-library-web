@@ -1,6 +1,6 @@
 /**
- * Library browser: drill-down navigation stack, directory rendering, and
- * desktop Ctrl/Cmd-click multi-select.
+ * Library browser coordinator: mode chrome + wiring.
+ * Views live in static/js/browse/.
  */
 import {
   dirList,
@@ -8,182 +8,159 @@ import {
   btnAddAll,
   btnAddSelected,
   libraryTitle,
-  audio,
-  icon,
   showEmpty,
+  $,
 } from "./dom.js";
-import { apiGet, apiPost, coverUrl } from "./api.js";
-import { pl } from "./state.js";
-import { playIndex } from "./player.js";
-import { addPathsToPlaylist } from "./playlist.js";
+import { apiGet } from "./api.js";
+import { addToQueue } from "./playlist.js";
+import * as nav from "./browse/nav.js";
+import { bind as bindBrowseContext } from "./browse/context.js";
+import {
+  clearLibSelection,
+  collectSelectedIds,
+  currentFolderPath,
+  libSelected,
+  renderFolders,
+  setSelectionChangeHandler,
+} from "./browse/folders.js";
+import {
+  renderAlbumList,
+  renderAlbumTracks,
+  renderArtistAlbums,
+  renderArtistList,
+} from "./browse/discovery.js";
+import { runSearch } from "./browse/search.js";
 
-/** Library navigation stack: [{ path, name }] — empty means library root. */
-let navStack = [];
-/** Monotonic id so a stale /api/browse response can't render over a newer navigation. */
-let renderDirSeq = 0;
-/** Desktop multi-select in the library: path -> 'dir' | 'file' */
-const libSelected = new Map();
+let renderSeq = 0;
+let searchTimer = null;
 
-function currentPath() {
-  return navStack.length ? navStack[navStack.length - 1].path : "";
+function isCurrent(seq) {
+  return seq === renderSeq;
 }
 
-/**
- * "%tracknumber%. %title% - %albumname% [%artist]" for browser file rows.
- * Track number is zero-padded to two digits (01…99); larger values stay as-is.
- * When track is missing, the numeric prefix is omitted.
- */
-function formatTrackLabel({ track, title, album, artist }) {
-  const body = `${title || ""} - ${album || ""} [${artist || ""}]`;
-  if (track == null || !Number.isFinite(Number(track))) return body;
-  const n = Math.trunc(Number(track));
-  if (n < 0) return body;
-  const num = String(n).padStart(2, "0");
-  return `${num}. ${body}`;
+function bumpSeq() {
+  return ++renderSeq;
 }
 
-function clearLibSelection() {
-  libSelected.clear();
-  dirList.querySelectorAll(".row.selected").forEach((el) => {
-    el.classList.remove("selected");
-  });
+export async function renderLibrary() {
+  const seq = bumpSeq();
+  clearLibSelection();
+  setModeButtons();
   syncLibActions();
+  dirList.classList.remove("album-grid-host");
+
+  if (nav.mode === "folders") {
+    btnBack.classList.toggle("hidden", nav.depth() === 0);
+    libraryTitle.textContent = nav.depth() ? nav.peek().name : "Folders";
+    return renderFolders(seq);
+  }
+
+  if (nav.mode === "search" && !nav.depth()) {
+    btnBack.classList.add("hidden");
+    libraryTitle.textContent = "Search";
+    const q = ($("library-search")?.value || "").trim();
+    if (!q) {
+      dirList.innerHTML = "";
+      showEmpty(dirList, "Type to search the library index");
+      return;
+    }
+    return runSearch(q, seq);
+  }
+
+  btnBack.classList.toggle("hidden", nav.depth() === 0);
+  if (!nav.depth()) {
+    libraryTitle.textContent = nav.mode === "artists" ? "Artists" : "Albums";
+    if (nav.mode === "artists") return renderArtistList(seq);
+    if (nav.mode === "albums") return renderAlbumList(seq);
+    return;
+  }
+
+  const top = nav.peek();
+  libraryTitle.textContent = top.name;
+  if (top.kind === "artist") return renderArtistAlbums(seq, top.id);
+  if (top.kind === "album") return renderAlbumTracks(seq, top.id);
 }
+
+bindBrowseContext({ renderLibrary, isCurrent });
 
 function syncLibActions() {
-  btnAddSelected.classList.toggle("hidden", libSelected.size === 0);
+  const folderRoot = nav.mode === "folders";
+  btnAddAll.classList.toggle("hidden", !folderRoot && nav.depth() === 0);
+  btnAddSelected.classList.toggle(
+    "hidden",
+    nav.mode !== "folders" || libSelected.size === 0
+  );
+}
+
+function setModeButtons() {
+  for (const m of ["folders", "artists", "albums", "search"]) {
+    const btn = $(`mode-${m}`);
+    if (!btn) continue;
+    const active = nav.mode === m;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", String(active));
+  }
+  $("search-bar")?.classList.toggle("hidden", nav.mode !== "search");
+  btnAddAll.classList.toggle(
+    "hidden",
+    nav.mode === "search" && nav.depth() === 0
+  );
+}
+
+export function setBrowseMode(mode) {
+  if (!["folders", "artists", "albums", "search"].includes(mode)) return;
+  nav.setMode(mode);
+  clearLibSelection();
+  dirList.classList.remove("album-grid-host");
+  setModeButtons();
+  renderLibrary();
+  if (mode === "search") {
+    const input = $("library-search");
+    input?.focus();
+    if (input?.value?.trim()) runSearch(input.value.trim(), null, { bumpSeq });
+  }
 }
 
 export async function renderDir() {
-  const seq = ++renderDirSeq;
-  const path = currentPath();
-  libSelected.clear();
-  syncLibActions();
-  btnBack.classList.toggle("hidden", navStack.length === 0);
-  libraryTitle.textContent = navStack.length
-    ? navStack[navStack.length - 1].name
-    : "Library";
-  dirList.innerHTML = "";
-
-  let data;
-  try {
-    data = await apiGet(`/api/browse?path=${encodeURIComponent(path)}`);
-  } catch (err) {
-    if (seq !== renderDirSeq) return; // a newer navigation superseded this one
-    showEmpty(dirList, `Error: ${err.message}`);
-    return;
-  }
-  if (seq !== renderDirSeq) return;
-
-  if (!data.dirs.length && !data.files.length) {
-    showEmpty(dirList, "This folder is empty");
-    return;
-  }
-
-  for (const dir of data.dirs) {
-    dirList.appendChild(createDirRow(dir));
-  }
-
-  /** @type {Map<string, HTMLElement>} path -> .row-title element */
-  const fileTitleEls = new Map();
-  for (const file of data.files) {
-    const row = createFileRow(file);
-    fileTitleEls.set(file.path, row.querySelector(".row-title"));
-    dirList.appendChild(row);
-  }
-
-  if (!fileTitleEls.size) return;
-  try {
-    const meta = await apiPost("/api/meta", {
-      paths: [...fileTitleEls.keys()],
-    });
-    if (seq !== renderDirSeq) return;
-    for (const m of meta.results || []) {
-      const el = fileTitleEls.get(m.path);
-      if (el) el.textContent = formatTrackLabel(m);
-    }
-  } catch (err) {
-    // Keep filename labels on meta failure.
-    console.error(err);
-  }
+  return renderLibrary();
 }
 
-/** Desktop Ctrl/Cmd-click multi-select; returns true if the click was a selection. */
-function maybeSelectRow(row, path, kind, e) {
-  if (!(e.metaKey || e.ctrlKey)) return false;
-  if (libSelected.has(path)) {
-    libSelected.delete(path);
-    row.classList.remove("selected");
-  } else {
-    libSelected.set(path, kind);
-    row.classList.add("selected");
-  }
-  syncLibActions();
-  return true;
-}
-
-function createDirRow(dir) {
-  const row = document.createElement("div");
-  row.className = "row";
-  row.dataset.path = dir.path;
-  row.innerHTML = `
-    <span class="row-icon">${icon("folder")}</span>
-    <span class="row-meta">
-      <span class="row-title"></span>
-    </span>
-    <span class="row-chevron">${icon("chevron-right")}</span>
-  `;
-  row.querySelector(".row-title").textContent = dir.name;
-
-  row.addEventListener("click", (e) => {
-    if (maybeSelectRow(row, dir.path, "dir", e)) return;
-    navStack.push({ path: dir.path, name: dir.name });
-    renderDir();
-  });
-  return row;
-}
-
-function createFileRow(file) {
-  const row = document.createElement("div");
-  row.className = "row";
-  row.dataset.path = file.path;
-  row.innerHTML = `
-    <span class="row-cover-wrap">
-      <img class="row-cover" src="${coverUrl(file.path, "thumb", false)}" alt="" loading="lazy" />
-    </span>
-    <span class="row-meta">
-      <span class="row-title"></span>
-    </span>
-    <button type="button" class="icon-btn row-add" title="Add to playlist" aria-label="Add to playlist">${icon("plus")}</button>
-  `;
-  row.querySelector(".row-title").textContent = file.name;
-
-  row.addEventListener("click", async (e) => {
-    if (maybeSelectRow(row, file.path, "file", e)) return;
-    const startPlay = pl.length === 0 || audio.paused;
-    await addPathsToPlaylist([file.path]);
-    if (startPlay) {
-      playIndex(pl.length - 1);
-    }
-  });
-
-  row.querySelector(".row-add").addEventListener("click", async (e) => {
-    e.stopPropagation();
-    await addPathsToPlaylist([file.path]);
-  });
-  return row;
-}
+setSelectionChangeHandler(syncLibActions);
 
 btnBack.addEventListener("click", () => {
-  if (!navStack.length) return;
-  navStack.pop();
-  renderDir();
+  if (!nav.depth()) return;
+  nav.pop();
+  renderLibrary();
 });
 
 btnAddAll.addEventListener("click", async () => {
   try {
-    const data = await apiGet(`/api/collect?path=${encodeURIComponent(currentPath())}`);
-    await addPathsToPlaylist(data.files);
+    if (nav.mode === "folders") {
+      const data = await apiGet(
+        `/api/collect?path=${encodeURIComponent(currentFolderPath())}`
+      );
+      await addToQueue((data.files || []).filter((f) => f.id));
+      return;
+    }
+    const top = nav.peek();
+    if (top?.kind === "album") {
+      const data = await apiGet(
+        `/api/albums/${encodeURIComponent(top.id)}/tracks`
+      );
+      await addToQueue(data.items || []);
+    } else if (top?.kind === "artist") {
+      const data = await apiGet(
+        `/api/artists/${encodeURIComponent(top.id)}/albums`
+      );
+      const all = [];
+      for (const album of data.items || []) {
+        const tr = await apiGet(
+          `/api/albums/${encodeURIComponent(album.id)}/tracks`
+        );
+        all.push(...(tr.items || []));
+      }
+      await addToQueue(all);
+    }
   } catch (err) {
     console.error(err);
   }
@@ -191,20 +168,33 @@ btnAddAll.addEventListener("click", async () => {
 
 btnAddSelected.addEventListener("click", async () => {
   if (!libSelected.size) return;
-  const files = (
-    await Promise.all(
-      [...libSelected].map(async ([p, kind]) => {
-        if (kind !== "dir") return [p];
-        try {
-          const data = await apiGet(`/api/collect?path=${encodeURIComponent(p)}`);
-          return data.files;
-        } catch (err) {
-          console.error(err);
-          return [];
-        }
-      })
-    )
-  ).flat();
+  const files = await collectSelectedIds();
   clearLibSelection();
-  await addPathsToPlaylist(files);
+  await addToQueue(files);
+});
+
+for (const mode of ["folders", "artists", "albums", "search"]) {
+  $(`mode-${mode}`)?.addEventListener("click", () => setBrowseMode(mode));
+}
+
+const searchInput = $("library-search");
+searchInput?.addEventListener("input", () => {
+  if (nav.mode !== "search") return;
+  const q = searchInput.value.trim();
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    if (!q) {
+      dirList.innerHTML = "";
+      showEmpty(dirList, "Type to search the library index");
+      return;
+    }
+    runSearch(q, null, { bumpSeq });
+  }, 250);
+});
+searchInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const q = searchInput.value.trim();
+    if (q) runSearch(q, null, { bumpSeq });
+  }
 });

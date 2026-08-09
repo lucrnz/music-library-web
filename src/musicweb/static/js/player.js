@@ -24,7 +24,7 @@ import {
   formatTime,
 } from "./dom.js";
 import { pl, codec, commit, render } from "./state.js";
-import { coverUrl } from "./api.js";
+import { coverUrl, streamUrl } from "./api.js";
 
 /** Placeholder cover — the initial <img> src in index.html is the single source. */
 const PLACEHOLDER_COVER = coverArt.src;
@@ -63,8 +63,8 @@ function updateMediaSession() {
     album: t.album,
     artwork: [
       // Stable (non-cache-busted) URLs so the OS can cache artwork
-      { src: coverUrl(t.path, "thumb", false), sizes: "200x200", type: "image/webp" },
-      { src: coverUrl(t.path, "full", false), sizes: "1000x1000", type: "image/webp" },
+      { src: coverUrl(t, "thumb", false), sizes: "200x200", type: "image/webp" },
+      { src: coverUrl(t, "full", false), sizes: "1000x1000", type: "image/webp" },
     ],
   });
 }
@@ -130,7 +130,7 @@ export function updateNowPlaying() {
     p.title.textContent = title;
     p.artist.textContent = sub;
     // Mini player: small server-side thumbnail; sheet: full extracted art
-    p.cover.src = t ? coverUrl(t.path, p.coverSize) : PLACEHOLDER_COVER;
+    p.cover.src = t ? coverUrl(t, p.coverSize) : PLACEHOLDER_COVER;
   }
   updateMediaSession();
 }
@@ -157,7 +157,8 @@ export async function playIndex(index) {
   const track = pl.current;
   commit();
 
-  const url = `/api/stream?path=${encodeURIComponent(track.path)}&codec=${encodeURIComponent(codec.stream)}`;
+  const url = streamUrl(track, codec.stream);
+  if (!url) return;
   audio.src = url;
   try {
     await audio.play();

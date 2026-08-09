@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>{{ title }}</title>
   <link rel="stylesheet" href="/static/css/app.css" />
+  <link rel="stylesheet" href="/static/css/library.css" />
+  <link rel="stylesheet" href="/static/css/player.css" />
+  <link rel="stylesheet" href="/static/css/modal.css" />
+  <link rel="stylesheet" href="/static/css/desktop.css" />
 </head>
 <body>
   <!-- Inline SVG icon sprite -->
@@ -85,7 +89,7 @@
           <button type="button" id="btn-back" class="icon-btn hidden" title="Back" aria-label="Back">
             <svg class="icon"><use href="#i-chevron-left" /></svg>
           </button>
-          <div class="view-title" id="library-title">Library</div>
+          <div class="view-title" id="library-title">Folders</div>
           <div class="view-actions">
             <button type="button" id="btn-add-selected" class="pill hidden">Add selected</button>
             <button type="button" id="btn-add-all" class="pill">Add all</button>
@@ -94,19 +98,30 @@
             </button>
           </div>
         </div>
+        <div class="mode-bar" role="tablist" aria-label="Browse mode">
+          <button type="button" id="mode-folders" class="mode-btn active" role="tab" aria-selected="true">Folders</button>
+          <button type="button" id="mode-artists" class="mode-btn" role="tab" aria-selected="false">Artists</button>
+          <button type="button" id="mode-albums" class="mode-btn" role="tab" aria-selected="false">Albums</button>
+          <button type="button" id="mode-search" class="mode-btn" role="tab" aria-selected="false">Search</button>
+        </div>
+        <div id="search-bar" class="search-bar hidden">
+          <input type="search" id="library-search" class="search-input" placeholder="Search artists, albums, tracks…" autocomplete="off" enterkeyhint="search" />
+        </div>
         <div id="dir-list" class="row-list"></div>
       </section>
 
       <section id="view-playlist" class="view hidden" aria-label="Playlist">
         <div class="view-bar">
-          <div class="view-title">Playlist</div>
+          <div class="view-title">Queue</div>
           <div class="view-actions">
+            <button type="button" id="btn-save-pl" class="pill" title="Save queue as playlist">Save</button>
             <button type="button" id="btn-clear" class="pill danger hidden">Clear all</button>
             <button type="button" id="btn-edit" class="pill">
               <svg class="icon"><use href="#i-edit" /></svg><span>Edit</span>
             </button>
           </div>
         </div>
+        <div id="saved-pl-list" class="saved-pl-list"></div>
         <div id="pl-list" class="row-list"></div>
       </section>
     </main>
@@ -192,6 +207,18 @@
         <div class="modal-section">
           <div class="modal-section-title">Streaming quality</div>
           <div id="codec-list" class="codec-list" role="radiogroup" aria-label="Stream codec"></div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Library index</div>
+          <p id="scan-status-text" class="modal-hint">—</p>
+          <div class="scan-actions">
+            <button type="button" id="btn-scan-quick" class="pill">Quick rescan</button>
+            <button type="button" id="btn-scan-full" class="pill">Full re-index</button>
+            <button type="button" id="btn-scan-cancel" class="pill danger hidden">Cancel</button>
+          </div>
+          <div id="scan-progress-wrap" class="scan-progress-wrap hidden">
+            <div id="scan-progress-bar" class="scan-progress-bar"></div>
+          </div>
         </div>
       </div>
     </div>
