@@ -12,11 +12,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from musicweb.cache import CACHE_COVERS, CACHE_STREAMS, ProcessCache
+from musicweb.cache import CACHE_STREAMS, ProcessCache
 from musicweb.config import Settings, load_settings
-from musicweb.cover import CoverCache
+from musicweb.cover import CoverStore
+from musicweb.db.engine import init_database
 from musicweb.library import Library, PathEscapeError
 from musicweb.routes import api, pages
+from musicweb.scan.scanner import LibraryScanner
 from musicweb.transcode import Transcoder, check_dependencies
 
 logger = logging.getLogger(__name__)
@@ -38,44 +40,46 @@ async def lifespan(app: FastAPI):
     settings: Settings = app.state.settings
     process_cache: ProcessCache = app.state.process_cache
     transcoder: Transcoder = app.state.transcoder
-    cover_cache: CoverCache = app.state.cover_cache
+    scanner: LibraryScanner = app.state.scanner
 
     report = check_dependencies()
     transcoder.configure_encoders(report.aac_encoder)
     settings.validate_library()
+    settings.ensure_data_dir()
     process_cache.start()
     transcoder.start(process_cache.path(CACHE_STREAMS))
-    cover_cache.start(process_cache.path(CACHE_COVERS))
+
+    # Non-blocking incremental index on startup
+    scanner.start("quick")
 
     lan = _guess_lan_ip()
     print()
     print("=" * 60)
     print("  Music Library Web Server")
     print(f"  Library : {settings.music_library_path}")
+    print(f"  Data    : {settings.musicweb_data_dir}")
     print(f"  Listening on http://{settings.listen}:{settings.port}")
     if lan and settings.listen in ("0.0.0.0", "::"):
         print(f"  LAN URL : http://{lan}:{settings.port}")
-    print(f"  Cache   : {process_cache.root}  ({CACHE_STREAMS}/, {CACHE_COVERS}/)")
+    print(f"  Streams : {process_cache.path(CACHE_STREAMS)} (temp)")
     print("  Tools   :")
     for name, ver in report.tools.items():
         print(f"    - {name}: {ver[:72]}")
     print("=" * 60)
-    print("  Press Ctrl+C for clean shutdown (temp caches deleted)")
+    print("  Press Ctrl+C for clean shutdown (stream cache deleted)")
     print("=" * 60)
     print()
 
     try:
         yield
     finally:
-        logger.info("Shutting down — cleaning caches")
+        logger.info("Shutting down")
+        scanner.shutdown()
         transcoder.shutdown()
-        cover_cache.shutdown()
         process_cache.shutdown()
-        print("Caches cleaned up. Goodbye.")
+        print("Shutdown complete. Goodbye.")
 
 
-# Route-level exceptions mapped to HTTP responses (body: {"detail": str(exc)}).
-# PathEscapeError subclasses ValueError; both map to 400.
 _EXCEPTION_STATUS: list[tuple[type[Exception], int]] = [
     (PathEscapeError, 400),
     (FileNotFoundError, 404),
@@ -97,12 +101,20 @@ def _make_exception_handler(status_code: int):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
+    settings.ensure_data_dir()
+    database = init_database(settings.musicweb_data_dir)
+    library = Library(settings.music_library_path)
+    cover_store = CoverStore(settings.musicweb_data_dir)
+    scanner = LibraryScanner(database, library, cover_store)
+
     app = FastAPI(title="Music Library", lifespan=lifespan)
     app.state.settings = settings
-    app.state.library = Library(settings.music_library_path)
+    app.state.library = library
+    app.state.database = database
+    app.state.cover_store = cover_store
+    app.state.scanner = scanner
     app.state.process_cache = ProcessCache()
     app.state.transcoder = Transcoder()
-    app.state.cover_cache = CoverCache()
 
     for exc_type, status_code in _EXCEPTION_STATUS:
         app.add_exception_handler(exc_type, _make_exception_handler(status_code))
@@ -128,7 +140,6 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     settings = load_settings()
-    # Rebuild app with these settings so banner matches bind
     application = create_app(settings)
     uvicorn.run(
         application,

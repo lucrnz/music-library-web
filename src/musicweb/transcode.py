@@ -271,7 +271,7 @@ class Transcoder:
             )
         except FileNotFoundError as exc:
             raise RuntimeError(
-                f"{cmd[0]} not found on PATH (needed for {label})."
+                f"ffmpeg not found on PATH (needed for {label})."
             ) from exc
 
         job.proc = proc
@@ -727,7 +727,7 @@ class DependencyReport:
 
 def check_dependencies() -> DependencyReport:
     """
-    Ensure ffmpeg has libsoxr, a usable AAC encoder, libopus, and flac.
+    Ensure ffmpeg on PATH has libsoxr, a usable AAC encoder, libopus, and flac.
 
     Returns banner labels per dependency plus the resolved AAC encoder name.
     Raises RuntimeError on any missing requirement (fail fast).
