@@ -27,6 +27,11 @@ class Artist(Base):
     sort_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
     album_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     track_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    has_image: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mbid: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    image_source: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    image_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    image_fetched_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     albums: Mapped[list[Album]] = relationship(
         back_populates="album_artist",

@@ -35,6 +35,7 @@ def make_engine(data_dir: Path) -> Engine:
     """Create a SQLite engine under ``data_dir / library.db`` with WAL pragmas."""
     data_dir.mkdir(parents=True, exist_ok=True)
     (data_dir / "covers" / "albums").mkdir(parents=True, exist_ok=True)
+    (data_dir / "covers" / "artists").mkdir(parents=True, exist_ok=True)
     db_path = (data_dir / "library.db").resolve()
     url = f"sqlite:///{db_path}"
     engine = create_engine(
