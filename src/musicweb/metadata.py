@@ -57,11 +57,59 @@ def _parse_year(raw: str | None) -> int | None:
     return None
 
 
+def _audio_tech_from_info(info: object, path: Path) -> dict:
+    """Extract sample_rate_hz, bit_depth, channels, source_codec from mutagen info."""
+    sample_rate_hz = getattr(info, "sample_rate", None)
+    if sample_rate_hz is not None:
+        try:
+            sample_rate_hz = int(sample_rate_hz)
+        except (TypeError, ValueError):
+            sample_rate_hz = None
+
+    bit_depth = getattr(info, "bits_per_sample", None)
+    if bit_depth is None:
+        bit_depth = getattr(info, "sample_size", None)
+    if bit_depth is not None:
+        try:
+            bit_depth = int(bit_depth)
+            if bit_depth <= 0:
+                bit_depth = None
+        except (TypeError, ValueError):
+            bit_depth = None
+
+    channels = getattr(info, "channels", None)
+    if channels is not None:
+        try:
+            channels = int(channels)
+        except (TypeError, ValueError):
+            channels = None
+
+    source_codec: str | None = None
+    ext = path.suffix.lower()
+    if ext == ".flac":
+        source_codec = "flac"
+    elif ext in {".m4a", ".mp4", ".alac"}:
+        codec = (getattr(info, "codec", None) or "").lower()
+        source_codec = codec or "alac"
+    else:
+        codec = getattr(info, "codec", None)
+        if codec:
+            source_codec = str(codec).lower()
+
+    return {
+        "sample_rate_hz": sample_rate_hz,
+        "bit_depth": bit_depth,
+        "channels": channels,
+        "source_codec": source_codec,
+    }
+
+
 def read_metadata(path: Path) -> dict:
     """
-    Return common tags for a single audio file.
+    Return common tags + source audio tech for a single audio file.
 
     Falls back to the filename stem when title is missing.
+    Tech keys: sample_rate_hz, bit_depth, channels, source_codec (may be None).
     """
     stem = path.stem
     result: dict = {
@@ -73,6 +121,10 @@ def read_metadata(path: Path) -> dict:
         "disc": None,
         "year": None,
         "duration": None,
+        "sample_rate_hz": None,
+        "bit_depth": None,
+        "channels": None,
+        "source_codec": None,
     }
 
     try:
@@ -89,8 +141,10 @@ def read_metadata(path: Path) -> dict:
             return result
 
     info = getattr(audio, "info", None)
-    if info is not None and getattr(info, "length", None):
-        result["duration"] = float(info.length)
+    if info is not None:
+        if getattr(info, "length", None):
+            result["duration"] = float(info.length)
+        result.update(_audio_tech_from_info(info, path))
 
     tags = getattr(audio, "tags", None)
     if tags is None:

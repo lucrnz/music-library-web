@@ -185,6 +185,10 @@ def apply_track_fields(
     track.disc_no = meta.get("disc")
     track.year = year
     track.duration_ms = duration_ms
+    track.sample_rate_hz = meta.get("sample_rate_hz")
+    track.bit_depth = meta.get("bit_depth")
+    track.channels = meta.get("channels")
+    track.source_codec = meta.get("source_codec")
     track.size_bytes = size
     track.mtime_ns = mtime_ns
     track.is_missing = False

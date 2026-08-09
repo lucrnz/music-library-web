@@ -81,6 +81,11 @@ class Track(Base):
     disc_no: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Source audio tech (from mutagen at scan; used for encode dither/rate policy).
+    sample_rate_hz: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bit_depth: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    channels: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    source_codec: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
     is_missing: Mapped[bool] = mapped_column(
