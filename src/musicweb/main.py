@@ -21,6 +21,7 @@ from musicweb.library import Library, PathEscapeError
 from musicweb.routes import api, pages
 from musicweb.scan.scanner import LibraryScanner
 from musicweb.transcode import Transcoder, check_dependencies
+from musicweb.vendor_deps import ensure_vendor_assets
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,8 @@ async def lifespan(app: FastAPI):
     settings.validate_library()
     settings.ensure_data_dir()
     report = check_dependencies()
+    # Fail hard before serving if Vue/etc. cannot be fetched or cached.
+    vendor_lines = ensure_vendor_assets()
     process_cache.start()
     transcoder.start(process_cache.path(CACHE_STREAMS))
 
@@ -65,6 +68,9 @@ async def lifespan(app: FastAPI):
     print("  Tools   :")
     for name, ver in report.tools.items():
         print(f"    - {name}: {ver[:72]}")
+    print("  Frontend:")
+    for line in vendor_lines:
+        print(f"    - {line}")
     print("=" * 60)
     print("  Press Ctrl+C for clean shutdown (stream cache deleted)")
     print("=" * 60)
@@ -123,13 +129,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     for exc_type, status_code in _EXCEPTION_STATUS:
         app.add_exception_handler(exc_type, _make_exception_handler(status_code))
 
-    app.include_router(pages.router)
+    # API + static before SPA catch-all (pages.router includes /{path}).
     app.include_router(api.router)
     app.mount(
         "/static",
         StaticFiles(directory=str(PACKAGE_DIR / "static")),
         name="static",
     )
+    app.include_router(pages.router)
     return app
 
 

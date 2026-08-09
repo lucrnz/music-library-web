@@ -9,6 +9,14 @@
   <link rel="stylesheet" href="/static/css/player.css" />
   <link rel="stylesheet" href="/static/css/modal.css" />
   <link rel="stylesheet" href="/static/css/desktop.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "vue": "/static/vendor/vue.esm-browser.prod.js",
+      "vue-router": "/static/vendor/vue-router.esm-browser.prod.js"
+    }
+  }
+  </script>
 </head>
 <body>
   <!-- Inline SVG icon sprite -->
@@ -82,158 +90,7 @@
     </symbol>
   </svg>
 
-  <div id="app">
-    <main>
-      <section id="view-library" class="view" aria-label="Library">
-        <div class="view-bar">
-          <button type="button" id="btn-back" class="icon-btn hidden" title="Back" aria-label="Back">
-            <svg class="icon"><use href="#i-chevron-left" /></svg>
-          </button>
-          <div class="view-title" id="library-title">Folders</div>
-          <div class="view-actions">
-            <button type="button" id="btn-add-selected" class="pill hidden">Add selected</button>
-            <button type="button" id="btn-add-all" class="pill">Add all</button>
-            <button type="button" id="btn-settings-lib" class="icon-btn" title="Settings" aria-label="Settings" aria-haspopup="dialog">
-              <svg class="icon"><use href="#i-settings" /></svg>
-            </button>
-          </div>
-        </div>
-        <div class="mode-bar" role="tablist" aria-label="Browse mode">
-          <button type="button" id="mode-folders" class="mode-btn active" role="tab" aria-selected="true">Folders</button>
-          <button type="button" id="mode-artists" class="mode-btn" role="tab" aria-selected="false">Artists</button>
-          <button type="button" id="mode-albums" class="mode-btn" role="tab" aria-selected="false">Albums</button>
-          <button type="button" id="mode-search" class="mode-btn" role="tab" aria-selected="false">Search</button>
-        </div>
-        <div id="search-bar" class="search-bar hidden">
-          <input type="search" id="library-search" class="search-input" placeholder="Search artists, albums, tracks…" autocomplete="off" enterkeyhint="search" />
-        </div>
-        <div id="dir-list" class="row-list"></div>
-      </section>
-
-      <section id="view-playlist" class="view hidden" aria-label="Playlist">
-        <div class="view-bar">
-          <div class="view-title">Queue</div>
-          <div class="view-actions">
-            <button type="button" id="btn-save-pl" class="pill" title="Save queue as playlist">Save</button>
-            <button type="button" id="btn-clear" class="pill danger hidden">Clear all</button>
-            <button type="button" id="btn-edit" class="pill">
-              <svg class="icon"><use href="#i-edit" /></svg><span>Edit</span>
-            </button>
-          </div>
-        </div>
-        <div id="saved-pl-list" class="saved-pl-list"></div>
-        <div id="pl-list" class="row-list"></div>
-      </section>
-    </main>
-
-    <div id="player" class="hidden">
-      <!-- Compact bar (mobile) -->
-      <div class="player-mini">
-        <img id="cover-art" class="mini-cover" src="/static/img/placeholder.svg" alt="" />
-        <button type="button" class="mini-meta" id="btn-expand" aria-label="Open now playing">
-          <span id="np-title" class="np-title">—</span>
-          <span id="np-artist" class="np-artist">No track</span>
-        </button>
-        <button type="button" id="btn-play-mini" class="icon-btn" title="Play / Pause" aria-label="Play / Pause">
-          <svg class="icon"><use href="#i-play" /></svg>
-        </button>
-        <button type="button" id="btn-next-mini" class="icon-btn" title="Next" aria-label="Next">
-          <svg class="icon"><use href="#i-next" /></svg>
-        </button>
-      </div>
-
-      <!-- Full layout: now-playing sheet on mobile, player bar on desktop -->
-      <div class="player-full">
-        <div class="sheet-grab" id="sheet-grab">
-          <button type="button" id="btn-collapse" class="icon-btn" title="Close" aria-label="Close now playing">
-            <svg class="icon"><use href="#i-chevron-down" /></svg>
-          </button>
-        </div>
-
-        <div class="full-cover-wrap">
-          <img id="cover-art-full" class="full-cover" src="/static/img/placeholder.svg" alt="Album cover" />
-        </div>
-
-        <div class="full-meta">
-          <div id="np-title-full" class="np-title">—</div>
-          <div id="np-artist-full" class="np-artist">No track</div>
-        </div>
-
-        <div class="seek-row">
-          <span id="time-cur" class="time">0:00</span>
-          <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="Seek" />
-          <span id="time-total" class="time">0:00</span>
-        </div>
-
-        <div class="transport-buttons">
-          <button type="button" id="btn-shuffle" class="icon-btn toggle" title="Shuffle" aria-pressed="false" aria-label="Shuffle">
-            <svg class="icon"><use href="#i-shuffle" /></svg>
-          </button>
-          <button type="button" id="btn-prev" class="icon-btn" title="Previous" aria-label="Previous">
-            <svg class="icon"><use href="#i-prev" /></svg>
-          </button>
-          <button type="button" id="btn-play" class="icon-btn primary" title="Play / Pause" aria-label="Play / Pause">
-            <svg class="icon"><use href="#i-play" /></svg>
-          </button>
-          <button type="button" id="btn-next" class="icon-btn" title="Next" aria-label="Next">
-            <svg class="icon"><use href="#i-next" /></svg>
-          </button>
-          <button type="button" id="btn-repeat" class="icon-btn toggle" title="Repeat" aria-pressed="false" aria-label="Repeat">
-            <svg class="icon"><use href="#i-repeat" /></svg>
-          </button>
-        </div>
-
-        <div class="player-extras">
-          <label class="vol-label" title="Volume">
-            <svg class="icon"><use href="#i-volume" /></svg>
-            <input type="range" id="volume" min="0" max="1" step="0.01" value="1" aria-label="Volume" />
-          </label>
-          <button type="button" id="btn-settings" class="icon-btn" title="Settings" aria-label="Settings" aria-haspopup="dialog">
-            <svg class="icon"><use href="#i-settings" /></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-      <div class="modal-backdrop" id="settings-backdrop"></div>
-      <div class="modal-sheet">
-        <div class="modal-head">
-          <div class="modal-title" id="settings-title">Settings</div>
-          <button type="button" id="btn-settings-close" class="icon-btn" title="Close" aria-label="Close settings">
-            <svg class="icon"><use href="#i-chevron-down" /></svg>
-          </button>
-        </div>
-        <div class="modal-section">
-          <div class="modal-section-title">Streaming quality</div>
-          <div id="codec-list" class="codec-list" role="radiogroup" aria-label="Stream codec"></div>
-        </div>
-        <div class="modal-section">
-          <div class="modal-section-title">Library index</div>
-          <p id="scan-status-text" class="modal-hint">—</p>
-          <div class="scan-actions">
-            <button type="button" id="btn-scan-quick" class="pill">Quick rescan</button>
-            <button type="button" id="btn-scan-full" class="pill">Full re-index</button>
-            <button type="button" id="btn-scan-cancel" class="pill danger hidden">Cancel</button>
-          </div>
-          <div id="scan-progress-wrap" class="scan-progress-wrap hidden">
-            <div id="scan-progress-bar" class="scan-progress-bar"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <nav id="tab-bar" aria-label="Views">
-      <button type="button" id="tab-library" class="tab active" aria-label="Library">
-        <svg class="icon"><use href="#i-library" /></svg><span>Library</span>
-      </button>
-      <button type="button" id="tab-playlist" class="tab" aria-label="Playlist">
-        <svg class="icon"><use href="#i-queue" /></svg><span>Playlist</span>
-      </button>
-    </nav>
-  </div>
-
-  <audio id="audio" preload="metadata"></audio>
-  <script type="module" src="/static/js/ui.js"></script>
+  <div id="app"></div>
+  <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>
