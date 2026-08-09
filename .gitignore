@@ -8,3 +8,7 @@ __pycache__/
 dist/
 build/
 data/
+
+# Frontend vendor downloads (fetched on startup from unpkg; see vendor_deps.py)
+src/musicweb/static/vendor/**
+!src/musicweb/static/vendor/.gitkeep
