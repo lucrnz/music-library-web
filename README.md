@@ -84,14 +84,11 @@ $MUSICWEB_DATA_DIR/
   - Full ≈ 1000×1000 lossless WebP; thumb 200×200 quality 90
   - `/api/cover?album_id=…&size=full|thumb` or `track_id=…`
 - Tags via mutagen (title, artist, album, album artist, track, disc, year, duration)
-- Selectable **Codec** profiles (default AAC). Settings only lists formats this browser can **actually decode** (tiny silent fixtures loaded into a muted `Audio` element — not `canPlayType` / UA sniffing; e.g. ALAC is typically Safari-only):
+- Selectable **Codec** profiles (default Opus 192). Settings only lists formats this browser can **actually decode** (tiny silent fixtures loaded into a muted `Audio` element — not `canPlayType` / UA sniffing):
+  - **`opus_192_48000`** — Opus 192k 48kHz (**default**)
+  - **`opus_160_48000`** — Opus 160k 48kHz
   - **`aac_256_44100`** — AAC-LC VBR ~256k 44.1kHz
   - **`aac_256_48000`** — AAC-LC VBR ~256k 48kHz
-  - **`opus_192_48000`** — Opus 192k 48kHz
-  - **`opus_160_48000`** — Opus 160k 48kHz
-  - **`alac_16_44100`** — ALAC 16-bit 44.1kHz
-  - **`alac_16_48000`** — ALAC 16-bit 48kHz
-  - **`alac_24_96000`** — ALAC 24-bit 96kHz
   - **`flac_16_44100`** — FLAC 16-bit 44.1kHz
   - **`flac_16_48000`** — FLAC 16-bit 48kHz
   - **`flac_24_96000`** — FLAC 24-bit 96kHz
@@ -121,11 +118,11 @@ $MUSICWEB_DATA_DIR/
 - **Stream URL:** `/api/stream?id={track_id}&codec=…` (id required)
 - **Cover URL:** `/api/cover?album_id=…` or `?track_id=…`
 - **Prewarm:** `POST /api/transcode/prepare` with `{"ids": [...], "codec": "…", "replace": false}`
-- **AAC encoder selection** (startup): prefer **`aac_at`** (Apple) when present, else **`libfdk_aac`**. Fail if neither is available. Also requires **libopus**, **flac**, and **alac** encoders plus **libsoxr**.
+- **AAC encoder selection** (startup): prefer **`aac_at`** (Apple) when present, else **`libfdk_aac`**. Fail if neither is available. Also requires **libopus**, **flac**, and **libsoxr**.
 - **Transcode path** (one ffmpeg process):
   1. `aresample=resampler=soxr:precision=28:cutoff=0.95:dither_method=shibata`
-  2. Force 16-bit + profile sample rate
-  3. Encode AAC, Opus, or FLAC into a tagged cache file
+  2. Force 16-bit + profile sample rate (24-bit for high-rate FLAC)
+  3. Encode Opus, AAC, or FLAC into a tagged cache file
   4. Skip rate conversion when source rate already matches the target
 - Stream cache under process temp `streams/`; clear with `POST /api/cache/clear?scope=streams`
 - Concurrent requests for the same track+profile share one encode
