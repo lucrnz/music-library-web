@@ -73,6 +73,11 @@ Press **Ctrl+C** for a clean shutdown. Temporary stream caches under the process
 | `MUSICWEB_DATA_DIR` | `./data` | Directory for `library.db` + persisted `covers/` (not a single `.db` file path) |
 | `LISTEN` | `0.0.0.0` | Bind address |
 | `PORT` | `8765` | TCP port |
+| `LASTFM_API_KEY` | empty | Optional Last.fm API key for artist portraits |
+| `FANART_TV_API_KEY` | empty | Optional fanart.tv personal API key for artist portraits |
+| `MUSICBRAINZ_CONTACT_EMAIL` | empty | Contact email for MusicBrainz User-Agent (required for MB + fanart.tv MBID path) |
+
+Artist image fetch tuning (interval, retry cooldown, on/off) lives in source (`musicweb/config.py`), not env.
 
 ### Data directory layout
 
@@ -81,6 +86,8 @@ $MUSICWEB_DATA_DIR/
   library.db                 # SQLite index (SQLAlchemy, WAL)
   covers/albums/{album_id}.full.webp
   covers/albums/{album_id}.thumb.webp
+  covers/artists/{artist_id}.full.webp
+  covers/artists/{artist_id}.thumb.webp
 ```
 
 ## Features
@@ -96,6 +103,9 @@ $MUSICWEB_DATA_DIR/
 - Cover art: embedded (ffmpeg) or folder `cover.jpg` / `cover.png` / etc., encoded once to WebP under the data dir (survives restarts)
   - Full ≈ 1000×1000 lossless WebP; thumb 200×200 quality 90
   - `/api/cover?album_id=…&size=full|thumb` or `track_id=…`
+- Artist portraits on re-scan (missing only): local `artist.jpg` / `artist.png` → MusicBrainz → Last.fm → fanart.tv (APIs only)
+  - Stored as WebP under `covers/artists/`; `/api/artist-image?artist_id=…&size=full|thumb`
+  - Shown as thumbs on Artists list and search
 - Tags via mutagen (title, artist, album, album artist, track, disc, year, duration)
 - Selectable **Codec** profiles (default Opus 192). Settings only lists formats this browser can **actually decode** (tiny silent fixtures loaded into a muted `Audio` element — not `canPlayType` / UA sniffing):
   - **`opus_192_48000`** — Opus 192k 48kHz (**default**)
@@ -120,7 +130,8 @@ $MUSICWEB_DATA_DIR/
 | `GET /api/search?q=` | FTS5 + artist/album LIKE |
 | `GET /api/browse`, `/api/collect` | Folders (+ track `id` when indexed) |
 | `GET /api/stream?id=…&codec=…` | Stream by track id (path still accepted) |
-| `GET /api/cover?album_id=…` / `track_id=…` | Persisted WebP |
+| `GET /api/cover?album_id=…` / `track_id=…` | Persisted album cover WebP |
+| `GET /api/artist-image?artist_id=…&size=…` | Persisted artist portrait WebP |
 | `/api/playlists` CRUD + tracks | Saved playlists by track id |
 
 ## Notes
