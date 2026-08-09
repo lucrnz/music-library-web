@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-AUDIO_EXTENSIONS = {".flac", ".m4a"}
+from musicweb.scan.formats import is_lossless_audio
 
 
 class PathEscapeError(ValueError):
@@ -52,7 +52,8 @@ class Library:
         return path.resolve().relative_to(self.root).as_posix()
 
     def is_audio(self, path: Path) -> bool:
-        return path.is_file() and path.suffix.lower() in AUDIO_EXTENSIONS
+        """True for indexable/streamable lossless audio files."""
+        return is_lossless_audio(path)
 
     def browse(self, relative: str | None = None) -> dict:
         """
