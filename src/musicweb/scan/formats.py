@@ -1,4 +1,8 @@
-"""Lossless format detection for indexing and streaming eligibility."""
+"""Packed lossless format detection for indexing and streaming eligibility.
+
+Only **FLAC** and **ALAC** (in .m4a/.mp4/.alac) are indexed. Unpacked PCM
+containers (.wav, .aiff, .aif) are not part of the library.
+"""
 
 from __future__ import annotations
 
@@ -14,13 +18,10 @@ CANDIDATE_EXTENSIONS = frozenset({
     ".m4a",
     ".mp4",
     ".alac",
-    ".wav",
-    ".aiff",
-    ".aif",
 })
 
 # Always-lossless by extension (no further probe required for indexing).
-ALWAYS_LOSSLESS = frozenset({".flac", ".wav", ".aiff", ".aif", ".alac"})
+ALWAYS_LOSSLESS = frozenset({".flac", ".alac"})
 
 
 def is_candidate_audio(path: Path) -> bool:
@@ -28,7 +29,7 @@ def is_candidate_audio(path: Path) -> bool:
 
 
 def is_lossless_audio(path: Path) -> bool:
-    """Return True if the file is a lossless audio format we index."""
+    """Return True if the file is packed lossless (FLAC or ALAC) we index."""
     if not path.is_file():
         return False
     ext = path.suffix.lower()
@@ -61,7 +62,7 @@ def _is_alac(path: Path) -> bool:
 
 
 def probe_codec_label(path: Path) -> str | None:
-    """Best-effort short codec label for debugging (not stored in v1 core)."""
+    """Best-effort short codec label (flac / alac / …)."""
     ext = path.suffix.lower()
     try:
         if ext == ".flac":
@@ -69,7 +70,12 @@ def probe_codec_label(path: Path) -> str | None:
             return "flac"
         if ext in {".m4a", ".mp4", ".alac"}:
             audio = MP4(path)
-            return getattr(audio.info, "codec", None) if audio and audio.info else None
+            if not audio or not audio.info:
+                return None
+            codec = (getattr(audio.info, "codec", None) or "").lower()
+            if codec:
+                return codec
+            return "alac" if _is_alac(path) else None
         audio = MutagenFile(path)
         if audio and audio.info:
             return type(audio.info).__name__
