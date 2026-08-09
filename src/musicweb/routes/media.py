@@ -17,7 +17,12 @@ from musicweb.db.repositories import tracks as tracks_repo
 from musicweb.db.session import get_db
 from musicweb.library import Library
 from musicweb.routes.deps import cover_store, library, transcoder
-from musicweb.transcode import DEFAULT_PROFILE_TAG, PROFILES, get_profile
+from musicweb.transcode import (
+    DEFAULT_PROFILE_TAG,
+    PROFILES,
+    get_profile,
+    tech_from_track,
+)
 
 router = APIRouter(prefix="/api", tags=["media"])
 
@@ -79,6 +84,7 @@ async def stream(
         resolved,
         track.rel_path,
         profile_tag=codec,
+        source_tech=tech_from_track(track),
     )
     return FileResponse(
         path=media_path,
@@ -126,7 +132,12 @@ def transcode_prepare(
         if not resolved.is_file() or not lib.is_audio(resolved):
             counts["skipped"] += 1
             continue
-        result = tc.prepare(resolved, t.rel_path, profile_tag=payload.codec)
+        result = tc.prepare(
+            resolved,
+            t.rel_path,
+            profile_tag=payload.codec,
+            source_tech=tech_from_track(t),
+        )
         counts[result] += 1
     return counts
 

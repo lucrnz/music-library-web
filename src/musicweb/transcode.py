@@ -1,21 +1,20 @@
-"""On-demand multi-codec streaming via a single ffmpeg encode.
+"""On-demand multi-codec streaming via ffmpeg (Opus + FLAC).
 
 Profiles:
   - opus_192_48000 → Opus VBR 192 kbps @ 48 kHz (libopus) — default
   - opus_160_48000 → Opus VBR 160 kbps @ 48 kHz (libopus)
-  - aac_256_44100  → AAC-LC VBR ~256 kbps @ 44.1 kHz (aac_at preferred, else libfdk_aac)
-  - aac_256_48000  → AAC-LC VBR ~256 kbps @ 48 kHz (same encoder settings)
   - flac_16_44100  → FLAC 16-bit @ 44.1 kHz (ffmpeg default compression)
   - flac_16_48000  → FLAC 16-bit @ 48 kHz (ffmpeg default compression)
   - flac_24_96000  → FLAC 24-bit @ 96 kHz (ffmpeg default compression)
 
 High-quality rate/bit-depth conversion uses libsoxr through aresample at
-SoX "very high quality" equivalents:
+SoX "very high quality" equivalents (``rate -v -L``):
   - precision=28 ≈ SoX ``rate -v``
-  - cutoff=0.95 (steep linear-phase low-pass)
-  - dither_method=shibata ≈ SoX ``dither -s``
-When the input sample rate already matches the target, ffmpeg skips the
-rate-conversion step automatically.
+  - linear phase ≈ SoX ``-L`` (libsoxr default; not exposed in ffmpeg)
+  - cutoff=0.95 (SoX VHQ ~95% bandwidth; ffmpeg soxr default is ~0.91)
+  - dither_method=shibata ≈ SoX ``dither -s`` **only when reducing bit depth**
+    (source bits > profile bits). Never dither when increasing bit depth
+    (e.g. 16→24). Perfect rate+depth match skips aresample entirely.
 
 Cache files live under the process cache ``streams/`` subdirectory and are
 wiped with the process root on shutdown (or via scoped ``/api/cache/clear``).
@@ -41,29 +40,41 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# SoX rate -v / dither -s equivalent via libsoxr (best practical quality).
+# SoX rate -v -L via libsoxr. Shibata dither only when reducing bit depth.
 ARESAMPLE_HQ = (
     "aresample=resampler=soxr:precision=28:cutoff=0.95:dither_method=shibata"
+)
+ARESAMPLE_HQ_NO_DITHER = (
+    "aresample=resampler=soxr:precision=28:cutoff=0.95"
 )
 
 DEFAULT_PROFILE_TAG = "opus_192_48000"
 
+
+@dataclass(frozen=True)
+class SourceAudioTech:
+    """Source file audio parameters (from DB scan or encode-time probe)."""
+
+    sample_rate_hz: int | None
+    bit_depth: int | None
+    channels: int | None = None
+    source_codec: str | None = None
+
 # MIME strings for HTMLMediaElement.canPlayType() on the client.
-_CAN_PLAY_AAC = 'audio/mp4; codecs="mp4a.40.2"'
 _CAN_PLAY_OPUS = 'audio/ogg; codecs="opus"'
 _CAN_PLAY_FLAC = "audio/flac"
 
 
 @dataclass(frozen=True)
 class StreamProfile:
-    """Product stream profile (format intent; AAC binary chosen at runtime)."""
+    """Product stream profile (format intent)."""
 
     tag: str
     sample_rate: int
     bitrate_kbps: int  # unused (0) for lossless FLAC
     extension: str
     media_type: str
-    kind: str  # "aac" | "opus" | "flac"
+    kind: str  # "opus" | "flac"
     label: str  # short UI label
     bit_depth: int  # 16 or 24 (PCM width fed to the encoder)
     can_play: str  # MIME probe string for browser capability checks
@@ -93,28 +104,6 @@ PROFILES: dict[str, StreamProfile] = {
             label="Opus 160k 48kHz",
             bit_depth=16,
             can_play=_CAN_PLAY_OPUS,
-        ),
-        StreamProfile(
-            tag="aac_256_44100",
-            sample_rate=44100,
-            bitrate_kbps=256,
-            extension="m4a",
-            media_type="audio/mp4",
-            kind="aac",
-            label="AAC 256k 44.1kHz",
-            bit_depth=16,
-            can_play=_CAN_PLAY_AAC,
-        ),
-        StreamProfile(
-            tag="aac_256_48000",
-            sample_rate=48000,
-            bitrate_kbps=256,
-            extension="m4a",
-            media_type="audio/mp4",
-            kind="aac",
-            label="AAC 256k 48kHz",
-            bit_depth=16,
-            can_play=_CAN_PLAY_AAC,
         ),
         StreamProfile(
             tag="flac_16_44100",
@@ -176,6 +165,7 @@ class _Job:
     relative_path: str
     profile: StreamProfile
     urgent: bool
+    source_tech: SourceAudioTech | None = None
     done: threading.Event = field(default_factory=threading.Event)
     error: Exception | None = None
     out_path: Path | None = None
@@ -185,7 +175,7 @@ class _Job:
 
 
 class Transcoder:
-    """Transcode library audio into tagged cache files (AAC, Opus, or FLAC).
+    """Transcode library audio into tagged cache files (Opus or FLAC).
 
     All encodes flow through a single background worker with two priority
     tiers: urgent (play requests, newest first) and prewarm (FIFO). A play
@@ -208,26 +198,12 @@ class Transcoder:
         self._jobs: dict[str, _Job] = {}
         self._current: _Job | None = None
         self._worker: threading.Thread | None = None
-        # Set by configure_encoders() after dependency check
-        self._aac_encoder: str | None = None
 
     @property
     def temp_dir(self) -> Path:
         if self._temp_dir is None:
             raise RuntimeError("Transcoder not started")
         return self._temp_dir
-
-    @property
-    def aac_encoder(self) -> str:
-        if self._aac_encoder is None:
-            raise RuntimeError("AAC encoder not configured")
-        return self._aac_encoder
-
-    def configure_encoders(self, aac_encoder: str) -> None:
-        """Record the AAC encoder resolved at startup (aac_at or libfdk_aac)."""
-        if aac_encoder not in ("aac_at", "libfdk_aac"):
-            raise ValueError(f"Unsupported AAC encoder: {aac_encoder}")
-        self._aac_encoder = aac_encoder
 
     def start(self, cache_dir: Path) -> Path:
         """Use an existing streams/ directory and start the encode worker."""
@@ -300,8 +276,8 @@ class Transcoder:
         """Run a subprocess, exposing the handle on the job; raise on failure.
 
         The process handle is stored on the job so it can be preempted; a
-        canceled job raises TranscodeCanceled instead of a generic ffmpeg
-        error (SIGTERM makes the exit code non-zero).
+        canceled job raises TranscodeCanceled instead of a generic error
+        (SIGTERM makes the exit code non-zero).
         """
         if self._closed:
             raise RuntimeError("Transcoder is shut down")
@@ -314,12 +290,14 @@ class Transcoder:
                 stderr=subprocess.PIPE,
             )
         except FileNotFoundError as exc:
+            tool = cmd[0] if cmd else "encoder"
             raise RuntimeError(
-                f"ffmpeg not found on PATH (needed for {label})."
+                f"{tool} not found on PATH (needed for {label})."
             ) from exc
 
         job.proc = proc
         _, stderr = proc.communicate()
+        job.proc = None
 
         if job.cancel_requested:
             raise TranscodeCanceled(f"{label} preempted for {key}")
@@ -336,16 +314,51 @@ class Transcoder:
         if profile.kind == "flac":
             # FLAC: s16 or s32 (+ bits_per_raw_sample for true 24-bit).
             return "s32" if profile.bit_depth >= 24 else "s16"
-        # Lossy codecs: 16-bit intermediate is standard.
+        # Lossy codecs (Opus): 16-bit intermediate is standard.
         return "s16"
+
+    @staticmethod
+    def _aresample_filter(
+        profile: StreamProfile,
+        source_tech: SourceAudioTech | None,
+    ) -> str | None:
+        """Return aresample filter string, or None to skip aresample.
+
+        Policy:
+          - Perfect rate+depth match → no filter
+          - Source bits > profile bits → soxr + Shibata dither
+          - Unknown bits → 16-bit target → dither (conservative)
+          - Else (rate change, same/up depth, unknown→24) → soxr without dither
+        """
+        src_rate = source_tech.sample_rate_hz if source_tech else None
+        src_bits = source_tech.bit_depth if source_tech else None
+        tgt_rate = profile.sample_rate
+        tgt_bits = profile.bit_depth
+
+        if (
+            src_rate is not None
+            and src_bits is not None
+            and src_rate == tgt_rate
+            and src_bits == tgt_bits
+        ):
+            return None
+
+        if src_bits is not None and src_bits > tgt_bits:
+            return ARESAMPLE_HQ
+
+        if src_bits is None and tgt_bits <= 16:
+            return ARESAMPLE_HQ
+
+        return ARESAMPLE_HQ_NO_DITHER
 
     def _encode_cmd(
         self,
         source: Path,
         dest_partial: Path,
         profile: StreamProfile,
+        source_tech: SourceAudioTech | None = None,
     ) -> list[str]:
-        """Build a single-pass ffmpeg command: libsoxr aresample + encode."""
+        """Build a single-pass ffmpeg command: conditional soxr + encode."""
         cmd: list[str] = [
             "ffmpeg",
             "-hide_banner",
@@ -356,39 +369,21 @@ class Transcoder:
             str(source),
             "-map",
             "0:a:0",
-            "-af",
-            ARESAMPLE_HQ,
-            "-sample_fmt",
-            self._sample_fmt(profile),
-            "-ar",
-            str(profile.sample_rate),
-            "-vn",
         ]
+        af = self._aresample_filter(profile, source_tech)
+        if af is not None:
+            cmd.extend(["-af", af])
+        cmd.extend(
+            [
+                "-sample_fmt",
+                self._sample_fmt(profile),
+                "-ar",
+                str(profile.sample_rate),
+                "-vn",
+            ]
+        )
 
-        if profile.kind == "aac":
-            encoder = self.aac_encoder
-            cmd.extend(["-c:a", encoder])
-            if encoder == "aac_at":
-                cmd.extend(
-                    [
-                        "-aac_at_mode",
-                        "vbr",
-                        "-b:a",
-                        f"{profile.bitrate_kbps}k",
-                    ]
-                )
-            else:
-                # libfdk_aac: VBR mode 5 ≈ highest quality (near-transparent)
-                cmd.extend(
-                    [
-                        "-vbr",
-                        "5",
-                        "-afterburner",
-                        "1",
-                    ]
-                )
-            fmt = "mp4"
-        elif profile.kind == "opus":
+        if profile.kind == "opus":
             cmd.extend(
                 [
                     "-c:a",
@@ -418,6 +413,7 @@ class Transcoder:
         relative_path: str,
         *,
         profile_tag: str = DEFAULT_PROFILE_TAG,
+        source_tech: SourceAudioTech | None = None,
     ) -> str:
         """
         Queue a background (prewarm) encode; never blocks on ffmpeg.
@@ -445,6 +441,7 @@ class Transcoder:
                 relative_path=relative_path,
                 profile=profile,
                 urgent=False,
+                source_tech=source_tech,
             )
             self._jobs[key] = job
             self._prewarm.append(job)
@@ -501,6 +498,7 @@ class Transcoder:
         relative_path: str,
         *,
         profile_tag: str = DEFAULT_PROFILE_TAG,
+        source_tech: SourceAudioTech | None = None,
     ) -> Path:
         """
         Return path to a cached stream file, encoding if needed.
@@ -532,11 +530,14 @@ class Transcoder:
                     relative_path=relative_path,
                     profile=profile,
                     urgent=True,
+                    source_tech=source_tech,
                 )
                 self._jobs[key] = job
                 self._urgent.appendleft(job)
             else:
                 job.urgent = True
+                if source_tech is not None and job.source_tech is None:
+                    job.source_tech = source_tech
                 try:
                     self._prewarm.remove(job)
                 except ValueError:
@@ -557,7 +558,7 @@ class Transcoder:
         return job.out_path
 
     def _request_cancel(self, job: _Job) -> None:
-        """Ask a running job's ffmpeg to stop; the worker loop cleans up."""
+        """Ask a running encode process to stop; the worker loop cleans up."""
         job.cancel_requested = True
         proc = job.proc
         if proc is not None and proc.poll() is None:
@@ -628,23 +629,32 @@ class Transcoder:
 
     def _encoder_label(self, profile: StreamProfile) -> str:
         """Human label for the encoder a profile encodes with."""
-        if profile.kind == "aac":
-            return self.aac_encoder
         if profile.kind == "opus":
             return "libopus"
         return "flac"
 
     def _run_job(self, job: _Job) -> None:
-        """Encode one job: ffmpeg into a .partial, atomic rename on success."""
+        """Encode one job into a .partial, atomic rename on success."""
         profile = job.profile
         out_path = self._out_path(job.key, profile)
+        tech = job.source_tech
+        if tech is None or tech.sample_rate_hz is None or tech.bit_depth is None:
+            tech = probe_source_audio_tech(job.source, known=tech)
+            job.source_tech = tech
+        af = self._aresample_filter(profile, tech)
+        dither = af is not None and "dither_method" in af
         logger.info(
-            "Transcode %s → profile=%s encoder=%s ar=%s bit=%s%s",
+            "Transcode %s → profile=%s encoder=%s ar=%s bit=%s "
+            "src=%s/%s resample=%s dither=%s%s",
             job.relative_path,
             profile.tag,
             self._encoder_label(profile),
             profile.sample_rate,
             profile.bit_depth,
+            tech.bit_depth if tech else None,
+            tech.sample_rate_hz if tech else None,
+            "no" if af is None else "soxr",
+            "yes" if dither else "no",
             " (urgent)" if job.urgent else "",
         )
 
@@ -652,7 +662,9 @@ class Transcoder:
         try:
             if partial.exists():
                 partial.unlink(missing_ok=True)
-            cmd = self._encode_cmd(job.source, partial, profile)
+            cmd = self._encode_cmd(
+                job.source, partial, profile, source_tech=tech
+            )
             self._run_tracked(
                 job.key, cmd, label=f"ffmpeg-{profile.tag}", job=job
             )
@@ -667,6 +679,86 @@ class Transcoder:
         except Exception:
             partial.unlink(missing_ok=True)
             raise
+
+
+def probe_source_audio_tech(
+    path: Path,
+    *,
+    known: SourceAudioTech | None = None,
+) -> SourceAudioTech:
+    """Fill missing rate/bits via mutagen (and optional ffprobe fallback)."""
+    rate = known.sample_rate_hz if known else None
+    bits = known.bit_depth if known else None
+    channels = known.channels if known else None
+    codec = known.source_codec if known else None
+
+    if rate is not None and bits is not None:
+        return SourceAudioTech(rate, bits, channels, codec)
+
+    try:
+        from musicweb.metadata import read_metadata
+
+        meta = read_metadata(path)
+        if rate is None:
+            rate = meta.get("sample_rate_hz")
+        if bits is None:
+            bits = meta.get("bit_depth")
+        if channels is None:
+            channels = meta.get("channels")
+        if codec is None:
+            codec = meta.get("source_codec")
+    except Exception as exc:
+        logger.debug("mutagen tech probe failed for %s: %s", path, exc)
+
+    if rate is None or bits is None:
+        try:
+            proc = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "a:0",
+                    "-show_entries",
+                    "stream=sample_rate,bits_per_raw_sample,bits_per_sample,channels,codec_name",
+                    "-of",
+                    "default=noprint_wrappers=1",
+                    str(path),
+                ],
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+            text = (proc.stdout or b"").decode("utf-8", errors="replace")
+            vals: dict[str, str] = {}
+            for line in text.splitlines():
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    vals[k.strip()] = v.strip()
+            if rate is None and vals.get("sample_rate"):
+                rate = int(vals["sample_rate"])
+            if bits is None:
+                raw = vals.get("bits_per_raw_sample") or vals.get("bits_per_sample")
+                if raw and raw not in ("N/A", "0"):
+                    bits = int(raw)
+            if channels is None and vals.get("channels"):
+                channels = int(vals["channels"])
+            if codec is None and vals.get("codec_name"):
+                codec = vals["codec_name"]
+        except Exception as exc:
+            logger.debug("ffprobe tech probe failed for %s: %s", path, exc)
+
+    return SourceAudioTech(rate, bits, channels, codec)
+
+
+def tech_from_track(track: object) -> SourceAudioTech:
+    """Build SourceAudioTech from a Track ORM row (duck-typed attributes)."""
+    return SourceAudioTech(
+        sample_rate_hz=getattr(track, "sample_rate_hz", None),
+        bit_depth=getattr(track, "bit_depth", None),
+        channels=getattr(track, "channels", None),
+        source_codec=getattr(track, "source_codec", None),
+    )
 
 
 def _require_tool(name: str, args: list[str], *, hint: str) -> str:
@@ -704,14 +796,14 @@ def _ffmpeg_encoder_names() -> set[str]:
     except FileNotFoundError as exc:
         raise RuntimeError(
             "ffmpeg not found on PATH. Install ffmpeg with libsoxr, "
-            "libopus, flac, and aac_at or libfdk_aac."
+            "libopus, and flac."
         ) from exc
     if proc.returncode != 0:
         err = (proc.stderr or b"").decode("utf-8", errors="replace").strip()
         raise RuntimeError(f"ffmpeg -encoders failed: {err or proc.returncode}")
 
     text = (proc.stdout or b"").decode("utf-8", errors="replace")
-    # Lines look like: " A....D libfdk_aac           Fraunhofer FDK AAC ..."
+    # Lines look like: " A....D libopus           libopus OPUS ..."
     names: set[str] = set()
     for line in text.splitlines():
         m = re.match(r"^\s*[A-Z\.]{6}\s+(\S+)", line)
@@ -755,46 +847,23 @@ def _require_libsoxr() -> str:
     return "enabled (aresample resampler=soxr)"
 
 
-def resolve_aac_encoder(encoders: set[str] | None = None) -> tuple[str, str]:
-    """
-    Prefer Apple AudioToolbox (aac_at), else Fraunhofer FDK (libfdk_aac).
-
-    Returns (encoder_name, human_label).
-    """
-    if encoders is None:
-        encoders = _ffmpeg_encoder_names()
-    if "aac_at" in encoders:
-        return "aac_at", "aac_at (Apple AudioToolbox)"
-    if "libfdk_aac" in encoders:
-        return "libfdk_aac", "libfdk_aac (Fraunhofer FDK)"
-    raise RuntimeError(
-        "No suitable AAC encoder found. Need aac_at (macOS AudioToolbox) "
-        "or libfdk_aac (ffmpeg built with --enable-libfdk-aac --enable-nonfree)."
-    )
-
-
 @dataclass(frozen=True)
 class DependencyReport:
-    """Startup dependency check results: banner labels + resolved encoders."""
+    """Startup dependency check results: banner labels."""
 
     tools: dict[str, str]
-    aac_encoder: str
 
 
 def check_dependencies() -> DependencyReport:
     """
-    Ensure ffmpeg on PATH has libsoxr, a usable AAC encoder, libopus, and flac.
+    Ensure ffmpeg has libsoxr, libopus, and flac.
 
-    Returns banner labels per dependency plus the resolved AAC encoder name.
     Raises RuntimeError on any missing requirement (fail fast).
     """
     ffmpeg_ver = _require_tool(
         "ffmpeg",
         ["-version"],
-        hint=(
-            "Install ffmpeg with libsoxr, libopus, flac, "
-            "and aac_at or libfdk_aac."
-        ),
+        hint="Install ffmpeg with libsoxr, libopus, and flac.",
     )
     soxr_label = _require_libsoxr()
     encoders = _ffmpeg_encoder_names()
@@ -808,9 +877,7 @@ def check_dependencies() -> DependencyReport:
             "ffmpeg is missing the flac encoder. "
             "Install a standard ffmpeg build that includes FLAC."
         )
-    aac_name, aac_label = resolve_aac_encoder(encoders)
 
-    logger.info("AAC encoder selected: %s", aac_label)
     logger.info("Opus encoder: libopus")
     logger.info("FLAC encoder: flac")
     logger.info("Resampler: %s", soxr_label)
@@ -819,9 +886,7 @@ def check_dependencies() -> DependencyReport:
         tools={
             "ffmpeg": ffmpeg_ver,
             "libsoxr": soxr_label,
-            "aac encoder": aac_label,
             "opus encoder": "libopus",
             "flac encoder": "flac",
         },
-        aac_encoder=aac_name,
     )

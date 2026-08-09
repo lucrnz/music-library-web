@@ -42,10 +42,9 @@ async def lifespan(app: FastAPI):
     transcoder: Transcoder = app.state.transcoder
     scanner: LibraryScanner = app.state.scanner
 
-    report = check_dependencies()
-    transcoder.configure_encoders(report.aac_encoder)
     settings.validate_library()
     settings.ensure_data_dir()
+    report = check_dependencies()
     process_cache.start()
     transcoder.start(process_cache.path(CACHE_STREAMS))
 
