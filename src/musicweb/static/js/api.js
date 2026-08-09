@@ -82,6 +82,24 @@ export function coverUrl(ref, size, bust = true) {
   return bust ? `${base}&t=${Date.now()}` : base;
 }
 
+/**
+ * Artist profile image URL by artist id.
+ * @param {string | { id?: string }} artistOrId
+ * @param {'full'|'thumb'} size
+ * @param {boolean} bust
+ */
+export function artistImageUrl(artistOrId, size = "thumb", bust = false) {
+  const id =
+    typeof artistOrId === "string"
+      ? artistOrId
+      : artistOrId && typeof artistOrId === "object"
+        ? artistOrId.id
+        : null;
+  if (!id) return "/static/img/placeholder.svg";
+  const base = `/api/artist-image?artist_id=${encodeURIComponent(id)}&size=${size}`;
+  return bust ? `${base}&t=${Date.now()}` : base;
+}
+
 /** Stream URL — track id required. */
 export function streamUrl(track, codec) {
   if (!track?.id) return null;

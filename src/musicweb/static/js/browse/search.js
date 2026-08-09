@@ -2,7 +2,7 @@
  * Full-text search results view.
  */
 import { dirList, icon, showEmpty } from "../dom.js";
-import { apiGet } from "../api.js";
+import { apiGet, artistImageUrl } from "../api.js";
 import * as nav from "./nav.js";
 import { isCurrent, renderLibrary } from "./context.js";
 import { createAlbumRow, createTrackRow } from "./rows.js";
@@ -38,7 +38,9 @@ export async function runSearch(q, seq, { bumpSeq } = {}) {
       const row = document.createElement("div");
       row.className = "row";
       row.innerHTML = `
-        <span class="row-icon">${icon("library")}</span>
+        <span class="row-cover-wrap">
+          <img class="row-cover" src="${artistImageUrl(artist, "thumb", false)}" alt="" loading="lazy" />
+        </span>
         <span class="row-meta"><span class="row-title"></span></span>
         <span class="row-chevron">${icon("chevron-right")}</span>
       `;
