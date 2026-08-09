@@ -12,6 +12,15 @@ _ENV_CANDIDATES = (
     _PROJECT_ROOT / ".env",
 )
 
+# Artist image fetch tuning (source constants — not env).
+ARTIST_IMAGE_FETCH = True
+ARTIST_IMAGE_MIN_INTERVAL_MS = 1000
+ARTIST_IMAGE_RETRY_DAYS = 14
+ARTIST_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+MUSICBRAINZ_UA_TEMPLATE = (
+    "MusicLibaryWeb/0.1 - https://github.com/lucrnz/music-library-web - Contact: {email}"
+)
+
 
 def _env_file() -> str | None:
     for candidate in _ENV_CANDIDATES:
@@ -41,6 +50,14 @@ class Settings(BaseSettings):
     listen: str = Field(default="0.0.0.0", description="Bind address")
     port: int = Field(default=8765, ge=1, le=65535, description="Listen port")
 
+    # Secrets / personal contact for artist image providers (optional).
+    lastfm_api_key: str = Field(default="", description="Last.fm API key (read-only).")
+    fanart_tv_api_key: str = Field(default="", description="fanart.tv personal API key.")
+    musicbrainz_contact_email: str = Field(
+        default="",
+        description="Contact email embedded in the MusicBrainz User-Agent.",
+    )
+
     @field_validator("music_library_path", "musicweb_data_dir", mode="before")
     @classmethod
     def expand_path(cls, value: object) -> Path:
@@ -50,6 +67,25 @@ class Settings(BaseSettings):
         else:
             path = path.resolve()
         return path
+
+    @field_validator(
+        "lastfm_api_key",
+        "fanart_tv_api_key",
+        "musicbrainz_contact_email",
+        mode="before",
+    )
+    @classmethod
+    def strip_secret(cls, value: object) -> str:
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    def musicbrainz_user_agent(self) -> str | None:
+        """MusicBrainz UA when contact email is configured; else None."""
+        email = self.musicbrainz_contact_email
+        if not email:
+            return None
+        return MUSICBRAINZ_UA_TEMPLATE.format(email=email)
 
     def validate_library(self) -> None:
         if not self.music_library_path.exists():
@@ -65,6 +101,7 @@ class Settings(BaseSettings):
         """Create the data directory (and covers subtree) if needed."""
         self.musicweb_data_dir.mkdir(parents=True, exist_ok=True)
         (self.musicweb_data_dir / "covers" / "albums").mkdir(parents=True, exist_ok=True)
+        (self.musicweb_data_dir / "covers" / "artists").mkdir(parents=True, exist_ok=True)
         return self.musicweb_data_dir
 
 
