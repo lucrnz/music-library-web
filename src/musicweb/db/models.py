@@ -1,0 +1,140 @@
+"""ORM models for the music library index."""
+
+from __future__ import annotations
+
+from typing import Optional
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from musicweb.db.base import Base
+
+
+class Artist(Base):
+    __tablename__ = "artists"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    name_norm: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    sort_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    album_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    track_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    albums: Mapped[list[Album]] = relationship(
+        back_populates="album_artist",
+        foreign_keys="Album.artist_id",
+    )
+
+
+class Album(Base):
+    __tablename__ = "albums"
+    __table_args__ = (
+        UniqueConstraint("artist_id", "title_norm", name="uq_album_artist_title"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    artist_id: Mapped[str] = mapped_column(
+        ForeignKey("artists.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    title_norm: Mapped[str] = mapped_column(String, nullable=False)
+    year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    track_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    has_cover: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    album_artist: Mapped[Artist] = relationship(
+        back_populates="albums",
+        foreign_keys=[artist_id],
+    )
+    tracks: Mapped[list[Track]] = relationship(back_populates="album")
+
+
+class Track(Base):
+    __tablename__ = "tracks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    fingerprint_algo: Mapped[str] = mapped_column(String, nullable=False)
+    # NULL when is_missing (SQLite UNIQUE allows multiple NULLs).
+    rel_path: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    artist_name: Mapped[str] = mapped_column(String, nullable=False)
+    album_artist_name: Mapped[str] = mapped_column(String, nullable=False)
+    artist_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("artists.id"), nullable=True, index=True
+    )
+    album_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("albums.id"), nullable=True, index=True
+    )
+    album_artist_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("artists.id"), nullable=True, index=True
+    )
+    track_no: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    disc_no: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    is_missing: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    added_at: Mapped[str] = mapped_column(String, nullable=False)
+    indexed_at: Mapped[str] = mapped_column(String, nullable=False)
+
+    album: Mapped[Optional[Album]] = relationship(back_populates="tracks")
+
+
+class Playlist(Base):
+    __tablename__ = "playlists"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)
+
+    items: Mapped[list[PlaylistTrack]] = relationship(
+        back_populates="playlist",
+        order_by="PlaylistTrack.position",
+        cascade="all, delete-orphan",
+    )
+
+
+class PlaylistTrack(Base):
+    __tablename__ = "playlist_tracks"
+
+    playlist_id: Mapped[str] = mapped_column(
+        ForeignKey("playlists.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    track_id: Mapped[str] = mapped_column(
+        ForeignKey("tracks.id"), nullable=False, index=True
+    )
+
+    playlist: Mapped[Playlist] = relationship(back_populates="items")
+    track: Mapped[Track] = relationship()
+
+
+class ScanState(Base):
+    __tablename__ = "scan_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="idle")
+    mode: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    started_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    finished_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    phase: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    files_seen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    files_upserted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    files_missing: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    files_total_hint: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    current_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
