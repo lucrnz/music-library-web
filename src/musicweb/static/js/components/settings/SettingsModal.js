@@ -13,6 +13,14 @@ import {
   closeSettings,
   setStreamCodec,
 } from "../../stores/settings.js";
+import {
+  downloads,
+  disableDownloads,
+  downloadsStorageLine as formatDlStorage,
+  enableDownloads,
+  openDownloadsManager,
+  refreshStorageInfo,
+} from "../../stores/downloads.js";
 import Icon from "../icons/Icon.js";
 
 export default defineComponent({
@@ -23,6 +31,7 @@ export default defineComponent({
     const progressPct = ref(0);
     const showProgress = ref(false);
     const scanning = ref(false);
+    const downloadsBusy = ref(false);
     let pollTimer = null;
 
     function stopPoll() {
@@ -107,6 +116,47 @@ export default defineComponent({
       });
     }
 
+    const downloadsStorageLine = computed(() => {
+      if (!downloads.enabled) return "";
+      return formatDlStorage("short");
+    });
+
+    async function onToggleDownloads(e) {
+      const want = e.target.checked;
+      if (want === downloads.enabled) return;
+      downloadsBusy.value = true;
+      try {
+        if (want) {
+          await enableDownloads();
+          await refreshStorageInfo();
+        } else {
+          if (
+            !confirm(
+              "Disable downloads? You can keep files on this device or delete them."
+            )
+          ) {
+            e.target.checked = true;
+            return;
+          }
+          const wipe = confirm(
+            "Delete all downloaded music from this device?\n\nOK = Delete everything\nCancel = Keep files (idle until re-enabled)"
+          );
+          await disableDownloads({ wipe });
+        }
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "Could not update downloads setting");
+        e.target.checked = downloads.enabled;
+      } finally {
+        downloadsBusy.value = false;
+      }
+    }
+
+    function onOpenManager() {
+      closeSettings();
+      openDownloadsManager();
+    }
+
     function onKey(e) {
       if (e.key === "Escape" && settings.open) closeSettings();
     }
@@ -117,6 +167,7 @@ export default defineComponent({
         if (open) {
           refreshScanStatus();
           startPoll();
+          if (downloads.enabled) refreshStorageInfo();
           document.addEventListener("keydown", onKey);
         } else {
           stopPoll();
@@ -136,14 +187,19 @@ export default defineComponent({
 
     return {
       settings,
+      downloads,
       statusText,
       showProgress,
       progressStyle,
       scanning,
+      downloadsBusy,
+      downloadsStorageLine,
       closeSettings,
       chooseCodec,
       startScan,
       cancelScan,
+      onToggleDownloads,
+      onOpenManager,
     };
   },
   template: `
@@ -182,6 +238,37 @@ export default defineComponent({
               <span class="codec-label">{{ opt.label }}</span>
               <svg class="icon codec-check" aria-hidden="true"><use href="#i-check"></use></svg>
             </button>
+          </div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Downloads</div>
+          <p class="modal-hint">
+            Store tracks on this device to save data and play offline.
+            Downloads use the streaming quality selected above.
+          </p>
+          <label class="toggle-row">
+            <span class="toggle-label">Enable downloads</span>
+            <input
+              type="checkbox"
+              class="toggle-input"
+              :checked="downloads.enabled"
+              :disabled="downloadsBusy"
+              @change="onToggleDownloads"
+            />
+          </label>
+          <p v-if="downloads.enabled && downloadsStorageLine" class="modal-hint" style="margin-top:8px">
+            {{ downloadsStorageLine }}
+          </p>
+          <p v-if="downloads.enabled && downloads.nearQuota" class="modal-hint warn">
+            Storage almost full — free space or delete downloads.
+          </p>
+          <div class="scan-actions" style="margin-top:10px">
+            <button
+              type="button"
+              class="pill"
+              :disabled="!downloads.enabled && !downloads.trackCount"
+              @click="onOpenManager"
+            >Download manager</button>
           </div>
         </div>
         <div class="modal-section">

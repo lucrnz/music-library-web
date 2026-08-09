@@ -1,7 +1,8 @@
 import { computed, defineComponent } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { downloads } from "../../stores/downloads.js";
 
-const MODES = [
+const BASE_MODES = [
   { id: "folders", label: "Folders", name: "folders" },
   { id: "artists", label: "Artists", name: "artists" },
   { id: "albums", label: "Albums", name: "albums" },
@@ -14,17 +15,24 @@ export default defineComponent({
     const route = useRoute();
     const router = useRouter();
     const activeMode = computed(() => route.meta.mode || "folders");
+    const modes = computed(() => {
+      if (!downloads.enabled) return BASE_MODES;
+      return [
+        ...BASE_MODES,
+        { id: "downloads", label: "Downloads", name: "downloads" },
+      ];
+    });
 
     function select(mode) {
       router.push({ name: mode.name });
     }
 
-    return { MODES, activeMode, select };
+    return { modes, activeMode, select };
   },
   template: `
     <div class="mode-bar" role="tablist" aria-label="Browse mode">
       <button
-        v-for="m in MODES"
+        v-for="m in modes"
         :key="m.id"
         type="button"
         class="mode-btn"

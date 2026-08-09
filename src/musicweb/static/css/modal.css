@@ -125,6 +125,232 @@ body.modal-open {
   overflow: hidden;
 }
 
+/* Downloads settings toggle */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 4px 0;
+}
+
+.toggle-label {
+  font-weight: 600;
+}
+
+.toggle-input {
+  width: 44px;
+  height: 24px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.modal-hint.warn {
+  color: var(--danger);
+}
+
+/* Download manager */
+.downloads-modal {
+  z-index: 110;
+}
+
+.downloads-sheet {
+  max-height: 90vh;
+}
+
+.dl-pause-banner {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warn, #e6a23c) 18%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.dl-queue-summary {
+  margin: 0 0 8px;
+}
+
+.dl-queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dl-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.dl-queue-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.dl-queue-title {
+  display: block;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dl-queue-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.dl-queue-meta .scan-progress-wrap {
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.dl-queue-meta .scan-progress-wrap.is-indeterminate .scan-progress-bar {
+  width: 30%;
+  animation: dl-progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes dl-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+.dl-artist {
+  margin-bottom: 16px;
+}
+
+.dl-artist-head,
+.dl-album-head,
+.dl-track-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 0;
+}
+
+.dl-tree-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.dl-tree-toggle:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+  color: var(--text);
+}
+
+.dl-tree-toggle .icon {
+  transition: transform 0.15s ease;
+}
+
+.dl-tree-toggle.collapsed .icon {
+  transform: rotate(-90deg);
+}
+
+.dl-tree-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.dl-tree-label:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.08));
+}
+
+.dl-album {
+  margin-left: 12px;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+  margin-top: 4px;
+}
+
+.dl-track-row {
+  margin-left: 8px;
+}
+
+.dl-track-num {
+  width: 28px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: right;
+}
+
+.row-download {
+  color: var(--text-dim);
+}
+
+.row-download.is-ready {
+  color: var(--accent);
+}
+
+.row-download.is-other {
+  color: var(--accent-bright);
+}
+
+.row-download.is-failed {
+  color: var(--danger);
+}
+
+.row-download.is-busy {
+  opacity: 0.7;
+}
+
+.dl-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: dl-spin 0.7s linear infinite;
+}
+
+@keyframes dl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.offline-banner {
+  padding: 8px 16px;
+  font-size: 13px;
+  line-height: 1.35;
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--danger);
+  border-bottom: 1px solid var(--border);
+}
+
 /* Range inputs — track fill via --range-fill (set from JS) */
 input[type="range"] {
   -webkit-appearance: none;

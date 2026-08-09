@@ -181,6 +181,11 @@ export default defineComponent({
       }"
       :style="rootStyle"
     >
+      <div
+        v-if="player.playNotice"
+        class="player-notice"
+        role="status"
+      >{{ player.playNotice }}</div>
       <div class="player-mini">
         <img class="mini-cover" :src="coverThumb" alt="" />
         <button type="button" class="mini-meta" aria-label="Open now playing" @click="expand">

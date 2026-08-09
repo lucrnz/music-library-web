@@ -16,13 +16,21 @@ import {
   ui,
 } from "../../stores/ui.js";
 import { openSettings } from "../../stores/settings.js";
+import {
+  downloads,
+  downloadTracks,
+  noteServerReachable,
+  noteServerUnreachable,
+  refreshDownloadStatuses,
+} from "../../stores/downloads.js";
 import Icon from "../icons/Icon.js";
 import ModeBar from "../layout/ModeBar.js";
+import DownloadIcon from "../downloads/DownloadIcon.js";
 import { playOrQueueTrack, queueOnly } from "./rows.js";
 
 export default defineComponent({
   name: "LibraryView",
-  components: { Icon, ModeBar },
+  components: { Icon, ModeBar, DownloadIcon },
   setup() {
     const route = useRoute();
     const router = useRouter();
@@ -72,6 +80,13 @@ export default defineComponent({
     });
     const showAddSelected = computed(
       () => mode.value === "folders" && selectedCount.value > 0
+    );
+    const showDownloadAlbum = computed(
+      () =>
+        downloads.enabled &&
+        mode.value !== "folders" &&
+        Boolean(albumId.value) &&
+        tracks.value.length > 0
     );
 
     function isCurrent(seq) {
@@ -216,9 +231,28 @@ export default defineComponent({
         }
       } catch (err) {
         if (!isCurrent(seq)) return;
-        error.value = err.message || String(err);
+        const msg = err.message || String(err);
+        noteServerUnreachable(err);
+        // Only replace with connectivity banner when connectivity actually flipped
+        error.value = downloads.connectivityNote || msg;
       } finally {
         if (isCurrent(seq)) loading.value = false;
+      }
+      if (!error.value) {
+        noteServerReachable();
+      }
+      if (downloads.enabled && isCurrent(seq)) {
+        refreshDownloadStatuses().catch(() => {});
+      }
+    }
+
+    async function downloadCurrentAlbum() {
+      if (!downloads.enabled || !tracks.value.length) return;
+      try {
+        await downloadTracks(tracks.value.filter((t) => t.id && !t.is_missing));
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "Download failed");
       }
     }
 
@@ -407,6 +441,7 @@ export default defineComponent({
       searchQuery,
       showAddAll,
       showAddSelected,
+      showDownloadAlbum,
       goBack,
       openFolder,
       openArtist,
@@ -417,6 +452,7 @@ export default defineComponent({
       onFileAdd,
       addAll,
       addSelected,
+      downloadCurrentAlbum,
       onSearchInput,
       onSearchEnter,
       openSettings,
@@ -427,10 +463,16 @@ export default defineComponent({
       playOrQueueTrack,
       queueOnly,
       formatTrackLabel,
+      downloads,
     };
   },
   template: `
     <section id="view-library" class="view" aria-label="Library">
+      <div
+        v-if="downloads.connectivityNote"
+        class="offline-banner"
+        role="status"
+      >{{ downloads.connectivityNote }}</div>
       <div class="view-bar">
         <button
           v-if="showBack"
@@ -456,6 +498,13 @@ export default defineComponent({
             class="pill"
             @click="addAll"
           >Add all</button>
+          <button
+            v-if="showDownloadAlbum"
+            type="button"
+            class="pill"
+            title="Download album"
+            @click="downloadCurrentAlbum"
+          ><Icon name="download" /><span>Download</span></button>
           <button
             type="button"
             class="icon-btn"
@@ -513,6 +562,7 @@ export default defineComponent({
             <span class="row-meta">
               <span class="row-title">{{ file.displayName || file.name }}</span>
             </span>
+            <DownloadIcon v-if="file.id" :track="{ id: file.id, ...(file.meta || {}) }" />
             <button
               type="button"
               class="icon-btn row-add"
@@ -562,7 +612,7 @@ export default defineComponent({
             v-for="track in tracks"
             :key="track.id"
             class="row"
-            @click="(e) => { if (!e.target.closest('.row-add')) playOrQueueTrack(track); }"
+            @click="(e) => { if (!e.target.closest('.row-add') && !e.target.closest('.row-download')) playOrQueueTrack(track); }"
           >
             <span class="row-cover-wrap">
               <img class="row-cover" :src="trackCover(track)" alt="" loading="lazy" />
@@ -571,6 +621,7 @@ export default defineComponent({
               <span class="row-title">{{ formatTrackLabel(track) }}</span>
               <span class="row-sub">{{ track.artist || '' }}</span>
             </span>
+            <DownloadIcon :track="track" />
             <button
               type="button"
               class="icon-btn row-add"
@@ -621,7 +672,7 @@ export default defineComponent({
               v-for="track in searchSections.tracks"
               :key="'st-' + track.id"
               class="row"
-              @click="(e) => { if (!e.target.closest('.row-add')) playOrQueueTrack(track); }"
+              @click="(e) => { if (!e.target.closest('.row-add') && !e.target.closest('.row-download')) playOrQueueTrack(track); }"
             >
               <span class="row-cover-wrap">
                 <img class="row-cover" :src="trackCover(track)" alt="" loading="lazy" />
@@ -630,6 +681,7 @@ export default defineComponent({
                 <span class="row-title">{{ track.title }}</span>
                 <span class="row-sub">{{ [track.artist, track.album].filter(Boolean).join(' — ') }}</span>
               </span>
+              <DownloadIcon :track="track" />
               <button
                 type="button"
                 class="icon-btn row-add"

@@ -3,6 +3,12 @@
  */
 import { reactive } from "vue";
 import { coverUrl, streamUrl } from "../api.js";
+import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
+import {
+  downloads,
+  isHardOffline,
+  markDownloadBroken,
+} from "./downloads.js";
 import { pl, commit } from "./playlist.js";
 import { settings } from "./settings.js";
 
@@ -13,35 +19,63 @@ export const audio = new Audio();
 audio.preload = "metadata";
 audio.setAttribute("playsinline", "");
 
+/** @type {string | null} blob: URL we must revoke */
+let localPlayUrl = null;
+
 export const player = reactive({
   seeking: false,
   expanded: false,
-  /** drag transform for mobile sheet */
   sheetOffset: 0,
   draggingSheet: false,
   volume: 1,
-  /** seconds; updated from audio events */
   currentTime: 0,
   duration: 0,
   paused: true,
+  fromDownload: false,
+  /** User-visible play block message (null when clear) */
+  playNotice: null,
 });
 
 const msSupported = "mediaSession" in navigator;
 
-function updateMediaSession() {
+function revokeLocalPlayUrl() {
+  if (localPlayUrl) {
+    URL.revokeObjectURL(localPlayUrl);
+    localPlayUrl = null;
+  }
+}
+
+function setPlayNotice(msg) {
+  player.playNotice = msg || null;
+}
+
+async function updateMediaSession() {
   if (!msSupported) return;
   const t = pl.current;
   if (!t) {
     navigator.mediaSession.metadata = null;
     return;
   }
+  const albumId = t.album_id || t.albumId;
+  const thumb = await resolveCoverUrl(
+    albumId,
+    "thumb",
+    coverUrl(t, "thumb", false),
+    downloads.enabled
+  );
+  const full = await resolveCoverUrl(
+    albumId,
+    "full",
+    coverUrl(t, "full", false),
+    downloads.enabled
+  );
   navigator.mediaSession.metadata = new MediaMetadata({
     title: t.title,
     artist: t.artist,
     album: t.album,
     artwork: [
-      { src: coverUrl(t, "thumb", false), sizes: "200x200", type: "image/webp" },
-      { src: coverUrl(t, "full", false), sizes: "1000x1000", type: "image/webp" },
+      { src: thumb, sizes: "200x200", type: "image/webp" },
+      { src: full, sizes: "1000x1000", type: "image/webp" },
     ],
   });
 }
@@ -62,7 +96,7 @@ function updatePositionState() {
       position: Math.min(audio.currentTime, dur),
     });
   } catch {
-    /* ignore out-of-range positions */
+    /* ignore */
   }
 }
 
@@ -81,6 +115,9 @@ export function stopPlayback() {
   audio.pause();
   audio.removeAttribute("src");
   audio.load();
+  revokeLocalPlayUrl();
+  player.fromDownload = false;
+  setPlayNotice(null);
   pl.index = -1;
   player.currentTime = 0;
   player.duration = 0;
@@ -98,13 +135,59 @@ export async function playIndex(index) {
   commit();
   updateMediaSession();
 
-  const url = streamUrl(track, settings.stream);
-  if (!url) return;
-  audio.src = url;
+  revokeLocalPlayUrl();
+  player.fromDownload = false;
+  setPlayNotice(null);
+
+  const source = await resolvePlaySource(track, {
+    enabled: downloads.enabled,
+    codec: settings.stream,
+    offline: isHardOffline(),
+  });
+
+  if (source.type === "unavailable") {
+    const title = track?.title || "Track";
+    setPlayNotice(source.message ? `${title}: ${source.message}` : source.message);
+    syncTransportFlags();
+    return;
+  }
+
+  if (source.type === "local") {
+    localPlayUrl = source.url;
+    player.fromDownload = true;
+  }
+
+  audio.src = source.url;
   try {
     await audio.play();
   } catch (err) {
-    console.error("Playback failed", err);
+    if (player.fromDownload) {
+      console.warn("Local playback failed, falling back to stream", err);
+      if (track?.id) markDownloadBroken(track.id).catch(() => {});
+      revokeLocalPlayUrl();
+      player.fromDownload = false;
+
+      if (isHardOffline()) {
+        setPlayNotice(
+          `${track?.title || "Track"}: Local file is unreadable. Re-download when online.`
+        );
+        syncTransportFlags();
+        return;
+      }
+      const remote = streamUrl(track, settings.stream);
+      if (remote) {
+        audio.src = remote;
+        try {
+          await audio.play();
+        } catch (err2) {
+          console.error("Playback failed", err2);
+          setPlayNotice("Playback failed");
+        }
+      }
+    } else {
+      console.error("Playback failed", err);
+      setPlayNotice("Playback failed");
+    }
   }
   syncTransportFlags();
 }
@@ -184,7 +267,6 @@ export function applyVolume() {
   audio.volume = player.volume;
 }
 
-/** Wire audio element listeners once at boot. */
 export function initAudioListeners() {
   if (!audio.isConnected) {
     audio.hidden = true;

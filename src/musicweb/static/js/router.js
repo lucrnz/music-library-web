@@ -46,6 +46,24 @@ const routes = [
     meta: { mode: "search", pane: "library", title: "Search" },
   },
   {
+    path: "/downloads",
+    name: "downloads",
+    component: Shell,
+    meta: { mode: "downloads", pane: "library", title: "Downloads" },
+  },
+  {
+    path: "/downloads/artists/:artistId",
+    name: "downloads-artist",
+    component: Shell,
+    meta: { mode: "downloads", pane: "library" },
+  },
+  {
+    path: "/downloads/albums/:albumId",
+    name: "downloads-album",
+    component: Shell,
+    meta: { mode: "downloads", pane: "library" },
+  },
+  {
     path: "/queue",
     name: "queue",
     component: Shell,

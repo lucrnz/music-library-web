@@ -1,6 +1,6 @@
 import { defineComponent, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { coverUrl } from "../../api.js";
+import { apiGet, coverUrl } from "../../api.js";
 import { formatTime } from "../../util.js";
 import {
   pl,
@@ -17,6 +17,11 @@ import {
   playIndex,
   stopPlayback,
 } from "../../stores/player.js";
+import {
+  downloads,
+  downloadTracks,
+  refreshDownloadStatuses,
+} from "../../stores/downloads.js";
 import Icon from "../icons/Icon.js";
 
 export default defineComponent({
@@ -113,6 +118,38 @@ export default defineComponent({
       }
     }
 
+    async function onDownloadSaved(sp, e) {
+      e.stopPropagation();
+      if (!downloads.enabled) return;
+      try {
+        const full = await apiGet(
+          `/api/playlists/${encodeURIComponent(sp.id)}/tracks`
+        );
+        const tracks = (full.items || []).filter((t) => t.id && !t.is_missing);
+        if (!tracks.length) {
+          alert("Playlist has no downloadable tracks");
+          return;
+        }
+        await downloadTracks(tracks);
+        await refreshDownloadStatuses();
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "Download failed");
+      }
+    }
+
+    async function onDownloadQueue() {
+      if (!downloads.enabled || !pl.tracks.length) return;
+      try {
+        const tracks = pl.tracks.filter((t) => t.id && !t.is_missing);
+        await downloadTracks(tracks);
+        await refreshDownloadStatuses();
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "Download failed");
+      }
+    }
+
     function trackCover(track) {
       return coverUrl(track, "thumb", false);
     }
@@ -145,9 +182,12 @@ export default defineComponent({
       onLoadSaved,
       onDeleteSaved,
       onSave,
+      onDownloadSaved,
+      onDownloadQueue,
       trackCover,
       trackSub,
       refreshSaved,
+      downloads,
     };
   },
   template: `
@@ -155,6 +195,13 @@ export default defineComponent({
       <div class="view-bar">
         <div class="view-title">Queue</div>
         <div class="view-actions">
+          <button
+            v-if="downloads.enabled && pl.length"
+            type="button"
+            class="pill"
+            title="Download queue"
+            @click="onDownloadQueue"
+          ><Icon name="download" /><span>Download</span></button>
           <button type="button" class="pill" title="Save queue as playlist" @click="onSave">Save</button>
           <button
             v-if="pl.editing && pl.length"
@@ -177,6 +224,14 @@ export default defineComponent({
             <span class="saved-pl-name">{{ sp.name }}</span>
             <span class="saved-pl-count">{{ sp.track_count }} tracks</span>
           </button>
+          <button
+            v-if="downloads.enabled"
+            type="button"
+            class="icon-btn"
+            title="Download playlist"
+            aria-label="Download playlist"
+            @click="(e) => onDownloadSaved(sp, e)"
+          ><Icon name="download" /></button>
           <button
             type="button"
             class="icon-btn saved-pl-del"

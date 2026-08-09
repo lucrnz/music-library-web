@@ -82,6 +82,10 @@ export function setStreamCodec(v, ctx) {
   settings.open = false;
   preparedKeys.clear();
   requestPrepare(ctx.tracks, v, { replace: true });
+  // Side-effect after codec change (safe: downloads store does not import settings mutators)
+  import("./downloads.js")
+    .then((m) => m.onStreamCodecChanged?.())
+    .catch(() => {});
   if (ctx.index >= 0) {
     ctx.playIndex(ctx.index);
   }
