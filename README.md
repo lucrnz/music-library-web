@@ -1,8 +1,8 @@
 # Music Library Web Server
 
-Browse and stream a lossless music library over your LAN. Modern mobile-first web UI (Spotify/YT-Music style): **drill-down library browser**, **playlist**, a mini-player that expands into a full now-playing sheet on phones, and a two-pane layout with a persistent player bar on desktop. Live multi-codec transcoding via **ffmpeg** (libsoxr HQ resample + AAC, Opus, or FLAC).
+Browse and stream a lossless music library over your LAN. Modern mobile-first web UI (Spotify/YT-Music style): **Folders / Artists / Albums** discovery, **session queue**, **saved playlists**, a mini-player that expands into a full now-playing sheet on phones, and a two-pane layout with a persistent player bar on desktop. Live multi-codec transcoding via **ffmpeg** (libsoxr HQ resample + AAC, Opus, or FLAC).
 
-The library browser is **filesystem-agnostic**: it only needs `MUSIC_LIBRARY_PATH`. It discovers whatever directories and audio files exist under that root (lazy tree, one level at a time). No hard-coded folder names or library schema.
+The media tree is **filesystem-agnostic** (`MUSIC_LIBRARY_PATH`). A SQLAlchemy/SQLite **index** under `MUSICWEB_DATA_DIR` powers Artist → Album → Track browsing, FTS5 search, stable track IDs (content fingerprints), re-scan, and durable playlists.
 
 ## Requirements
 
@@ -56,45 +56,77 @@ Press **Ctrl+C** for a clean shutdown. Temporary caches live under one process r
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MUSIC_LIBRARY_PATH` | — | Root directory to browse (required in practice) |
+| `MUSIC_LIBRARY_PATH` | — | Root directory of media files (required in practice) |
+| `MUSICWEB_DATA_DIR` | `./data` | Directory for `library.db` + persisted `covers/` (not a single `.db` file path) |
 | `LISTEN` | `0.0.0.0` | Bind address |
 | `PORT` | `8765` | TCP port |
+
+### Data directory layout
+
+```text
+$MUSICWEB_DATA_DIR/
+  library.db                 # SQLite index (SQLAlchemy, WAL)
+  covers/albums/{album_id}.full.webp
+  covers/albums/{album_id}.thumb.webp
+```
 
 ## Features
 
 - Mobile-first responsive UI: bottom tabs + mini-player/now-playing sheet on phones; side-by-side library/playlist panes + player bar on desktop (≥900px)
-- Drill-down folder browser (dirs + `.flac` / `.m4a` only); tap-to-play, per-row add, "Add all" per folder, desktop Ctrl/Cmd multi-select
-- Browser session playlist (tap to play, edit mode: remove, touch/mouse drag reorder, clear)
-- Play / pause / next / prev, seek, volume
-- Shuffle, repeat off / one / all
-- Cover art: embedded (ffmpeg) or folder `cover.jpg` / `cover.png` / etc., always served as WebP
-  - Now-playing sheet: 800×800 lossless WebP (LANCZOS resize) via `/api/cover?path=…&size=full`
-  - Mini-player / playlist thumbnails: 200×200 WebP quality 90 via `/api/cover?path=…&size=thumb`
-  - **Album-keyed process cache**: tracks that share the same album *title* tag share one full + thumbnail WebP pair (extracted once, ready to serve). No album tag → per-file key. Stored under the process cache `covers/` subdir (same root as streams; wiped on shutdown)
-- Tags via mutagen (title, artist, album, duration)
-- Selectable **Codec** profiles (player bar; default AAC):
+- **Browse modes:** Folders, **Artists → Albums → Tracks**, **Albums** cover grid, **Search** (FTS5)
+- **SQLite index** (SQLAlchemy 2 + Alembic migrations): artists, albums, tracks, playlists, FTS5
+- **Stable track IDs** from content fingerprints (FLAC STREAMINFO MD5; other lossless: SHA-256); renames reattach when fingerprint matches
+- **Incremental scan on startup** + Settings: **Quick rescan**, **Full re-index**, progress, cancel (full scan rebuilds FTS)
+- Lossless formats: `.flac`, ALAC in `.m4a`, `.wav`, `.aiff`/`.aif` (AAC `.m4a` is not indexed)
+- Session **queue** (browser sessionStorage) + **saved playlists** in SQLite (shared across LAN devices)
+- Play / pause / next / prev, seek, volume, shuffle, repeat
+- Cover art: embedded (ffmpeg) or folder `cover.jpg` / `cover.png` / etc., encoded once to WebP under the data dir (survives restarts)
+  - Full ≈ 1000×1000 lossless WebP; thumb 200×200 quality 90
+  - `/api/cover?album_id=…&size=full|thumb` or `track_id=…`
+- Tags via mutagen (title, artist, album, album artist, track, disc, year, duration)
+- Selectable **Codec** profiles (default AAC):
   - **`aac_256_44100`** — AAC 256k 44.1kHz
   - **`opus_192_48000`** — Opus 192k 48kHz
   - **`opus_160_48000`** — Opus 160k 48kHz
   - **`flac_16_44100`** — FLAC 44.1kHz
   - **`flac_16_48000`** — FLAC 48kHz
-- On-demand single-pass ffmpeg encode into `<cache>/streams/`; process cache wiped on shutdown
-- Session caches share one root (`streams/`, `covers/`). Scoped clear: `POST /api/cache/clear?scope=streams` (playlist clear), `?scope=covers`, or both (`?scope=streams&scope=covers`)
+- On-demand ffmpeg encode into process temp `streams/` (wiped on shutdown)
 - No authentication (LAN trust only — do not expose to the public internet)
+
+## Library index API (summary)
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/library/stats` | Counts |
+| `POST /api/library/scan` | `{ "mode": "quick" \| "full" }` |
+| `POST /api/library/scan/cancel` | Cancel running scan |
+| `GET /api/library/scan/status` | Progress / last result |
+| `GET /api/artists`, `/api/artists/{id}/albums` | Discovery |
+| `GET /api/albums`, `/api/albums/{id}/tracks` | Discovery |
+| `GET /api/tracks/{id}`, `POST /api/tracks/meta` | Track by id |
+| `GET /api/search?q=` | FTS5 + artist/album LIKE |
+| `GET /api/browse`, `/api/collect` | Folders (+ track `id` when indexed) |
+| `GET /api/stream?id=…&codec=…` | Stream by track id (path still accepted) |
+| `GET /api/cover?album_id=…` / `track_id=…` | Persisted WebP |
+| `/api/playlists` CRUD + tracks | Saved playlists by track id |
 
 ## Notes
 
-- Source library is expected to be lossless (FLAC, ALAC in `.m4a`).
-- **Stream URL:** `/api/stream?path=…&codec=aac_256_44100|opus_192_48000|opus_160_48000|flac_16_44100|flac_16_48000`
-- **Prewarm URL:** `POST /api/transcode/prepare` with `{"paths": [...], "codec": "…", "replace": false}` — queues background transcodes (deduped, pending queue capped at 300; `replace: true` drops all pending prewarm jobs, used on codec change). Returns per-status counts. The frontend fires this when tracks are added to the playlist and for the whole playlist after a codec change.
-- **AAC encoder selection** (startup): prefer **`aac_at`** (Apple) when present, else **`libfdk_aac`**. Fail if neither is available. The chosen encoder is logged in the startup banner.
+- Source library is expected to be **lossless**.
+- **Stream URL:** `/api/stream?id={track_id}&codec=…` (id required)
+- **Cover URL:** `/api/cover?album_id=…` or `?track_id=…`
+- **Prewarm:** `POST /api/transcode/prepare` with `{"ids": [...], "codec": "…", "replace": false}`
+- **AAC encoder selection** (startup): prefer **`aac_at`** (Apple) when present, else **`libfdk_aac`**. Fail if neither is available.
 - **Transcode path** (one ffmpeg process):
-  1. `aresample=resampler=soxr:precision=28:cutoff=0.95:dither_method=shibata` (≈ SoX `rate -v` + Shibata dither)
-  2. Force 16-bit + profile sample rate (`-sample_fmt s16 -ar …`)
-  3. Encode AAC, Opus, or FLAC into a tagged cache file (FLAC uses ffmpeg default compression; level is not set)
-  4. When the source sample rate already matches the target, ffmpeg **skips** the rate-conversion step (format/dither may still apply)
-- Stream cache filenames live under `<cache>/streams/` and include the profile tag, e.g. `{hash}.aac_256_44100.m4a`, `{hash}.opus_192_48000.opus`, `{hash}.flac_16_44100.flac`
-- **Cache clear:** `POST /api/cache/clear?scope=streams` and/or `?scope=covers` (required; repeat for both). Response: `{"removed": {"streams": N, …}, "scopes": […]}`
+  1. `aresample=resampler=soxr:precision=28:cutoff=0.95:dither_method=shibata`
+  2. Force 16-bit + profile sample rate
+  3. Encode AAC, Opus, or FLAC into a tagged cache file
+  4. Skip rate conversion when source rate already matches the target
+- Stream cache under process temp `streams/`; clear with `POST /api/cache/clear?scope=streams`
 - Concurrent requests for the same track+profile share one encode
-- All encodes run on a single background worker (serial by design — encodes are CPU-bound) fed by a two-tier queue: play requests first (newest first), then prewarm requests (FIFO). A play request promotes its queued job, or preempts a running prewarm encode — the `.partial` file is deleted (never renamed, so nothing corrupt is ever served) and the canceled job restarts after the urgent work
+- Single encode worker: play requests preempt prewarm; `.partial` never served
 - Seeking uses HTTP Range on completed cache files
+
+## Schema migrations
+
+Schema migrations live under `src/musicweb/db/migrations/`. Startup runs Alembic to head (or stamps head if an older pre-Alembic DB is detected). Optional CLI: `alembic upgrade head`.
