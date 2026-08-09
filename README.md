@@ -1,8 +1,21 @@
 # Music Library Web Server
 
-Browse and stream a lossless music library over your LAN. Modern mobile-first web UI (Spotify/YT-Music style): **Folders / Artists / Albums** discovery, **session queue**, **saved playlists**, a mini-player that expands into a full now-playing sheet on phones, and a two-pane layout with a persistent player bar on desktop. Live multi-codec transcoding via **ffmpeg** (libsoxr HQ resample + AAC, Opus, or FLAC).
+Browse and stream a lossless music library over your LAN. Modern mobile-first web UI (Spotify/YT-Music style): **Folders / Artists / Albums** discovery, **session queue**, **saved playlists**, a mini-player that expands into a full now-playing sheet on phones, and a two-pane layout with a persistent player bar on desktop. Live multi-codec transcoding via **ffmpeg** (libsoxr HQ resample + **Opus** or **FLAC**).
 
 The media tree is **filesystem-agnostic** (`MUSIC_LIBRARY_PATH`). A SQLAlchemy/SQLite **index** under `MUSICWEB_DATA_DIR` powers Artist → Album → Track browsing, FTS5 search, stable track IDs (content fingerprints), re-scan, and durable playlists.
+
+## Audio quality principles
+
+**High-fidelity streaming is a primary goal.** Whenever audio is resampled or re-encoded for the browser, this project prefers settings that match studio / mastering-grade practice over “good enough” OS or consumer defaults.
+
+Examples:
+
+- **Resampling:** libsoxr via ffmpeg at SoX Very High Quality equivalents (`rate -v -L`: `precision=28`, linear phase, `cutoff=0.95`) — not the OS mixer’s cheap resampler.
+- **Dither:** Shibata (`dither -s`) **only when reducing bit depth** (e.g. 24-bit source → 16-bit Opus/FLAC). **Never** dither when increasing bit depth (16 → 24) or when depth is unchanged. If sample rate and bit depth already match the stream profile, aresample is skipped entirely.
+- **Encoders:** best practical quality knobs for each codec (e.g. Opus VBR at the selected bitrate; FLAC with true 24-bit when that profile is chosen).
+- **Source library:** packed lossless only (**FLAC** and **ALAC**); the pipeline should not needlessly degrade it before the chosen stream format.
+
+Tweaking small pipeline details for transparent, high-fidelity delivery is intentional and preferred over simpler lower-quality paths.
 
 ## Requirements
 
@@ -10,11 +23,10 @@ The media tree is **filesystem-agnostic** (`MUSIC_LIBRARY_PATH`). A SQLAlchemy/S
 - [uv](https://github.com/astral-sh/uv)
 - [ffmpeg](https://ffmpeg.org/) on your `PATH`, built with:
   - **libsoxr** (`--enable-libsoxr`) — high-quality resampling
-  - **libopus** — Opus profile
+  - **libopus** — Opus profiles
   - **flac** — lossless FLAC profiles (built into standard ffmpeg)
-  - **aac_at** (macOS AudioToolbox) **or** **libfdk_aac** (`--enable-libfdk-aac --enable-nonfree`) — AAC profile
 
-On macOS with Homebrew, a non-free ffmpeg build that includes FDK + libsoxr is typical. The server **refuses to start** if libsoxr, libopus, flac, or a usable AAC encoder is missing. It does **not** require a separate SoX package.
+The server **refuses to start** if libsoxr, libopus, or flac is missing. It does **not** require a separate SoX package.
 
 ## Setup
 
@@ -45,12 +57,11 @@ LAN URL : http://192.168.x.x:8765
 Tools   :
   - ffmpeg: ...
   - libsoxr: enabled (aresample resampler=soxr)
-  - aac encoder: aac_at (Apple AudioToolbox)
   - opus encoder: libopus
   - flac encoder: flac
 ```
 
-Press **Ctrl+C** for a clean shutdown. Temporary caches live under one process root (`streams/` + `covers/`) and are always deleted on exit.
+Press **Ctrl+C** for a clean shutdown. Temporary stream caches under the process root are always deleted on exit.
 
 ## Configuration (`.env`)
 
@@ -77,7 +88,7 @@ $MUSICWEB_DATA_DIR/
 - **SQLite index** (SQLAlchemy 2 + Alembic migrations): artists, albums, tracks, playlists, FTS5
 - **Stable track IDs** from content fingerprints (FLAC STREAMINFO MD5; other lossless: SHA-256); renames reattach when fingerprint matches
 - **Incremental scan on startup** + Settings: **Quick rescan**, **Full re-index**, progress, cancel (full scan rebuilds FTS)
-- Lossless formats: `.flac`, ALAC in `.m4a`, `.wav`, `.aiff`/`.aif` (AAC `.m4a` is not indexed)
+- Packed lossless only: `.flac`, ALAC in `.m4a`/`.mp4` (WAV/AIFF and AAC `.m4a` are not indexed)
 - Session **queue** (browser sessionStorage) + **saved playlists** in SQLite (shared across LAN devices)
 - Play / pause / next / prev, seek, volume, shuffle, repeat
 - Cover art: embedded (ffmpeg) or folder `cover.jpg` / `cover.png` / etc., encoded once to WebP under the data dir (survives restarts)
@@ -87,8 +98,6 @@ $MUSICWEB_DATA_DIR/
 - Selectable **Codec** profiles (default Opus 192). Settings only lists formats this browser can **actually decode** (tiny silent fixtures loaded into a muted `Audio` element — not `canPlayType` / UA sniffing):
   - **`opus_192_48000`** — Opus 192k 48kHz (**default**)
   - **`opus_160_48000`** — Opus 160k 48kHz
-  - **`aac_256_44100`** — AAC-LC VBR ~256k 44.1kHz
-  - **`aac_256_48000`** — AAC-LC VBR ~256k 48kHz
   - **`flac_16_44100`** — FLAC 16-bit 44.1kHz
   - **`flac_16_48000`** — FLAC 16-bit 48kHz
   - **`flac_24_96000`** — FLAC 24-bit 96kHz
@@ -118,12 +127,13 @@ $MUSICWEB_DATA_DIR/
 - **Stream URL:** `/api/stream?id={track_id}&codec=…` (id required)
 - **Cover URL:** `/api/cover?album_id=…` or `?track_id=…`
 - **Prewarm:** `POST /api/transcode/prepare` with `{"ids": [...], "codec": "…", "replace": false}`
-- **AAC encoder selection** (startup): prefer **`aac_at`** (Apple) when present, else **`libfdk_aac`**. Fail if neither is available. Also requires **libopus**, **flac**, and **libsoxr**.
+- Startup requires **libopus**, **flac**, and **libsoxr** (no AAC encoder).
 - **Transcode path** (one ffmpeg process):
-  1. `aresample=resampler=soxr:precision=28:cutoff=0.95:dither_method=shibata`
-  2. Force 16-bit + profile sample rate (24-bit for high-rate FLAC)
-  3. Encode Opus, AAC, or FLAC into a tagged cache file
-  4. Skip rate conversion when source rate already matches the target
+  1. If source rate **and** bit depth already match the profile → **no aresample**
+  2. Else soxr VHQ (`precision=28`, `cutoff=0.95`); add `dither_method=shibata` **only** when source bit depth **>** profile bit depth
+  3. Force sample format + profile sample rate (16-bit for Opus / FLAC 16; 24-bit for high-rate FLAC)
+  4. Encode Opus or FLAC into a tagged cache file
+  Source rate/depth are stored on tracks at scan time (and probed at encode if missing).
 - Stream cache under process temp `streams/`; clear with `POST /api/cache/clear?scope=streams`
 - Concurrent requests for the same track+profile share one encode
 - Single encode worker: play requests preempt prewarm; `.partial` never served
