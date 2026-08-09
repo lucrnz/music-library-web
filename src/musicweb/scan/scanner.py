@@ -116,6 +116,65 @@ class LibraryScanner:
             setattr(row, key, value)
         session.commit()
 
+    def _log_progress(
+        self,
+        *,
+        mode: ScanMode | str | None,
+        phase: str | None,
+        files_seen: int,
+        files_upserted: int,
+        files_missing: int = 0,
+        files_total_hint: int | None = None,
+        current_path: str | None = None,
+        status: str | None = None,
+    ) -> None:
+        """Log scan progress to the terminal (mirrors UI status fields)."""
+        if status is None:
+            status = "canceling" if self._cancel.is_set() else "running"
+        parts: list[str] = [f"Library scan: {status}"]
+        if mode:
+            parts[0] += f" ({mode})"
+        if phase:
+            parts.append(phase)
+        if files_total_hint and files_total_hint > 0:
+            pct = min(100, max(0, round(files_seen * 100 / files_total_hint)))
+            parts.append(f"{pct}% ({files_seen}/{files_total_hint})")
+        else:
+            parts.append(f"seen {files_seen}")
+        parts.append(f"updated {files_upserted}")
+        parts.append(f"missing {files_missing}")
+        if current_path:
+            parts.append(f"path {current_path}")
+        logger.info(" · ".join(parts))
+
+    def _log_final_summary(self, *, canceled: bool) -> None:
+        st = self.status()
+        mode = st.get("mode")
+        seen = st.get("files_seen") or 0
+        upserted = st.get("files_upserted") or 0
+        missing = st.get("files_missing") or 0
+        total = st.get("files_total_hint")
+        verb = "canceled" if canceled else "finished"
+        if total and total > 0:
+            logger.info(
+                "Library scan %s (mode=%s) · seen %s/%s · updated %s · missing %s",
+                verb,
+                mode,
+                seen,
+                total,
+                upserted,
+                missing,
+            )
+        else:
+            logger.info(
+                "Library scan %s (mode=%s) · seen %s · updated %s · missing %s",
+                verb,
+                mode,
+                seen,
+                upserted,
+                missing,
+            )
+
     def _run(self, mode: ScanMode) -> None:
         logger.info("Library scan started (mode=%s)", mode)
         try:
@@ -134,6 +193,12 @@ class LibraryScanner:
                     current_path=None,
                     last_error=None,
                 )
+            self._log_progress(
+                mode=mode,
+                phase="walk",
+                files_seen=0,
+                files_upserted=0,
+            )
             self._scan(mode)
             with self._db.session() as session:
                 self._set_state(
@@ -143,8 +208,7 @@ class LibraryScanner:
                     phase=None,
                     current_path=None,
                 )
-            if self._cancel.is_set():
-                logger.info("Library scan canceled")
+            self._log_final_summary(canceled=self._cancel.is_set())
         except Exception as exc:
             logger.exception("Library scan failed")
             with self._db.session() as session:
@@ -160,7 +224,6 @@ class LibraryScanner:
             with self._lock:
                 self._running = False
                 self._thread = None
-            logger.info("Library scan finished")
 
     def _iter_audio(self) -> Iterator[Path]:
         """Stream audio files under the library root (no full materialization)."""
@@ -178,9 +241,39 @@ class LibraryScanner:
             if is_lossless_audio(path):
                 yield path
 
+    def _count_audio(self, mode: ScanMode) -> int:
+        """Cancelable count of audio files; logs intermediate walk progress."""
+        total = 0
+        for _ in self._iter_audio():
+            total += 1
+            if total % 1000 == 0:
+                self._log_progress(
+                    mode=mode,
+                    phase="walk",
+                    files_seen=total,
+                    files_upserted=0,
+                    files_total_hint=None,
+                )
+        return total
+
     def _scan(self, mode: ScanMode) -> None:
+        total_hint = self._count_audio(mode)
+        if self._cancel.is_set():
+            return
+
         with self._db.session() as session:
-            self._set_state(session, phase="index")
+            self._set_state(
+                session,
+                phase="index",
+                files_total_hint=total_hint,
+            )
+        self._log_progress(
+            mode=mode,
+            phase="index",
+            files_seen=0,
+            files_upserted=0,
+            files_total_hint=total_hint,
+        )
 
         seen_paths: set[str] = set()
         seen_count = 0
@@ -210,6 +303,14 @@ class LibraryScanner:
                     files_upserted=upserted,
                     current_path=last_rel,
                 )
+            self._log_progress(
+                mode=mode,
+                phase="index",
+                files_seen=seen_count,
+                files_upserted=upserted,
+                files_total_hint=total_hint,
+                current_path=last_rel,
+            )
 
         if batch and not self._cancel.is_set():
             s, u, covers = self._process_batch(batch, mode)
@@ -225,12 +326,26 @@ class LibraryScanner:
                     files_upserted=upserted,
                     current_path=None,
                 )
+            self._log_progress(
+                mode=mode,
+                phase="index",
+                files_seen=seen_count,
+                files_upserted=upserted,
+                files_total_hint=total_hint,
+            )
 
         if self._cancel.is_set():
             return
 
         with self._db.session() as session:
             self._set_state(session, phase="finalize")
+            self._log_progress(
+                mode=mode,
+                phase="finalize",
+                files_seen=seen_count,
+                files_upserted=upserted,
+                files_total_hint=total_hint,
+            )
             missing = self._mark_missing(session, seen_paths)
             self._recount_entities(session)
             if mode == "full":
@@ -242,10 +357,26 @@ class LibraryScanner:
                 files_upserted=upserted,
                 files_missing=missing,
             )
+        self._log_progress(
+            mode=mode,
+            phase="finalize",
+            files_seen=seen_count,
+            files_upserted=upserted,
+            files_missing=missing,
+            files_total_hint=total_hint,
+        )
 
         if cover_queue and not self._cancel.is_set():
             with self._db.session() as session:
                 self._set_state(session, phase="covers")
+            self._log_progress(
+                mode=mode,
+                phase="covers",
+                files_seen=seen_count,
+                files_upserted=upserted,
+                files_missing=missing,
+                files_total_hint=total_hint,
+            )
             self._extract_covers(cover_queue, force=(mode == "full"))
 
     def _process_batch(
@@ -373,10 +504,15 @@ class LibraryScanner:
         )
 
     def _extract_covers(self, cover_queue: dict[str, Path], *, force: bool) -> None:
+        total = len(cover_queue)
+        processed = 0
+        extracted = 0
+        logger.info("Library scan: covers · processing %s albums", total)
         with self._db.session() as session:
             for album_id, audio_path in cover_queue.items():
                 if self._cancel.is_set():
                     break
+                processed += 1
                 album = session.get(Album, album_id)
                 if album is None:
                     continue
@@ -384,4 +520,26 @@ class LibraryScanner:
                     continue
                 ok = self._covers.ensure_album_cover(album_id, audio_path, force=force)
                 album.has_cover = bool(ok)
+                if ok:
+                    extracted += 1
+                if processed % 25 == 0 or processed == total:
+                    logger.info(
+                        "Library scan: covers · %s/%s albums (%s extracted)",
+                        processed,
+                        total,
+                        extracted,
+                    )
             session.commit()
+        if self._cancel.is_set():
+            logger.info(
+                "Library scan: covers canceled · %s/%s albums (%s extracted)",
+                processed,
+                total,
+                extracted,
+            )
+        else:
+            logger.info(
+                "Library scan: covers done · %s albums (%s extracted)",
+                total,
+                extracted,
+            )
