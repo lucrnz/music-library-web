@@ -47,7 +47,16 @@ def _resolve_track_file(lib: Library, track: Track) -> Path:
 @router.get("/codecs")
 async def codecs() -> dict:
     return {
-        "codecs": [{"id": p.tag, "label": p.label} for p in PROFILES.values()],
+        "codecs": [
+            {
+                "id": p.tag,
+                "label": p.label,
+                "kind": p.kind,
+                "media_type": p.media_type,
+                "can_play": p.can_play,
+            }
+            for p in PROFILES.values()
+        ],
         "default": DEFAULT_PROFILE_TAG,
     }
 
