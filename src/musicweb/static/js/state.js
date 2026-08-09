@@ -6,7 +6,7 @@
 import { audio } from "./dom.js";
 
 const STORAGE_KEY = "musicweb.playlist.v1";
-const DEFAULT_CODEC = "aac_256_44100";
+const DEFAULT_CODEC = "opus_192_48000";
 
 /**
  * Render callbacks registered by the UI layer (ui.js) at startup. State and
@@ -157,7 +157,7 @@ export const codec = {
    * browser can decode (silent fixture probes in codecSupport.js).
    * @type {{ id: string, label: string, kind?: string, media_type?: string, can_play?: string }[]}
    */
-  options: [{ id: DEFAULT_CODEC, label: "AAC 256k 44.1kHz" }],
+  options: [{ id: DEFAULT_CODEC, label: "Opus 192k 48kHz" }],
   default: DEFAULT_CODEC,
 };
 

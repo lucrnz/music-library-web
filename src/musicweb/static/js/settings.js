@@ -29,8 +29,8 @@ function loadStreamCodec() {
   } catch {
     codec.stream = pickDefault();
   }
-  // Persist the resolved choice when we had to fall back (e.g. ALAC saved on
-  // Safari, then opened in Chrome).
+  // Persist the resolved choice when we had to fall back (e.g. unsupported
+  // or removed profile saved from an older session).
   saveStreamCodec();
 }
 

@@ -1,8 +1,8 @@
 /**
  * Real browser decode probes (not canPlayType / UA sniffing).
  *
- * canPlayType is unreliable for MP4-wrapped codecs: Chrome often returns
- * "maybe" for audio/mp4 even when the payload is ALAC and will not play.
+ * canPlayType is unreliable for some containers (e.g. Chrome often returns
+ * "maybe" for audio/mp4 without guaranteeing the actual payload will play).
  * We instead load a tiny silent fixture of each codec family into a muted
  * HTMLAudioElement and require canplay/loadeddata without error.
  */
@@ -72,7 +72,7 @@ function probeDecode(mime, b64, timeoutMs = 2500) {
 }
 
 /**
- * Probe one codec family (aac | opus | flac | alac). Results are cached.
+ * Probe one codec family (aac | opus | flac). Results are cached.
  * @param {string} kind
  * @returns {Promise<boolean>}
  */
