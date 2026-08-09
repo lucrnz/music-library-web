@@ -1,5 +1,7 @@
 # Music Library Web Server
 
+> **Disclaimer:** This project has been developed heavily with AI-assisted tools. The developer does not guarantee production readiness, stability, or security. Use it at your own risk. Scope is driven solely by the developer’s interests; pull requests and feature requests are not accepted.
+
 Browse and stream a lossless music library over your LAN. Modern mobile-first web UI (Spotify/YT-Music style): **Folders / Artists / Albums** discovery, **session queue**, **saved playlists**, a mini-player that expands into a full now-playing sheet on phones, and a two-pane layout with a persistent player bar on desktop. Live multi-codec transcoding via **ffmpeg** (libsoxr HQ resample + **Opus** or **FLAC**).
 
 The media tree is **filesystem-agnostic** (`MUSIC_LIBRARY_PATH`). A SQLAlchemy/SQLite **index** under `MUSICWEB_DATA_DIR` powers Artist → Album → Track browsing, FTS5 search, stable track IDs (content fingerprints), re-scan, and durable playlists.
@@ -142,3 +144,7 @@ $MUSICWEB_DATA_DIR/
 ## Schema migrations
 
 Schema migrations live under `src/musicweb/db/migrations/`. Startup runs Alembic to head (or stamps head if an older pre-Alembic DB is detected). Optional CLI: `alembic upgrade head`.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

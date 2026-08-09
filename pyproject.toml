@@ -3,6 +3,7 @@ name = "musicweb"
 version = "0.1.0"
 description = "Browse and stream a lossless music library over the LAN (Foobar-style UI)."
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "Luciano Hillcoat", email = "me@lucdev.net" }
 ]
