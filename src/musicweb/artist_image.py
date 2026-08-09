@@ -97,14 +97,6 @@ class ArtistImageStore:
         partial.write_bytes(data)
         partial.replace(path)
 
-    def delete_artist_image(self, artist_id: str) -> None:
-        for size in ("full", "thumb"):
-            path = self.path_for(artist_id, size)
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
     def ensure_from_bytes(self, artist_id: str, source: bytes) -> bool:
         """Write full+thumb WebP from raw image bytes. Returns True on success."""
         if not source:

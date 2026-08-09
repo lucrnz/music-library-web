@@ -28,25 +28,6 @@ def get_many(session: Session, ids: list[str]) -> list[Track]:
     return [by_id[i] for i in ids if i in by_id]
 
 
-def get_by_path(session: Session, rel_path: str) -> Track | None:
-    return session.scalars(
-        select(Track)
-        .where(Track.rel_path == rel_path)
-        .options(selectinload(Track.album))
-    ).first()
-
-
-def get_by_paths(session: Session, paths: list[str]) -> dict[str, Track]:
-    if not paths:
-        return {}
-    rows = session.scalars(
-        select(Track)
-        .where(Track.rel_path.in_(paths))
-        .options(selectinload(Track.album))
-    ).all()
-    return {t.rel_path: t for t in rows}
-
-
 def id_map_for_paths(session: Session, paths: list[str]) -> dict[str, str]:
     if not paths:
         return {}

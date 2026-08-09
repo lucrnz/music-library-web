@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mutagen import File as MutagenFile
-from mutagen.flac import FLAC
 from mutagen.mp4 import MP4
 
 # Extensions we consider for indexing (may still reject after codec probe).
@@ -22,10 +20,6 @@ CANDIDATE_EXTENSIONS = frozenset({
 
 # Always-lossless by extension (no further probe required for indexing).
 ALWAYS_LOSSLESS = frozenset({".flac", ".alac"})
-
-
-def is_candidate_audio(path: Path) -> bool:
-    return path.is_file() and path.suffix.lower() in CANDIDATE_EXTENSIONS
 
 
 def is_lossless_audio(path: Path) -> bool:
@@ -59,26 +53,3 @@ def _is_alac(path: Path) -> bool:
     if "alac" in desc or "lossless" in desc:
         return True
     return False
-
-
-def probe_codec_label(path: Path) -> str | None:
-    """Best-effort short codec label (flac / alac / …)."""
-    ext = path.suffix.lower()
-    try:
-        if ext == ".flac":
-            FLAC(path)
-            return "flac"
-        if ext in {".m4a", ".mp4", ".alac"}:
-            audio = MP4(path)
-            if not audio or not audio.info:
-                return None
-            codec = (getattr(audio.info, "codec", None) or "").lower()
-            if codec:
-                return codec
-            return "alac" if _is_alac(path) else None
-        audio = MutagenFile(path)
-        if audio and audio.info:
-            return type(audio.info).__name__
-    except Exception:
-        return None
-    return None

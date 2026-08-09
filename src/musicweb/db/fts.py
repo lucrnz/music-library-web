@@ -62,13 +62,6 @@ def fts_upsert(
     )
 
 
-def fts_delete(session: Session, track_id: str) -> None:
-    session.execute(
-        text("DELETE FROM tracks_fts WHERE track_id = :tid"),
-        {"tid": track_id},
-    )
-
-
 def fts_clear(session: Session) -> None:
     session.execute(text("DELETE FROM tracks_fts"))
 
