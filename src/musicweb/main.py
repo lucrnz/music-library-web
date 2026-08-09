@@ -140,7 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-# ASGI app for `uvicorn musicweb.main:app`
+# ASGI app for `uvicorn musicweb.main:app` (single construction per process).
 app = create_app()
 
 
@@ -150,10 +150,9 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    settings = load_settings()
-    application = create_app(settings)
+    settings: Settings = app.state.settings
     uvicorn.run(
-        application,
+        app,
         host=settings.listen,
         port=settings.port,
         log_level="info",
