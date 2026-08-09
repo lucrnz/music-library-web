@@ -90,10 +90,16 @@ $MUSICWEB_DATA_DIR/
   covers/artists/{artist_id}.thumb.webp
 ```
 
+## Frontend
+
+Vue 3 + Vue Router (ESM browser builds), **no bundler / no Node**. Pinned packages live in `musicweb/vendor_deps.py` and are **downloaded from unpkg into `static/vendor/` on startup** (skipped when the local manifest already matches). The Jinja shell loads them via import map. First run (or after a version bump) needs network; afterward the server can start offline. Client routes (`/folders`, `/artists/…`, `/albums/…`, `/search`, `/queue`) are served by a FastAPI SPA fallback so refresh works.
+
+To upgrade Vue/Router: edit versions and URLs in `vendor_deps.py`, restart — the new builds are fetched automatically.
+
 ## Features
 
 - Mobile-first responsive UI: bottom tabs + mini-player/now-playing sheet on phones; side-by-side library/playlist panes + player bar on desktop (≥900px)
-- **Browse modes:** Folders, **Artists → Albums → Tracks**, **Albums** cover grid, **Search** (FTS5)
+- **Browse modes:** Folders, **Artists → Albums → Tracks**, **Albums** cover grid, **Search** (FTS5); bookmarkable client routes
 - **SQLite index** (SQLAlchemy 2 + Alembic migrations): artists, albums, tracks, playlists, FTS5
 - **Stable track IDs** from content fingerprints (FLAC STREAMINFO MD5; other lossless: SHA-256); renames reattach when fingerprint matches
 - **Incremental scan on startup** + Settings: **Quick rescan**, **Full re-index**, progress, cancel (full scan rebuilds FTS)
