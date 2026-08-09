@@ -1,0 +1,185 @@
+"""Stream, cover, prepare, codecs — id-primary media."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from musicweb.cover import placeholder_webp
+from musicweb.db.models import Album, Track
+from musicweb.db.repositories import tracks as tracks_repo
+from musicweb.db.session import get_db
+from musicweb.library import Library
+from musicweb.routes.deps import cover_store, library, transcoder
+from musicweb.transcode import DEFAULT_PROFILE_TAG, PROFILES, get_profile
+
+router = APIRouter(prefix="/api", tags=["media"])
+
+_COVER_HEADERS = {"Cache-Control": "private, max-age=86400"}
+
+
+def _resolve_track_file(lib: Library, track: Track) -> Path:
+    if track.is_missing or not track.rel_path:
+        raise HTTPException(status_code=404, detail="Track file is missing")
+    resolved = lib.resolve(track.rel_path)
+    if not resolved.is_file() or not lib.is_audio(resolved):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    return resolved
+
+
+@router.get("/codecs")
+async def codecs() -> dict:
+    return {
+        "codecs": [{"id": p.tag, "label": p.label} for p in PROFILES.values()],
+        "default": DEFAULT_PROFILE_TAG,
+    }
+
+
+@router.get("/stream")
+async def stream(
+    request: Request,
+    id: str = Query(..., description="Track id"),
+    codec: str = Query(default=DEFAULT_PROFILE_TAG),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    lib = library(request)
+    track = tracks_repo.get(db, id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Track not found")
+    resolved = _resolve_track_file(lib, track)
+    profile = get_profile(codec)
+    media_path = await run_in_threadpool(
+        transcoder(request).ensure_stream,
+        resolved,
+        track.rel_path,
+        profile_tag=codec,
+    )
+    return FileResponse(
+        path=media_path,
+        media_type=profile.media_type,
+        filename=f"{resolved.stem}.{profile.extension}",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
+
+class PrepareRequest(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=1000)
+    codec: str = DEFAULT_PROFILE_TAG
+    replace: bool = False
+
+
+@router.post("/transcode/prepare")
+def transcode_prepare(
+    request: Request,
+    payload: PrepareRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    lib = library(request)
+    tc = transcoder(request)
+    get_profile(payload.codec)
+
+    if payload.replace:
+        tc.drop_pending_prewarm()
+
+    counts = {"queued": 0, "already": 0, "ready": 0, "skipped": 0}
+    if not payload.ids:
+        return counts
+
+    for t in tracks_repo.get_many(db, payload.ids):
+        if t.is_missing or not t.rel_path:
+            counts["skipped"] += 1
+            continue
+        try:
+            resolved = lib.resolve(t.rel_path)
+        except Exception:
+            counts["skipped"] += 1
+            continue
+        if not resolved.is_file() or not lib.is_audio(resolved):
+            counts["skipped"] += 1
+            continue
+        result = tc.prepare(resolved, t.rel_path, profile_tag=payload.codec)
+        counts[result] += 1
+    return counts
+
+
+@router.post("/cache/clear")
+async def cache_clear(
+    request: Request,
+    scope: list[Literal["streams"]] = Query(
+        ...,
+        description="Cache subtree(s) to wipe. Only streams (covers are persisted).",
+    ),
+) -> dict:
+    scopes = set(scope)
+    removed: dict[str, int] = {}
+    if "streams" in scopes:
+        removed["streams"] = await run_in_threadpool(transcoder(request).clear_cache)
+    return {"removed": removed, "scopes": sorted(scopes)}
+
+
+@router.get("/cover")
+async def cover(
+    request: Request,
+    album_id: str | None = Query(default=None),
+    track_id: str | None = Query(default=None),
+    size: Literal["full", "thumb"] = Query(default="full"),
+    db: Session = Depends(get_db),
+) -> Response:
+    lib = library(request)
+    store = cover_store(request)
+    resolved_album_id = album_id
+    audio_path: Path | None = None
+
+    if track_id:
+        track = tracks_repo.get(db, track_id)
+        if track is None:
+            raise HTTPException(status_code=404, detail="Track not found")
+        resolved_album_id = track.album_id
+        if not track.is_missing and track.rel_path:
+            try:
+                audio_path = lib.resolve(track.rel_path)
+            except Exception:
+                audio_path = None
+    elif not album_id:
+        raise HTTPException(
+            status_code=400,
+            detail="album_id or track_id is required",
+        )
+
+    if not resolved_album_id:
+        return Response(
+            content=placeholder_webp(size),
+            media_type="image/webp",
+            headers=_COVER_HEADERS,
+        )
+
+    hit = store.cover_path(resolved_album_id, size)
+    if hit is not None:
+        return FileResponse(hit, media_type="image/webp", headers=_COVER_HEADERS)
+
+    if audio_path is not None and audio_path.is_file():
+        result = await run_in_threadpool(
+            store.get_or_fill, resolved_album_id, audio_path
+        )
+        album = db.get(Album, resolved_album_id)
+        if album is not None:
+            album.has_cover = store.has_cover(resolved_album_id)
+        item = result[size]
+        if isinstance(item, Path):
+            return FileResponse(item, media_type="image/webp", headers=_COVER_HEADERS)
+        return Response(content=item, media_type="image/webp", headers=_COVER_HEADERS)
+
+    return Response(
+        content=placeholder_webp(size),
+        media_type="image/webp",
+        headers=_COVER_HEADERS,
+    )
