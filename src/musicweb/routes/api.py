@@ -7,12 +7,14 @@ from fastapi import APIRouter
 from musicweb.routes import (
     discovery,
     folders,
+    health,
     library_scan,
     media,
     playlists,
 )
 
 router = APIRouter()
+router.include_router(health.router)
 router.include_router(library_scan.router)
 router.include_router(discovery.router)
 router.include_router(folders.router)
