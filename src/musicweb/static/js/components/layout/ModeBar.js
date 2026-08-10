@@ -1,6 +1,6 @@
 import { computed, defineComponent } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { downloads } from "../../stores/downloads.js";
+import { downloads } from "../../downloads/state.js";
 
 const BASE_MODES = [
   { id: "folders", label: "Folders", name: "folders" },

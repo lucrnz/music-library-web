@@ -9,16 +9,18 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { loadDownloadsView } from "../../downloads/browse.js";
+import { downloads } from "../../downloads/state.js";
 import { addToQueue } from "../../stores/playlist.js";
-import { downloads } from "../../stores/downloads.js";
 import { openSettings } from "../../stores/settings.js";
 import Icon from "../icons/Icon.js";
 import ModeBar from "../layout/ModeBar.js";
-import { formatTrackLabel, playOrQueueTrack, queueOnly } from "../library/rows.js";
+import AlbumCard from "../library/rows/AlbumCard.js";
+import ArtistRow from "../library/rows/ArtistRow.js";
+import TrackRow from "../library/rows/TrackRow.js";
 
 export default defineComponent({
   name: "DownloadsLibraryView",
-  components: { Icon, ModeBar },
+  components: { Icon, ModeBar, AlbumCard, ArtistRow, TrackRow },
   setup() {
     const route = useRoute();
     const router = useRouter();
@@ -112,19 +114,17 @@ export default defineComponent({
       }
     }
 
-    function albumCover(album) {
-      return localArt.value[`al:${album.id}`] || "/static/img/placeholder.svg";
+    function albumCoverSrc(album) {
+      return localArt.value[`al:${album.id}`] || "";
     }
 
-    function artistCover(artist) {
-      return localArt.value[`a:${artist.id}`] || "/static/img/placeholder.svg";
+    function artistCoverSrc(artist) {
+      return localArt.value[`a:${artist.id}`] || "";
     }
 
-    function trackCover(track) {
-      const id = track.album_id || track.albumId;
-      return (
-        (id && localArt.value[`al:${id}`]) || "/static/img/placeholder.svg"
-      );
+    function trackCoverSrc(track) {
+      const id = track.albumId;
+      return (id && localArt.value[`al:${id}`]) || "";
     }
 
     watch(
@@ -149,12 +149,9 @@ export default defineComponent({
       openArtist,
       openAlbum,
       addAll,
-      albumCover,
-      artistCover,
-      trackCover,
-      playOrQueueTrack,
-      queueOnly,
-      formatTrackLabel,
+      albumCoverSrc,
+      artistCoverSrc,
+      trackCoverSrc,
       openSettings,
     };
   },
@@ -205,61 +202,35 @@ export default defineComponent({
         <div v-else-if="emptyMsg" class="list-empty">{{ emptyMsg }}</div>
 
         <template v-else-if="artists.length">
-          <div
+          <ArtistRow
             v-for="artist in artists"
             :key="artist.id"
-            class="row"
-            @click="openArtist(artist)"
-          >
-            <span class="row-cover-wrap">
-              <img class="row-cover" :src="artistCover(artist)" alt="" loading="lazy" />
-            </span>
-            <span class="row-meta">
-              <span class="row-title">{{ artist.name }}</span>
-              <span class="row-sub">{{ artist.album_count }} album{{ artist.album_count === 1 ? '' : 's' }} · {{ artist.track_count }} tracks</span>
-            </span>
-            <span class="row-chevron"><Icon name="chevron-right" /></span>
-          </div>
+            :artist="artist"
+            :cover-src="artistCoverSrc(artist)"
+            @open="openArtist"
+          />
         </template>
 
         <template v-else-if="albumGrid && albums.length">
           <div class="album-grid">
-            <button
+            <AlbumCard
               v-for="album in albums"
               :key="album.id"
-              type="button"
-              class="album-card"
-              @click="openAlbum(album)"
-            >
-              <img class="album-card-cover" :src="albumCover(album)" alt="" loading="lazy" />
-              <span class="album-card-title">{{ album.title }}</span>
-              <span class="album-card-sub">{{ [album.artist, album.year].filter(Boolean).join(' · ') }}</span>
-            </button>
+              :album="album"
+              :cover-src="albumCoverSrc(album)"
+              @open="openAlbum"
+            />
           </div>
         </template>
 
         <template v-else-if="tracks.length">
-          <div
+          <TrackRow
             v-for="track in tracks"
             :key="track.id"
-            class="row"
-            @click="(e) => { if (!e.target.closest('.row-add')) playOrQueueTrack(track); }"
-          >
-            <span class="row-cover-wrap">
-              <img class="row-cover" :src="trackCover(track)" alt="" loading="lazy" />
-            </span>
-            <span class="row-meta">
-              <span class="row-title">{{ formatTrackLabel(track) }}</span>
-              <span class="row-sub">{{ track.artist || '' }}</span>
-            </span>
-            <button
-              type="button"
-              class="icon-btn row-add"
-              title="Add to playlist"
-              aria-label="Add to playlist"
-              @click.stop="queueOnly(track)"
-            ><Icon name="plus" /></button>
-          </div>
+            :track="track"
+            :cover-src="trackCoverSrc(track)"
+            :show-download="false"
+          />
         </template>
       </div>
     </section>

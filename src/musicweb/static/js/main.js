@@ -11,7 +11,7 @@ import {
   refreshPlayerCovers,
 } from "./stores/player.js";
 import { loadCodecs } from "./stores/settings.js";
-import { initDownloads } from "./stores/downloads.js";
+import { initDownloads } from "./downloads/index.js";
 
 loadPlaylist();
 applyVolume();

@@ -1,9 +1,7 @@
 /**
- * Origin Private File System helpers with IndexedDB blob fallback.
- * Atomic full writes for small blobs; resumable partial writes for audio streams.
+ * Origin Private File System storage for downloads.
+ * OPFS is required (resumable Range downloads need partials).
  */
-
-import { deleteOne, getOne, putOne } from "./db.js";
 
 const AUDIO_DIR = "audio";
 const COVERS_DIR = "covers";
@@ -41,11 +39,20 @@ export async function hasOpfs() {
   return opfsAvailable;
 }
 
+export async function requireOpfs() {
+  if (!(await hasOpfs())) {
+    throw new Error(
+      "Downloads require Origin Private File System (OPFS). Use a recent Chromium, Safari, or Firefox build."
+    );
+  }
+}
+
 /**
  * @param {string[]} parts
  * @param {{ create?: boolean }} [opts]
  */
 async function getDir(parts, opts = { create: true }) {
+  await requireOpfs();
   let dir = await navigator.storage.getDirectory();
   for (const p of parts) {
     dir = await dir.getDirectoryHandle(p, { create: !!opts.create });
@@ -64,10 +71,6 @@ async function removeFile(dirParts, fileName) {
   } catch {
     /* missing ok */
   }
-}
-
-function blobKey(path) {
-  return path;
 }
 
 function partialName(fileName) {
@@ -143,6 +146,53 @@ async function finalizePartial(dirParts, fileName, bytes) {
 }
 
 /**
+ * Stream a Response body into a writable, honoring abort + progress.
+ * @returns {Promise<number>} bytes written in this call (not including prior offset)
+ */
+async function streamBodyToWritable(response, writable, {
+  signal,
+  onProgress,
+  loadedStart = 0,
+  total = null,
+  keepPartialOnAbort = false,
+}) {
+  let loaded = loadedStart;
+  if (onProgress) onProgress(loaded, total);
+
+  if (response.body && typeof response.body.getReader === "function") {
+    const reader = response.body.getReader();
+    while (true) {
+      if (signal?.aborted) {
+        try {
+          await reader.cancel();
+        } catch {
+          /* ignore */
+        }
+        throw new DownloadWriteAbortError(signal.reason || "aborted", {
+          keepPartial: keepPartialOnAbort,
+        });
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      await writable.write(value);
+      loaded += value.byteLength;
+      if (onProgress) onProgress(loaded, total);
+    }
+  } else {
+    if (signal?.aborted) {
+      throw new DownloadWriteAbortError(signal.reason || "aborted", {
+        keepPartial: keepPartialOnAbort,
+      });
+    }
+    const buf = await response.arrayBuffer();
+    await writable.write(buf);
+    loaded = loadedStart + buf.byteLength;
+    if (onProgress) onProgress(loaded, total ?? loaded);
+  }
+  return loaded;
+}
+
+/**
  * Write into OPFS via partial file, then promote to final name.
  * On failure, partial is removed (for non-resumable full writes).
  * @param {string[]} dirParts
@@ -177,21 +227,15 @@ async function writeOpfsAtomic(dirParts, fileName, writeBody) {
  * @param {Blob | ArrayBuffer | Uint8Array} data
  */
 export async function writeBinary(dirParts, fileName, data) {
+  await requireOpfs();
   const blob =
     data instanceof Blob
       ? data
       : new Blob([data instanceof Uint8Array ? data : new Uint8Array(data)]);
-  const path = [...dirParts, fileName].join("/");
-
-  if (await hasOpfs()) {
-    return writeOpfsAtomic(dirParts, fileName, async (writable) => {
-      await writable.write(blob);
-      return blob.size;
-    });
-  }
-
-  await putOne("blobs", { key: blobKey(path), blob, bytes: blob.size });
-  return { backend: "idb", path, bytes: blob.size };
+  return writeOpfsAtomic(dirParts, fileName, async (writable) => {
+    await writable.write(blob);
+    return blob.size;
+  });
 }
 
 /**
@@ -208,7 +252,7 @@ function parseContentRangeTotal(header) {
 }
 
 /**
- * Stream a Response body into storage (full or resumable).
+ * Stream a Response body into OPFS (full or resumable).
  *
  * @param {string[]} dirParts
  * @param {string} fileName
@@ -222,6 +266,8 @@ function parseContentRangeTotal(header) {
  * @returns {Promise<{ backend: string, path: string, bytes: number }>}
  */
 export async function writeResponseToFile(dirParts, fileName, response, opts = {}) {
+  await requireOpfs();
+
   const startOffset = Math.max(0, opts.startOffset || 0);
   const onProgress = opts.onProgress;
   const signal = opts.signal;
@@ -231,23 +277,6 @@ export async function writeResponseToFile(dirParts, fileName, response, opts = {
     throw new DownloadWriteAbortError(signal.reason || "aborted", {
       keepPartial: keepPartialOnAbort,
     });
-  }
-
-  const path = [...dirParts, fileName].join("/");
-
-  // IDB fallback: full body only
-  if (!(await hasOpfs())) {
-    if (startOffset > 0 && response.status === 206) {
-      throw new Error("Resumable downloads require OPFS");
-    }
-    if (!(response.ok || response.status === 206)) {
-      throw new Error(`Download failed: HTTP ${response.status}`);
-    }
-    const buf = await response.arrayBuffer();
-    const blob = new Blob([buf]);
-    if (onProgress) onProgress(blob.size, blob.size);
-    await putOne("blobs", { key: blobKey(path), blob, bytes: blob.size });
-    return { backend: "idb", path, bytes: blob.size };
   }
 
   if (response.status === 416) {
@@ -278,37 +307,17 @@ export async function writeResponseToFile(dirParts, fileName, response, opts = {
     }
   }
 
-  // Non-resumable art path: wipe partial first via atomic helper when offset 0 and !keepPartial
+  // Non-resumable art path
   if (offset === 0 && !keepPartialOnAbort) {
-    return writeOpfsAtomic(dirParts, fileName, async (writable) => {
-      let loaded = 0;
-      if (response.body && typeof response.body.getReader === "function") {
-        const reader = response.body.getReader();
-        while (true) {
-          if (signal?.aborted) {
-            try {
-              await reader.cancel();
-            } catch {
-              /* ignore */
-            }
-            throw new DownloadWriteAbortError(signal.reason || "aborted", {
-              keepPartial: false,
-            });
-          }
-          const { done, value } = await reader.read();
-          if (done) break;
-          await writable.write(value);
-          loaded += value.byteLength;
-          if (onProgress) onProgress(loaded, total);
-        }
-      } else {
-        const buf = await response.arrayBuffer();
-        await writable.write(buf);
-        loaded = buf.byteLength;
-        if (onProgress) onProgress(loaded, total ?? loaded);
-      }
-      return loaded;
-    });
+    return writeOpfsAtomic(dirParts, fileName, async (writable) =>
+      streamBodyToWritable(response, writable, {
+        signal,
+        onProgress,
+        loadedStart: 0,
+        total,
+        keepPartialOnAbort: false,
+      })
+    );
   }
 
   const partial = partialName(fileName);
@@ -325,39 +334,14 @@ export async function writeResponseToFile(dirParts, fileName, response, opts = {
   }
 
   let loaded = offset;
-  if (onProgress) onProgress(loaded, total);
-
   try {
-    if (response.body && typeof response.body.getReader === "function") {
-      const reader = response.body.getReader();
-      while (true) {
-        if (signal?.aborted) {
-          try {
-            await reader.cancel();
-          } catch {
-            /* ignore */
-          }
-          throw new DownloadWriteAbortError(signal.reason || "aborted", {
-            keepPartial: keepPartialOnAbort,
-          });
-        }
-        const { done, value } = await reader.read();
-        if (done) break;
-        await writable.write(value);
-        loaded += value.byteLength;
-        if (onProgress) onProgress(loaded, total);
-      }
-    } else {
-      if (signal?.aborted) {
-        throw new DownloadWriteAbortError(signal.reason || "aborted", {
-          keepPartial: keepPartialOnAbort,
-        });
-      }
-      const buf = await response.arrayBuffer();
-      await writable.write(buf);
-      loaded = offset + buf.byteLength;
-      if (onProgress) onProgress(loaded, total ?? loaded);
-    }
+    loaded = await streamBodyToWritable(response, writable, {
+      signal,
+      onProgress,
+      loadedStart: offset,
+      total,
+      keepPartialOnAbort,
+    });
     await writable.close();
   } catch (err) {
     try {
@@ -411,18 +395,14 @@ export async function writeFromResponse(dirParts, fileName, response, onProgress
  * @returns {Promise<Blob | null>}
  */
 export async function readBinary(dirParts, fileName) {
-  const path = [...dirParts, fileName].join("/");
-  if (await hasOpfs()) {
-    try {
-      const dir = await getDir(dirParts, { create: false });
-      const handle = await dir.getFileHandle(fileName, { create: false });
-      return await handle.getFile();
-    } catch {
-      return null;
-    }
+  if (!(await hasOpfs())) return null;
+  try {
+    const dir = await getDir(dirParts, { create: false });
+    const handle = await dir.getFileHandle(fileName, { create: false });
+    return await handle.getFile();
+  } catch {
+    return null;
   }
-  const row = await getOne("blobs", blobKey(path));
-  return row?.blob || null;
 }
 
 /**
@@ -430,16 +410,9 @@ export async function readBinary(dirParts, fileName) {
  * @param {string} fileName
  */
 export async function deleteBinary(dirParts, fileName) {
-  const path = [...dirParts, fileName].join("/");
-  if (await hasOpfs()) {
-    await removeFile(dirParts, fileName);
-    await removeFile(dirParts, partialName(fileName));
-  }
-  try {
-    await deleteOne("blobs", blobKey(path));
-  } catch {
-    /* ignore */
-  }
+  if (!(await hasOpfs())) return;
+  await removeFile(dirParts, fileName);
+  await removeFile(dirParts, partialName(fileName));
 }
 
 export function audioDirParts() {

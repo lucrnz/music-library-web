@@ -4,11 +4,8 @@
 
 import { streamUrl } from "../api.js";
 import { PLACEHOLDER_COVER } from "../util.js";
-import {
-  getLocalAudioUrl,
-  getLocalCoverUrl,
-  getTrackRecord,
-} from "./catalog.js";
+import { getLocalCoverUrl } from "./art.js";
+import { getLocalAudioUrl, getTrackRecord } from "./records.js";
 
 /**
  * @typedef {'local'|'remote'|'unavailable'} PlaySourceType

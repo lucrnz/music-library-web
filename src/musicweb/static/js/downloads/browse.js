@@ -1,13 +1,11 @@
 /**
  * Pure loader for the offline Downloads library browse mode.
- * Keeps LibraryView free of hierarchy walk / local-art orchestration.
+ * Track lists are projected to the client Track type.
  */
 
-import {
-  buildDownloadsHierarchy,
-  getLocalArtistImageUrl,
-  getLocalCoverUrl,
-} from "./catalog.js";
+import { fromCatalogRecord } from "../models/track.js";
+import { getLocalArtistImageUrl, getLocalCoverUrl } from "./art.js";
+import { buildDownloadsHierarchy } from "./hierarchy.js";
 
 /**
  * @typedef {object} DownloadsBrowseState
@@ -73,17 +71,7 @@ export async function loadDownloadsView(opts) {
       emptyMsg: "",
       artists: [],
       albums: [],
-      tracks: found.tracks.map((t) => ({
-        id: t.trackId,
-        title: t.title,
-        artist: t.artist,
-        album: t.album,
-        album_id: t.albumId,
-        artist_id: t.artistIds?.[0],
-        track: t.trackNum,
-        disc: t.disc,
-        duration: t.duration,
-      })),
+      tracks: found.tracks.map((t) => fromCatalogRecord(t)),
       albumGrid: false,
       artUrls,
     };

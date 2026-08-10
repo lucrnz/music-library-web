@@ -14,7 +14,6 @@ import {
   cancelQueueItem,
   clearFinishedQueue,
   closeDownloadsManager,
-  downloads,
   downloadsStorageLine,
   formatBytes,
   getLocalArtistImageUrl,
@@ -25,7 +24,8 @@ import {
   removeDownloadedTrack,
   resumeAllDownloads,
   retryQueueItem,
-} from "../../stores/downloads.js";
+} from "../../downloads/index.js";
+import { downloads } from "../../downloads/state.js";
 import { settings } from "../../stores/settings.js";
 import Icon from "../icons/Icon.js";
 

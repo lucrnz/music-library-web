@@ -3,10 +3,10 @@
  */
 import { computed, defineComponent } from "vue";
 import {
-  downloads,
   downloadTrack,
   trackDownloadState,
-} from "../../stores/downloads.js";
+} from "../../downloads/index.js";
+import { downloads } from "../../downloads/state.js";
 import Icon from "../icons/Icon.js";
 
 export default defineComponent({
@@ -18,7 +18,7 @@ export default defineComponent({
   setup(props) {
     const state = computed(() => {
       if (!downloads.enabled) return "hidden";
-      if (!props.track?.id || props.track.is_missing) return "hidden";
+      if (!props.track?.id || props.track.isMissing) return "hidden";
       return trackDownloadState(props.track.id);
     });
 
