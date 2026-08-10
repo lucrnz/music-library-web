@@ -100,6 +100,34 @@ class Track(Base):
     indexed_at: Mapped[str] = mapped_column(String, nullable=False)
 
     album: Mapped[Optional[Album]] = relationship(back_populates="tracks")
+    lyrics: Mapped[Optional["TrackLyrics"]] = relationship(
+        back_populates="track",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class TrackLyrics(Base):
+    """Cached plain / synced lyrics for one track (local or LRCLIB)."""
+
+    __tablename__ = "track_lyrics"
+
+    track_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("tracks.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    is_synced: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    plain_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    synced_lrc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    provider_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    match_fingerprint: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    fetched_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    track: Mapped[Track] = relationship(back_populates="lyrics")
 
 
 class Playlist(Base):

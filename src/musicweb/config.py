@@ -21,6 +21,16 @@ MUSICBRAINZ_UA_TEMPLATE = (
     "MusicLibaryWeb/0.1 - https://github.com/lucrnz/music-library-web - Contact: {email}"
 )
 
+# Lyrics fetch tuning (source constants — not env). LRCLIB needs no API key.
+LYRICS_FETCH = True
+LYRICS_MIN_INTERVAL_MS = 250
+LYRICS_RETRY_DAYS = 14
+LYRICS_MAX_BODY_BYTES = 512 * 1024
+LRCLIB_BASE_URL = "https://lrclib.net"
+LRCLIB_USER_AGENT = (
+    "musicweb/0.1.0 (https://github.com/lucrnz/music-library-web)"
+)
+
 
 def _env_file() -> str | None:
     for candidate in _ENV_CANDIDATES:
