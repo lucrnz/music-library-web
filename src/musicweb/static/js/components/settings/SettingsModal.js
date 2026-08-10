@@ -8,20 +8,20 @@ import {
 import { apiGet, apiPost } from "../../api.js";
 import { pl } from "../../stores/playlist.js";
 import { playIndex } from "../../stores/player.js";
+import { canReachServer } from "../../connectivity.js";
 import {
   settings,
   closeSettings,
   setStreamCodec,
 } from "../../stores/settings.js";
 import {
-  canReachServer,
-  downloads,
   disableDownloads,
   downloadsStorageLine as formatDlStorage,
   enableDownloads,
   openDownloadsManager,
   refreshStorageInfo,
-} from "../../stores/downloads.js";
+} from "../../downloads/index.js";
+import { downloads } from "../../downloads/state.js";
 import Icon from "../icons/Icon.js";
 
 export default defineComponent({

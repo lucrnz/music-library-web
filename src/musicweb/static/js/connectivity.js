@@ -1,6 +1,7 @@
 /**
- * Canonical network connectivity for downloads (and UI banners).
- * No Vue imports — store mirrors state via onConnectivityChange.
+ * Platform network connectivity: online / offline / server_down.
+ * Health probes, error classification, and banner copy.
+ * No Vue imports — stores mirror state via onConnectivityChange.
  */
 
 /** @typedef {'online'|'offline'|'server_down'} ConnectivityState */

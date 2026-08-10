@@ -8,18 +8,21 @@ import {
   apiPost,
   apiPut,
   apiDelete,
+  fetchPlaylistTracks,
+  fetchTracksMeta,
   requestPrepare,
   preparedKeys,
   clearCache,
 } from "../api.js";
-import { downloadStatusFor } from "../downloads/catalog.js";
-import { downloads } from "./downloads.js";
+import { coerceTrack, isTrack, mapTracks } from "../models/track.js";
+import { downloadStatusFor } from "../downloads/records.js";
+import { downloads } from "../downloads/state.js";
 import { settings } from "./settings.js";
 
 const STORAGE_KEY = "musicweb.playlist.v1";
 
 /**
- * @typedef {{ id?: string|null, path?: string|null, title: string, artist: string, album: string, album_id?: string|null, duration: number|null }} Track
+ * @typedef {import("../models/track.js").Track} Track
  */
 
 export const pl = reactive({
@@ -169,7 +172,9 @@ export function loadPlaylist() {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const data = JSON.parse(raw);
-    if (Array.isArray(data.playlist)) pl.tracks = data.playlist;
+    if (Array.isArray(data.playlist)) {
+      pl.tracks = mapTracks(data.playlist);
+    }
     if (typeof data.currentIndex === "number") pl.index = data.currentIndex;
     if (typeof data.shuffle === "boolean") pl.shuffle = data.shuffle;
     if (
@@ -179,6 +184,8 @@ export function loadPlaylist() {
     ) {
       pl.repeat = data.repeat;
     }
+    // Re-persist camelCase after migrating legacy snake_case rows.
+    savePlaylist();
   } catch {
     /* ignore */
   }
@@ -189,56 +196,48 @@ export function commit() {
   savePlaylist();
 }
 
-function normalizeTrack(meta) {
-  return {
-    id: meta.id || null,
-    path: meta.path || null,
-    title: meta.title || "Unknown",
-    artist: meta.artist || "",
-    album: meta.album || "",
-    album_id: meta.album_id || meta.albumId || null,
-    duration: meta.duration ?? null,
-  };
-}
-
 /**
- * Add tracks to the session queue (id-primary).
- * Accepts full track dicts from the API, or {id} / id strings.
+ * Add tracks to the session queue.
+ * Accepts full Track objects, or bare ids / { id } (meta-fetched).
  */
 export async function addToQueue(entries) {
   if (!entries?.length) return;
 
+  /** @type {string[]} */
   const ids = [];
+  /** @type {Track[]} */
   const preloaded = [];
 
   for (const entry of entries) {
     if (typeof entry === "string") {
       ids.push(entry);
-    } else if (entry && typeof entry === "object") {
-      if (entry.title && entry.id) {
-        preloaded.push(normalizeTrack(entry));
-      } else if (entry.id) {
-        ids.push(entry.id);
+    } else if (entry && typeof entry === "object" && entry.id) {
+      if (isTrack(entry)) {
+        const t = coerceTrack(entry);
+        if (t) preloaded.push(t);
+      } else {
+        ids.push(String(entry.id));
       }
     }
   }
 
+  /** @type {Track[]} */
   const items = [...preloaded];
 
   if (ids.length) {
     try {
-      const data = await apiPost("/api/tracks/meta", { ids });
-      const byId = new Map((data.results || []).map((m) => [m.id, m]));
+      const meta = await fetchTracksMeta(ids);
+      const byId = new Map(meta.map((m) => [m.id, m]));
       for (const id of ids) {
-        const meta = byId.get(id);
-        if (meta) items.push(normalizeTrack(meta));
+        const t = byId.get(id);
+        if (t) items.push(t);
       }
     } catch (err) {
       console.error(err);
     }
   }
 
-  const playable = items.filter((t) => t.id);
+  const playable = items.filter((t) => t.id && !t.isMissing);
   if (!playable.length) return;
   pl.add(playable);
   commit();
@@ -303,10 +302,9 @@ export async function fetchSavedPlaylists() {
 }
 
 export async function loadSavedPlaylist(id, stopPlayback) {
-  const full = await apiGet(
-    `/api/playlists/${encodeURIComponent(id)}/tracks`
+  const tracks = (await fetchPlaylistTracks(id)).filter(
+    (t) => !t.isMissing && t.id
   );
-  const tracks = (full.items || []).filter((t) => !t.is_missing && t.id);
   if (!tracks.length) return;
   stopPlayback();
   pl.clear();

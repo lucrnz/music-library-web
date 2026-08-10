@@ -3,15 +3,11 @@
  */
 import { reactive } from "vue";
 import { coverUrl, streamUrl } from "../api.js";
-import { getTrackRecord } from "../downloads/catalog.js";
+import { canReachServer, isHardOffline } from "../connectivity.js";
+import { markDownloadBroken } from "../downloads/index.js";
 import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
+import { downloads } from "../downloads/state.js";
 import { PLACEHOLDER_COVER } from "../util.js";
-import {
-  canReachServer,
-  downloads,
-  isHardOffline,
-  markDownloadBroken,
-} from "./downloads.js";
 import { pl, commit } from "./playlist.js";
 import { settings } from "./settings.js";
 
@@ -92,16 +88,8 @@ async function updateMediaSession() {
   // Drop previous track art while we resolve — never assign remote yet.
   clearCovers();
 
-  let albumId = t.album_id || t.albumId || null;
-  // Playlist rows sometimes omit album_id; fall back to the download catalog.
-  if (!albumId && downloads.enabled && t.id) {
-    try {
-      const rec = await getTrackRecord(t.id);
-      if (rec?.albumId) albumId = rec.albumId;
-    } catch {
-      /* ignore */
-    }
-  }
+  // Playlist holds full Track only — albumId comes from the producer.
+  const albumId = t.albumId || null;
   if (gen !== coverResolveGen) return;
 
   // Remote only when we can actually reach the library server.

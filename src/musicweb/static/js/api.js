@@ -1,6 +1,10 @@
 /**
- * HTTP helpers + server-endpoint wrappers. Leaf module.
+ * HTTP helpers + named track/library fetchers.
+ * Track-bearing responses are normalized here — leaves do not call bare
+ * apiGet for track lists.
  */
+
+import { fromApiTrack, mapTracks } from "./models/track.js";
 
 export async function apiGet(url) {
   const res = await fetch(url);
@@ -60,8 +64,10 @@ export async function apiDelete(url) {
 }
 
 /**
- * Cover URL by album_id or track_id.
- * @param {{ albumId?: string, album_id?: string, trackId?: string, track_id?: string, id?: string }} ref
+ * Cover URL for a Track (or album-only ref).
+ * Query params stay snake_case for the HTTP API.
+ *
+ * @param {{ albumId?: string|null, id?: string|null }|null} ref
  * @param {'full'|'thumb'} size
  * @param {boolean} bust
  */
@@ -69,8 +75,8 @@ export function coverUrl(ref, size, bust = true) {
   if (!ref || typeof ref !== "object") {
     return "/static/img/placeholder.svg";
   }
-  const albumId = ref.albumId || ref.album_id;
-  const trackId = ref.trackId || ref.track_id || ref.id;
+  const albumId = ref.albumId || null;
+  const trackId = ref.id || null;
   let base;
   if (albumId) {
     base = `/api/cover?album_id=${encodeURIComponent(albumId)}&size=${size}`;
@@ -106,6 +112,105 @@ export function streamUrl(track, codec) {
   return `/api/stream?id=${encodeURIComponent(track.id)}&codec=${encodeURIComponent(codec)}`;
 }
 
+/**
+ * GET /api/tracks/{id} → Track
+ * @param {string} id
+ * @returns {Promise<import("./models/track.js").Track>}
+ */
+export async function fetchTrack(id) {
+  const raw = await apiGet(`/api/tracks/${encodeURIComponent(id)}`);
+  return fromApiTrack(raw);
+}
+
+/**
+ * POST /api/tracks/meta → Track[]
+ * @param {string[]} ids
+ * @returns {Promise<import("./models/track.js").Track[]>}
+ */
+export async function fetchTracksMeta(ids) {
+  if (!ids?.length) return [];
+  const data = await apiPost("/api/tracks/meta", { ids });
+  return mapTracks(data.results || []);
+}
+
+/**
+ * GET /api/albums/{id}/tracks → Track[]
+ * @param {string} albumId
+ */
+export async function fetchAlbumTracks(albumId) {
+  const data = await apiGet(
+    `/api/albums/${encodeURIComponent(albumId)}/tracks`
+  );
+  return mapTracks(data.items || []);
+}
+
+/**
+ * GET /api/playlists/{id}/tracks → Track[]
+ * @param {string} playlistId
+ */
+export async function fetchPlaylistTracks(playlistId) {
+  const data = await apiGet(
+    `/api/playlists/${encodeURIComponent(playlistId)}/tracks`
+  );
+  return mapTracks(data.items || []);
+}
+
+/**
+ * GET /api/search — maps tracks only; artists/albums stay server shape.
+ * @param {string} q
+ * @param {number} [limit]
+ */
+export async function fetchSearch(q, limit = 50) {
+  const data = await apiGet(
+    `/api/search?q=${encodeURIComponent(q)}&limit=${limit}`
+  );
+  return {
+    artists: data.artists || [],
+    albums: data.albums || [],
+    tracks: mapTracks(data.tracks || []),
+  };
+}
+
+/**
+ * Collect file ids under path, then resolve full Track[] via meta.
+ * @param {string} path
+ * @returns {Promise<import("./models/track.js").Track[]>}
+ */
+export async function collectTracks(path) {
+  const data = await apiGet(
+    `/api/collect?path=${encodeURIComponent(path || "")}`
+  );
+  const ids = (data.files || []).map((f) => f.id).filter(Boolean);
+  return fetchTracksMeta(ids);
+}
+
+/**
+ * GET /api/artists/{id}/albums → album list (not tracks).
+ * @param {string} artistId
+ */
+export async function fetchArtistAlbums(artistId) {
+  const data = await apiGet(
+    `/api/artists/${encodeURIComponent(artistId)}/albums`
+  );
+  return data.items || [];
+}
+
+/**
+ * GET /api/artists/{id}
+ * @param {string} artistId
+ */
+export async function fetchArtist(artistId) {
+  return apiGet(`/api/artists/${encodeURIComponent(artistId)}`);
+}
+
+/**
+ * GET /api/albums/{id}
+ * @param {string} albumId
+ */
+export async function fetchAlbum(albumId) {
+  return apiGet(`/api/albums/${encodeURIComponent(albumId)}`);
+}
+
 export function clearCache(...scopes) {
   const only = scopes.filter((s) => s === "streams");
   if (!only.length) return;
@@ -137,3 +242,11 @@ export function requestPrepare(tracksOrIds, codec, { replace = false } = {}) {
     body: JSON.stringify({ ids: use, codec, replace }),
   }).catch(() => {});
 }
+
+export {
+  fromApiTrack,
+  fromCatalogRecord,
+  mapTracks,
+  isTrack,
+  coerceTrack,
+} from "./models/track.js";

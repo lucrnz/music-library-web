@@ -1,6 +1,6 @@
 import { defineComponent, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { apiGet, coverUrl } from "../../api.js";
+import { coverUrl, fetchPlaylistTracks } from "../../api.js";
 import { formatTime } from "../../util.js";
 import {
   pl,
@@ -18,10 +18,10 @@ import {
   stopPlayback,
 } from "../../stores/player.js";
 import {
-  downloads,
   downloadTracks,
   refreshDownloadStatuses,
-} from "../../stores/downloads.js";
+} from "../../downloads/index.js";
+import { downloads } from "../../downloads/state.js";
 import Icon from "../icons/Icon.js";
 
 export default defineComponent({
@@ -122,10 +122,9 @@ export default defineComponent({
       e.stopPropagation();
       if (!downloads.enabled) return;
       try {
-        const full = await apiGet(
-          `/api/playlists/${encodeURIComponent(sp.id)}/tracks`
+        const tracks = (await fetchPlaylistTracks(sp.id)).filter(
+          (t) => t.id && !t.isMissing
         );
-        const tracks = (full.items || []).filter((t) => t.id && !t.is_missing);
         if (!tracks.length) {
           alert("Playlist has no downloadable tracks");
           return;
@@ -141,7 +140,7 @@ export default defineComponent({
     async function onDownloadQueue() {
       if (!downloads.enabled || !pl.tracks.length) return;
       try {
-        const tracks = pl.tracks.filter((t) => t.id && !t.is_missing);
+        const tracks = pl.tracks.filter((t) => t.id && !t.isMissing);
         await downloadTracks(tracks);
         await refreshDownloadStatuses();
       } catch (err) {
