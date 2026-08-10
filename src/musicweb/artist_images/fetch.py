@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from sqlalchemy.orm import Session
@@ -26,7 +25,7 @@ from musicweb.config import (
 from musicweb.db.models import Artist
 from musicweb.http_client import RateLimitedHttp, looks_like_image
 from musicweb.library import Library
-from musicweb.timeutil import utc_now_iso
+from musicweb.timeutil import in_retry_cooldown, utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -34,27 +33,13 @@ logger = logging.getLogger(__name__)
 __all__ = ["ArtistImageFetcher", "FetchResult"]
 
 
-def _parse_iso(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        text = value.replace("Z", "+00:00")
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return None
-
-
-def _in_retry_cooldown(artist: Artist, *, now: datetime | None = None) -> bool:
+def _in_retry_cooldown(artist: Artist) -> bool:
     # Only cool down real attempts — not "skipped" (no keys / no contact yet).
-    if artist.image_status not in ("not_found", "error"):
-        return False
-    fetched = _parse_iso(artist.image_fetched_at)
-    if fetched is None:
-        return False
-    now = now or datetime.now(timezone.utc)
-    if fetched.tzinfo is None:
-        fetched = fetched.replace(tzinfo=timezone.utc)
-    return now < fetched + timedelta(days=ARTIST_IMAGE_RETRY_DAYS)
+    return in_retry_cooldown(
+        status=artist.image_status,
+        fetched_at=artist.image_fetched_at,
+        retry_days=ARTIST_IMAGE_RETRY_DAYS,
+    )
 
 
 class ArtistImageFetcher:
