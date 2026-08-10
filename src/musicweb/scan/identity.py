@@ -18,6 +18,7 @@ from musicweb.db.names import (
     normalize_name,
     sort_name,
 )
+from musicweb.metadata import TrackMetadata
 
 
 def ensure_artist(session: Session, display: str) -> Artist:
@@ -66,6 +67,30 @@ def ensure_album(
     return album
 
 
+def _new_track(
+    *,
+    track_id: str,
+    fingerprint: str,
+    fingerprint_algo: str,
+    rel_path: str,
+    now: str,
+) -> Track:
+    return Track(
+        id=track_id,
+        fingerprint=fingerprint,
+        fingerprint_algo=fingerprint_algo,
+        rel_path=rel_path,
+        title="",
+        artist_name=UNKNOWN_ARTIST,
+        album_artist_name=UNKNOWN_ARTIST,
+        size_bytes=0,
+        mtime_ns=0,
+        is_missing=False,
+        added_at=now,
+        indexed_at=now,
+    )
+
+
 def resolve_track(
     session: Session,
     *,
@@ -107,19 +132,12 @@ def resolve_track(
             existing_by_path.is_missing = True
             existing_by_path.rel_path = None
             session.flush()
-            track = Track(
-                id=track_id,
+            track = _new_track(
+                track_id=track_id,
                 fingerprint=fingerprint,
                 fingerprint_algo=fingerprint_algo,
                 rel_path=rel_path,
-                title="",
-                artist_name=UNKNOWN_ARTIST,
-                album_artist_name=UNKNOWN_ARTIST,
-                size_bytes=0,
-                mtime_ns=0,
-                is_missing=False,
-                added_at=now,
-                indexed_at=now,
+                now=now,
             )
             session.add(track)
             session.flush()
@@ -128,19 +146,12 @@ def resolve_track(
         existing_by_path.rel_path = rel_path
         return existing_by_path
 
-    track = Track(
-        id=track_id,
+    track = _new_track(
+        track_id=track_id,
         fingerprint=fingerprint,
         fingerprint_algo=fingerprint_algo,
         rel_path=rel_path,
-        title="",
-        artist_name=UNKNOWN_ARTIST,
-        album_artist_name=UNKNOWN_ARTIST,
-        size_bytes=0,
-        mtime_ns=0,
-        is_missing=False,
-        added_at=now,
-        indexed_at=now,
+        now=now,
     )
     session.add(track)
     session.flush()
@@ -154,26 +165,25 @@ def apply_track_fields(
     path: Path,
     size: int,
     mtime_ns: int,
-    meta: dict,
+    meta: TrackMetadata,
     now: str,
 ) -> str:
     """
     Apply tags + file stats to track, ensure artist/album, update FTS.
     Returns album_id.
     """
-    title = display_name(meta.get("title"), path.stem)
-    artist_name = display_name(meta.get("artist"), UNKNOWN_ARTIST)
-    album_title = display_name(meta.get("album"), UNKNOWN_ALBUM)
-    albumartist_raw = meta.get("albumartist") or meta.get("artist") or ""
+    title = display_name(meta.title, path.stem)
+    artist_name = display_name(meta.artist, UNKNOWN_ARTIST)
+    album_title = display_name(meta.album, UNKNOWN_ALBUM)
+    albumartist_raw = meta.albumartist or meta.artist or ""
     album_artist_name = display_name(albumartist_raw, artist_name)
 
     track_artist = ensure_artist(session, artist_name)
     album_artist = ensure_artist(session, album_artist_name)
-    year = meta.get("year")
+    year = meta.year
     album = ensure_album(session, album_artist, album_title, year)
 
-    duration = meta.get("duration")
-    duration_ms = int(duration * 1000) if duration is not None else None
+    duration_ms = int(meta.duration * 1000) if meta.duration is not None else None
 
     track.title = title
     track.artist_name = artist_name
@@ -181,14 +191,14 @@ def apply_track_fields(
     track.artist_id = track_artist.id
     track.album_id = album.id
     track.album_artist_id = album_artist.id
-    track.track_no = meta.get("track")
-    track.disc_no = meta.get("disc")
+    track.track_no = meta.track
+    track.disc_no = meta.disc
     track.year = year
     track.duration_ms = duration_ms
-    track.sample_rate_hz = meta.get("sample_rate_hz")
-    track.bit_depth = meta.get("bit_depth")
-    track.channels = meta.get("channels")
-    track.source_codec = meta.get("source_codec")
+    track.sample_rate_hz = meta.sample_rate_hz
+    track.bit_depth = meta.bit_depth
+    track.channels = meta.channels
+    track.source_codec = meta.source_codec
     track.size_bytes = size
     track.mtime_ns = mtime_ns
     track.is_missing = False

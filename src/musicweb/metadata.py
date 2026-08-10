@@ -3,12 +3,31 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from mutagen import File as MutagenFile
 from mutagen.mp4 import MP4
 
 _YEAR_RE = re.compile(r"(\d{4})")
+
+
+@dataclass(frozen=True)
+class TrackMetadata:
+    """Tags + source audio tech for one file."""
+
+    title: str | None
+    artist: str | None
+    album: str | None
+    albumartist: str | None
+    track: int | None
+    disc: int | None
+    year: int | None
+    duration: float | None
+    sample_rate_hz: int | None
+    bit_depth: int | None
+    channels: int | None
+    source_codec: str | None
 
 
 def _first(tags: dict | None, *keys: str) -> str | None:
@@ -104,57 +123,111 @@ def _audio_tech_from_info(info: object, path: Path) -> dict:
     }
 
 
-def read_metadata(path: Path) -> dict:
+def read_metadata(path: Path) -> TrackMetadata:
     """
     Return common tags + source audio tech for a single audio file.
 
     Falls back to the filename stem when title is missing.
-    Tech keys: sample_rate_hz, bit_depth, channels, source_codec (may be None).
+    Tech fields may be None when mutagen cannot determine them.
     """
     stem = path.stem
-    result: dict = {
-        "title": stem,
-        "artist": "",
-        "album": "",
-        "albumartist": "",
-        "track": None,
-        "disc": None,
-        "year": None,
-        "duration": None,
-        "sample_rate_hz": None,
-        "bit_depth": None,
-        "channels": None,
-        "source_codec": None,
-    }
+    title: str | None = stem
+    artist: str | None = None
+    album: str | None = None
+    albumartist: str | None = None
+    track: int | None = None
+    disc: int | None = None
+    year: int | None = None
+    duration: float | None = None
+    sample_rate_hz: int | None = None
+    bit_depth: int | None = None
+    channels: int | None = None
+    source_codec: str | None = None
 
     try:
         audio = MutagenFile(path, easy=True)
     except Exception:
-        return result
+        return TrackMetadata(
+            title=title,
+            artist=artist,
+            album=album,
+            albumartist=albumartist,
+            track=track,
+            disc=disc,
+            year=year,
+            duration=duration,
+            sample_rate_hz=sample_rate_hz,
+            bit_depth=bit_depth,
+            channels=channels,
+            source_codec=source_codec,
+        )
 
     if audio is None:
         try:
             audio = MutagenFile(path)
         except Exception:
-            return result
+            return TrackMetadata(
+                title=title,
+                artist=artist,
+                album=album,
+                albumartist=albumartist,
+                track=track,
+                disc=disc,
+                year=year,
+                duration=duration,
+                sample_rate_hz=sample_rate_hz,
+                bit_depth=bit_depth,
+                channels=channels,
+                source_codec=source_codec,
+            )
         if audio is None:
-            return result
+            return TrackMetadata(
+                title=title,
+                artist=artist,
+                album=album,
+                albumartist=albumartist,
+                track=track,
+                disc=disc,
+                year=year,
+                duration=duration,
+                sample_rate_hz=sample_rate_hz,
+                bit_depth=bit_depth,
+                channels=channels,
+                source_codec=source_codec,
+            )
 
     info = getattr(audio, "info", None)
     if info is not None:
         if getattr(info, "length", None):
-            result["duration"] = float(info.length)
-        result.update(_audio_tech_from_info(info, path))
+            duration = float(info.length)
+        tech = _audio_tech_from_info(info, path)
+        sample_rate_hz = tech["sample_rate_hz"]
+        bit_depth = tech["bit_depth"]
+        channels = tech["channels"]
+        source_codec = tech["source_codec"]
 
     tags = getattr(audio, "tags", None)
     if tags is None:
-        return result
+        return TrackMetadata(
+            title=title,
+            artist=artist,
+            album=album,
+            albumartist=albumartist,
+            track=track,
+            disc=disc,
+            year=year,
+            duration=duration,
+            sample_rate_hz=sample_rate_hz,
+            bit_depth=bit_depth,
+            channels=channels,
+            source_codec=source_codec,
+        )
 
     if hasattr(tags, "get"):
-        title = _first(tags, "title", "\xa9nam")
-        artist = _first(tags, "artist", "\xa9ART")
-        album = _first(tags, "album", "\xa9alb")
-        albumartist = _first(
+        t_title = _first(tags, "title", "\xa9nam")
+        t_artist = _first(tags, "artist", "\xa9ART")
+        t_album = _first(tags, "album", "\xa9alb")
+        t_albumartist = _first(
             tags,
             "albumartist",
             "album artist",
@@ -164,53 +237,66 @@ def read_metadata(path: Path) -> dict:
         disc_raw = _first(tags, "discnumber", "disknumber", "disk")
         year_raw = _first(tags, "date", "year", "\xa9day")
 
-        if title:
-            result["title"] = title
-        if artist:
-            result["artist"] = artist
-        if album:
-            result["album"] = album
-        if albumartist:
-            result["albumartist"] = albumartist
-        result["track"] = _track_number(track_raw)
-        result["disc"] = _track_number(disc_raw)
-        result["year"] = _parse_year(year_raw)
+        if t_title:
+            title = t_title
+        if t_artist:
+            artist = t_artist
+        if t_album:
+            album = t_album
+        if t_albumartist:
+            albumartist = t_albumartist
+        track = _track_number(track_raw)
+        disc = _track_number(disc_raw)
+        year = _parse_year(year_raw)
 
         # MP4 non-easy fallbacks
         if isinstance(audio, MP4) and audio.tags:
-            if result["track"] is None:
+            if track is None:
                 trkn = audio.tags.get("trkn")
                 if trkn and isinstance(trkn, list) and trkn[0]:
                     try:
-                        result["track"] = int(trkn[0][0])
+                        track = int(trkn[0][0])
                     except (TypeError, ValueError, IndexError):
                         pass
-            if result["disc"] is None:
+            if disc is None:
                 disk = audio.tags.get("disk")
                 if disk and isinstance(disk, list) and disk[0]:
                     try:
-                        result["disc"] = int(disk[0][0])
+                        disc = int(disk[0][0])
                     except (TypeError, ValueError, IndexError):
                         pass
-            if not result["title"] or result["title"] == stem:
+            if not title or title == stem:
                 nam = audio.tags.get("\xa9nam")
                 if nam:
-                    result["title"] = str(nam[0])
-            if not result["artist"]:
+                    title = str(nam[0])
+            if not artist:
                 art = audio.tags.get("\xa9ART")
                 if art:
-                    result["artist"] = str(art[0])
-            if not result["album"]:
+                    artist = str(art[0])
+            if not album:
                 alb = audio.tags.get("\xa9alb")
                 if alb:
-                    result["album"] = str(alb[0])
-            if not result["albumartist"]:
+                    album = str(alb[0])
+            if not albumartist:
                 aart = audio.tags.get("aART")
                 if aart:
-                    result["albumartist"] = str(aart[0])
-            if result["year"] is None:
+                    albumartist = str(aart[0])
+            if year is None:
                 day = audio.tags.get("\xa9day")
                 if day:
-                    result["year"] = _parse_year(str(day[0]))
+                    year = _parse_year(str(day[0]))
 
-    return result
+    return TrackMetadata(
+        title=title,
+        artist=artist,
+        album=album,
+        albumartist=albumartist,
+        track=track,
+        disc=disc,
+        year=year,
+        duration=duration,
+        sample_rate_hz=sample_rate_hz,
+        bit_depth=bit_depth,
+        channels=channels,
+        source_codec=source_codec,
+    )
