@@ -29,6 +29,7 @@ let lastCoverTrackId = null;
 
 export const player = reactive({
   seeking: false,
+  /** Full now-playing open (mobile sheet / desktop right panel) */
   expanded: false,
   sheetOffset: 0,
   draggingSheet: false,
@@ -42,7 +43,7 @@ export const player = reactive({
   /** Resolved cover URLs for PlayerBar (local OPFS or remote / placeholder). */
   coverThumb: PLACEHOLDER_COVER,
   coverFull: PLACEHOLDER_COVER,
-  /** Mobile expanded now-playing: lyrics overlay open */
+  /** Expanded now-playing: lyrics overlay open */
   lyricsOpen: false,
 });
 

@@ -1,5 +1,5 @@
 /**
- * Scrolling lyrics overlay for mobile expanded now-playing.
+ * Scrolling lyrics overlay for expanded now-playing (mobile sheet / desktop panel).
  */
 import {
   computed,

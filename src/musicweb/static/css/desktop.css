@@ -36,13 +36,12 @@
     opacity: 1;
   }
 
-  /* Persistent full player bar, 3 zones in one grid */
+  /* Persistent full player bar — closed only (expanded inherits player.css NP stack) */
   .player-mini {
     display: none;
   }
 
-  .player-full,
-  #player.expanded .player-full {
+  #player:not(.expanded) .player-full {
     display: grid;
     grid-template-columns: 64px minmax(140px, 1fr) minmax(320px, 1.6fr) minmax(200px, 1fr);
     grid-template-rows: auto auto;
@@ -51,16 +50,16 @@
     padding: 10px 16px;
   }
 
-  .sheet-grab {
+  #player:not(.expanded) .sheet-grab {
     display: none;
   }
 
-  .full-cover-wrap {
+  #player:not(.expanded) .full-cover-wrap {
     grid-column: 1;
     grid-row: 1 / 3;
   }
 
-  .full-cover {
+  #player:not(.expanded) .full-cover {
     width: 64px;
     height: 64px;
     border-radius: 6px;
@@ -68,47 +67,66 @@
     object-fit: cover;
   }
 
-  /* v1: lyrics UI is mobile expanded only */
-  .lyrics-toggle,
-  .lyrics-overlay {
-    display: none !important;
+  /* Open targets on the compact bar */
+  #player:not(.expanded) .full-cover-wrap.is-open-target {
+    transition: transform 0.12s ease, filter 0.12s ease;
   }
 
-  .full-cover-wrap.lyrics-open .full-cover {
-    filter: none;
+  #player:not(.expanded) .full-cover-wrap.is-open-target:hover .full-cover {
+    filter: brightness(1.08);
   }
 
-  .full-meta {
+  #player:not(.expanded) .full-cover-wrap.is-open-target:hover {
+    transform: scale(1.03);
+  }
+
+  #player:not(.expanded) .full-meta.is-open-target {
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.12s ease;
+  }
+
+  #player:not(.expanded) .full-meta.is-open-target:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  /* Lyrics only in expanded NP (hide on closed bar; no expanded !important show) */
+  #player:not(.expanded) .lyrics-toggle,
+  #player:not(.expanded) .lyrics-overlay {
+    display: none;
+  }
+
+  #player:not(.expanded) .full-meta {
     grid-column: 2;
     grid-row: 1 / 3;
     min-width: 0;
   }
 
-  .full-meta .np-title {
+  #player:not(.expanded) .full-meta .np-title {
     font-size: 14px;
   }
 
-  .full-meta .np-artist {
+  #player:not(.expanded) .full-meta .np-artist {
     font-size: 12px;
   }
 
-  .transport-buttons {
+  #player:not(.expanded) .transport-buttons {
     grid-column: 3;
     grid-row: 1;
     gap: 4px;
   }
 
-  .icon-btn.primary {
+  #player:not(.expanded) .icon-btn.primary {
     width: 40px;
     height: 40px;
   }
 
-  .icon-btn.primary .icon {
+  #player:not(.expanded) .icon-btn.primary .icon {
     width: 20px;
     height: 20px;
   }
 
-  .seek-row {
+  #player:not(.expanded) .seek-row {
     grid-column: 3;
     grid-row: 2;
     max-width: 640px;
@@ -116,19 +134,75 @@
     justify-self: center;
   }
 
-  .player-extras {
+  #player:not(.expanded) .player-extras {
     grid-column: 4;
     grid-row: 1 / 3;
     justify-content: flex-end;
   }
 
-  .vol-label {
+  #player:not(.expanded) .vol-label {
     flex: initial;
   }
 
-  .vol-label input[type="range"] {
+  #player:not(.expanded) .vol-label input[type="range"] {
     width: 100px;
     flex: none;
+  }
+
+  /* ── Desktop expanded: shell + right panel deltas only ─────────── */
+  /* Cover type, meta fonts, transport, vol, lyrics dim → player.css */
+
+  #player.expanded {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: transparent;
+    border: none;
+    overflow: hidden;
+    display: block;
+    transition: none;
+  }
+
+  #player.expanded .np-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 0;
+    cursor: pointer;
+  }
+
+  #player.expanded .player-notice {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(420px, 100vw);
+    z-index: 2;
+  }
+
+  #player.expanded .player-full {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(420px, 100vw);
+    z-index: 1;
+    min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+    background: linear-gradient(180deg, var(--elevated) 0%, var(--bg) 60%);
+    border-left: 1px solid var(--border);
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.35);
+    /* flex column / padding / gap from player.css — do not re-grid */
+  }
+
+  #player.expanded .sheet-grab {
+    justify-content: flex-start;
+  }
+
+  /* Panel narrower than mobile sheet cover max */
+  #player.expanded .full-cover {
+    width: min(100%, 320px);
   }
 
   .modal {

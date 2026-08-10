@@ -1,4 +1,12 @@
-import { computed, defineComponent, nextTick, ref, watch } from "vue";
+import {
+  computed,
+  defineComponent,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  watch,
+} from "vue";
 import { formatTime, setRangeFill } from "../../util.js";
 import { pl } from "../../stores/playlist.js";
 import {
@@ -11,11 +19,19 @@ import {
   seekToFraction,
   setVolume,
 } from "../../stores/player.js";
-import { openSettings } from "../../stores/settings.js";
+import { openSettings, settings } from "../../stores/settings.js";
+import { downloads } from "../../stores/downloads.js";
 import Icon from "../icons/Icon.js";
 import LyricsOverlay from "./LyricsOverlay.js";
 
 const DESKTOP_BREAKPOINT = "(min-width: 900px)";
+
+function isDesktop() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia(DESKTOP_BREAKPOINT).matches
+  );
+}
 
 export default defineComponent({
   name: "PlayerBar",
@@ -24,7 +40,10 @@ export default defineComponent({
     const root = ref(null);
     const seekEl = ref(null);
     const volEl = ref(null);
+    const closeBtn = ref(null);
     const sheetDragY = ref(null);
+    /** Element to restore focus to after collapse (nice-to-have). */
+    let focusRestoreEl = null;
 
     const visible = computed(() => Boolean(pl.current) || pl.length > 0);
     const track = computed(() => pl.current);
@@ -47,17 +66,35 @@ export default defineComponent({
       pl.repeat === "one" ? "repeat-one" : "repeat"
     );
 
-    function expand() {
-      if (window.matchMedia(DESKTOP_BREAKPOINT).matches) return;
+    function expand(ev) {
+      if (player.expanded) return;
+      if (ev?.currentTarget instanceof HTMLElement) {
+        focusRestoreEl = ev.currentTarget;
+      }
       player.expanded = true;
       player.sheetOffset = 0;
+      nextTick(() => {
+        closeBtn.value?.focus?.();
+      });
+    }
+
+    /** Open NP from closed-bar cover/meta; no-op when already expanded. */
+    function onCoverOrMetaOpen(ev) {
+      if (player.expanded) return;
+      expand(ev);
     }
 
     function collapse() {
+      if (!player.expanded) return;
       player.expanded = false;
       player.sheetOffset = 0;
       player.draggingSheet = false;
       player.lyricsOpen = false;
+      const restore = focusRestoreEl;
+      focusRestoreEl = null;
+      if (restore && typeof restore.focus === "function") {
+        nextTick(() => restore.focus());
+      }
     }
 
     function toggleLyrics() {
@@ -73,6 +110,7 @@ export default defineComponent({
     });
 
     function onSheetDown(e) {
+      if (isDesktop()) return;
       sheetDragY.value = e.clientY;
       player.draggingSheet = true;
       e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -111,6 +149,14 @@ export default defineComponent({
       setRangeFill(e.target);
     }
 
+    function onKeydown(e) {
+      if (e.key !== "Escape" || !player.expanded) return;
+      // Let higher modals own Escape (settings z-index 100+ over NP 50).
+      if (settings.open || downloads.managerOpen) return;
+      e.preventDefault();
+      collapse();
+    }
+
     watch(
       () => [player.currentTime, player.duration, player.seeking],
       async () => {
@@ -134,13 +180,24 @@ export default defineComponent({
       { immediate: true }
     );
 
-    // Collapse sheet when growing to desktop (collapse clears lyricsOpen).
-    if (typeof window !== "undefined") {
-      const mq = window.matchMedia(DESKTOP_BREAKPOINT);
-      mq.addEventListener("change", (e) => {
-        if (e.matches) collapse();
-      });
+    // Collapse NP when crossing mobile ↔ desktop either way.
+    let mq = null;
+    function onBreakpointChange() {
+      collapse();
     }
+
+    onMounted(() => {
+      window.addEventListener("keydown", onKeydown);
+      if (typeof window !== "undefined") {
+        mq = window.matchMedia(DESKTOP_BREAKPOINT);
+        mq.addEventListener("change", onBreakpointChange);
+      }
+    });
+
+    onUnmounted(() => {
+      window.removeEventListener("keydown", onKeydown);
+      mq?.removeEventListener("change", onBreakpointChange);
+    });
 
     const rootStyle = computed(() => {
       if (!player.draggingSheet && !player.sheetOffset) return {};
@@ -151,6 +208,7 @@ export default defineComponent({
       root,
       seekEl,
       volEl,
+      closeBtn,
       pl,
       player,
       visible,
@@ -163,6 +221,7 @@ export default defineComponent({
       repeatIcon,
       formatTime,
       expand,
+      onCoverOrMetaOpen,
       collapse,
       toggleLyrics,
       trackId,
@@ -194,39 +253,89 @@ export default defineComponent({
       :style="rootStyle"
     >
       <div
-        v-if="player.playNotice"
-        class="player-notice"
-        role="status"
-      >{{ player.playNotice }}</div>
+        v-if="player.expanded"
+        class="np-backdrop"
+        aria-hidden="true"
+        @click="collapse"
+      ></div>
+      <div v-if="player.playNotice" class="player-notice" role="status">
+        {{ player.playNotice }}
+      </div>
       <div class="player-mini">
         <img class="mini-cover" :src="coverThumb" alt="" />
-        <button type="button" class="mini-meta" aria-label="Open now playing" @click="expand">
+        <button
+          type="button"
+          class="mini-meta"
+          aria-label="Open now playing"
+          @click="expand"
+        >
           <span class="np-title">{{ title }}</span>
           <span class="np-artist">{{ subtitle }}</span>
         </button>
-        <button type="button" class="icon-btn" title="Play / Pause" aria-label="Play / Pause" @click="togglePlay">
+        <button
+          type="button"
+          class="icon-btn"
+          title="Play / Pause"
+          aria-label="Play / Pause"
+          @click="togglePlay"
+        >
           <Icon :name="playIcon" />
         </button>
-        <button type="button" class="icon-btn" title="Next" aria-label="Next" @click="playNext">
+        <button
+          type="button"
+          class="icon-btn"
+          title="Next"
+          aria-label="Next"
+          @click="playNext"
+        >
           <Icon name="next" />
         </button>
       </div>
 
-      <div class="player-full">
+      <div
+        class="player-full"
+        :role="player.expanded ? 'dialog' : undefined"
+        :aria-modal="player.expanded ? 'true' : undefined"
+        :aria-label="player.expanded ? 'Now playing' : undefined"
+      >
         <div
           class="sheet-grab"
           @pointerdown="onSheetDown"
           @pointermove="onSheetMove"
           @pointerup="onSheetUp"
         >
-          <button type="button" class="icon-btn" title="Close" aria-label="Close now playing" @click="collapse">
+          <button
+            type="button"
+            ref="closeBtn"
+            class="icon-btn"
+            title="Close"
+            aria-label="Close now playing"
+            @click="collapse"
+          >
             <Icon name="chevron-down" />
           </button>
         </div>
 
-        <div class="full-cover-wrap" :class="{ 'lyrics-open': player.lyricsOpen }">
-          <img class="full-cover" :src="coverFull" alt="Album cover" />
+        <!-- Single cover/meta tree: open affordance when closed; lyrics when expanded. -->
+        <div
+          class="full-cover-wrap"
+          :class="{
+            'lyrics-open': player.expanded && player.lyricsOpen,
+            'is-open-target': !player.expanded,
+          }"
+          :role="player.expanded ? undefined : 'button'"
+          :tabindex="player.expanded ? undefined : 0"
+          :aria-label="player.expanded ? undefined : 'Open now playing'"
+          @click="onCoverOrMetaOpen"
+          @keydown.enter.space.prevent="onCoverOrMetaOpen"
+        >
+          <img
+            class="full-cover"
+            :src="coverFull"
+            :alt="player.expanded ? 'Album cover' : ''"
+          />
           <LyricsOverlay
+            v-if="player.expanded"
             :open="player.lyricsOpen"
             :track-id="trackId"
             :current-time="player.currentTime"
@@ -234,7 +343,15 @@ export default defineComponent({
           />
         </div>
 
-        <div class="full-meta">
+        <div
+          class="full-meta"
+          :class="{ 'is-open-target': !player.expanded }"
+          :role="player.expanded ? undefined : 'button'"
+          :tabindex="player.expanded ? undefined : 0"
+          :aria-label="player.expanded ? undefined : 'Open now playing'"
+          @click="onCoverOrMetaOpen"
+          @keydown.enter.space.prevent="onCoverOrMetaOpen"
+        >
           <div class="np-title">{{ title }}</div>
           <div class="np-artist">{{ subtitle }}</div>
         </div>
@@ -265,13 +382,31 @@ export default defineComponent({
             aria-label="Shuffle"
             @click="toggleShuffle"
           ><Icon name="shuffle" /></button>
-          <button type="button" class="icon-btn" title="Previous" aria-label="Previous" @click="playPrev">
+          <button
+            type="button"
+            class="icon-btn"
+            title="Previous"
+            aria-label="Previous"
+            @click="playPrev"
+          >
             <Icon name="prev" />
           </button>
-          <button type="button" class="icon-btn primary" title="Play / Pause" aria-label="Play / Pause" @click="togglePlay">
+          <button
+            type="button"
+            class="icon-btn primary"
+            title="Play / Pause"
+            aria-label="Play / Pause"
+            @click="togglePlay"
+          >
             <Icon :name="playIcon" />
           </button>
-          <button type="button" class="icon-btn" title="Next" aria-label="Next" @click="playNext">
+          <button
+            type="button"
+            class="icon-btn"
+            title="Next"
+            aria-label="Next"
+            @click="playNext"
+          >
             <Icon name="next" />
           </button>
           <button
