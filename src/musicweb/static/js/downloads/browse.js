@@ -17,6 +17,7 @@ import { buildDownloadsHierarchy } from "./hierarchy.js";
  * @property {object[]} tracks
  * @property {boolean} albumGrid
  * @property {Record<string, string>} artUrls  keys: a:{id} | al:{id}
+ * @property {string} [parentArtistId] For album detail → artist Back
  */
 
 /**
@@ -49,9 +50,14 @@ export async function loadDownloadsView(opts) {
   if (opts.routeName === "downloads-album") {
     const id = opts.albumId;
     let found = null;
+    /** @type {string|undefined} */
+    let parentArtistId;
     for (const ar of tree.artists) {
       found = ar.albums.find((al) => al.albumId === id) || null;
-      if (found) break;
+      if (found) {
+        parentArtistId = ar.artistId;
+        break;
+      }
     }
     if (!found) {
       return {
@@ -74,6 +80,7 @@ export async function loadDownloadsView(opts) {
       tracks: found.tracks.map((t) => fromCatalogRecord(t)),
       albumGrid: false,
       artUrls,
+      parentArtistId,
     };
   }
 

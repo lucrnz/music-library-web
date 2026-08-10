@@ -46,6 +46,8 @@ export default defineComponent({
     /** True when the page is an albums collection (not tracks). */
     const albumsPage = ref(false);
     const localArt = ref({});
+    /** Parent artist for album-detail Back (hierarchical, not history). */
+    const parentArtistId = ref(/** @type {string|null} */ (null));
     let renderSeq = 0;
 
     const routeName = computed(() => route.name);
@@ -101,6 +103,9 @@ export default defineComponent({
         tracks.value = view.tracks;
         albumsPage.value = view.albumGrid;
         localArt.value = view.artUrls;
+        parentArtistId.value = view.parentArtistId
+          ? String(view.parentArtistId)
+          : null;
       } catch (err) {
         if (!isCurrent(seq)) return;
         error.value = err.message || String(err);
@@ -109,10 +114,14 @@ export default defineComponent({
       }
     }
 
+    /** Hierarchical parent only — never history.back() (can unload the page). */
     function goBack() {
       if (routeName.value === "downloads-album") {
-        if (window.history.length > 1) {
-          router.back();
+        if (parentArtistId.value) {
+          router.push({
+            name: "downloads-artist",
+            params: { artistId: parentArtistId.value },
+          });
           return;
         }
         router.push({ name: "downloads" });

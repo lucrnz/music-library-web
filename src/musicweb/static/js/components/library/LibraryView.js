@@ -77,6 +77,8 @@ export default defineComponent({
     const error = ref("");
     const title = ref("Folders");
     const showBack = ref(false);
+    /** Parent artist id for album-detail Back (hierarchical, not history). */
+    const backArtistId = ref(/** @type {string|null} */ (null));
     /** @type {import("vue").Ref<import("./loaders.js").LibraryBody>} */
     const body = ref(INITIAL_BODY);
     const searchQuery = ref(route.query.q ? String(route.query.q) : "");
@@ -139,6 +141,9 @@ export default defineComponent({
     function applyPage(page) {
       title.value = page.chrome.title;
       showBack.value = page.chrome.showBack;
+      backArtistId.value = page.chrome.backArtistId
+        ? String(page.chrome.backArtistId)
+        : null;
       body.value = page.body;
     }
 
@@ -180,6 +185,7 @@ export default defineComponent({
       }
     }
 
+    /** Hierarchical parent only — never history.back() (can unload the page). */
     function goBack() {
       if (mode.value === "folders" && folderPath.value) {
         const parts = folderPath.value.split("/").filter(Boolean);
@@ -191,11 +197,23 @@ export default defineComponent({
         });
         return;
       }
-      if (window.history.length > 1) {
-        router.back();
+      if (routeName.value === "album") {
+        // Prefer the album's artist when known (set while loading album chrome).
+        const aid = backArtistId.value;
+        if (aid) {
+          router.push({ name: "artist", params: { artistId: aid } });
+          return;
+        }
+        router.push({ name: "albums" });
         return;
       }
-      router.push({ name: mode.value === "artists" ? "artists" : "albums" });
+      if (routeName.value === "artist") {
+        router.push({ name: "artists" });
+        return;
+      }
+      router.push({
+        name: mode.value === "artists" ? "artists" : "albums",
+      });
     }
 
     function openFolder(dir) {

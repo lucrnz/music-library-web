@@ -30,6 +30,7 @@ import { formatTrackLabel } from "../../util.js";
  * @typedef {object} LibraryChrome
  * @property {string} title
  * @property {boolean} showBack
+ * @property {string} [backArtistId] Parent artist for album-detail Back
  */
 
 /**
@@ -155,16 +156,26 @@ export async function loadArtistDetail(id) {
 
 export async function loadAlbumDetail(id) {
   let title = "Album";
+  /** @type {string|undefined} */
+  let backArtistId;
   try {
     const album = await fetchAlbum(id);
     title = album.title || "Album";
+    const aid = album.artist_id || album.artistId;
+    if (aid) backArtistId = String(aid);
   } catch {
     /* keep default */
   }
-  const chrome = { title, showBack: true };
+  const chrome = { title, showBack: true, backArtistId };
   const tracks = await fetchAlbumTracks(id);
   if (!tracks.length) {
     return page(chrome, { kind: "empty", message: "No tracks" });
+  }
+  // Fallback: first track's album artist if album meta lacked id.
+  if (!chrome.backArtistId && tracks[0]) {
+    const t = tracks[0];
+    const aid = t.albumArtistId || t.artistId;
+    if (aid) chrome.backArtistId = String(aid);
   }
   return page(chrome, { kind: "tracks", tracks });
 }
