@@ -375,13 +375,13 @@ main {
   display: none;
 }
 
-#pl-list.editing .row .row-delete,
-#pl-list.editing .row .row-drag {
+.row-list.editing .row .row-delete,
+.row-list.editing .row .row-drag {
   display: flex;
 }
 
-#pl-list.editing .row .row-dur,
-#pl-list.editing .row .eq {
+.row-list.editing .row .row-dur,
+.row-list.editing .row .eq {
   display: none;
 }
 
