@@ -12,6 +12,7 @@ import { pl, commit } from "./playlist.js";
 import { settings } from "./settings.js";
 
 const VOLUME_STORAGE_KEY = "musicweb.volume";
+const EXPANDED_STORAGE_KEY = "musicweb.nowPlayingExpanded.v1";
 
 /** Shared audio element (attached to document.body at boot). */
 export const audio = new Audio();
@@ -314,6 +315,40 @@ export function applyVolume() {
     /* ignore */
   }
   audio.volume = player.volume;
+}
+
+/** Open/close full now-playing and persist the preference. */
+export function setExpanded(open) {
+  const next = !!open;
+  player.expanded = next;
+  if (!next) {
+    player.sheetOffset = 0;
+    player.draggingSheet = false;
+    player.lyricsOpen = false;
+  }
+  try {
+    localStorage.setItem(EXPANDED_STORAGE_KEY, next ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Restore now-playing expanded flag from localStorage.
+ * Call after loadPlaylist(); stays collapsed when the queue is empty.
+ */
+export function applyExpanded() {
+  let want = false;
+  try {
+    want = localStorage.getItem(EXPANDED_STORAGE_KEY) === "1";
+  } catch {
+    /* ignore */
+  }
+  if (want && pl.length > 0) {
+    player.expanded = true;
+  } else {
+    player.expanded = false;
+  }
 }
 
 /** Resolve covers for the current playlist track (e.g. after session restore). */

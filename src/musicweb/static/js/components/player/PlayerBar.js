@@ -18,6 +18,7 @@ import {
   cycleRepeat,
   seekToFraction,
   setVolume,
+  setExpanded,
 } from "../../stores/player.js";
 import { openSettings, settings } from "../../stores/settings.js";
 import { downloads } from "../../stores/downloads.js";
@@ -79,7 +80,7 @@ export default defineComponent({
       if (ev?.currentTarget instanceof HTMLElement) {
         focusRestoreEl = ev.currentTarget;
       }
-      player.expanded = true;
+      setExpanded(true);
       player.sheetOffset = 0;
       nextTick(() => {
         closeBtn.value?.focus?.();
@@ -94,10 +95,7 @@ export default defineComponent({
 
     function collapse() {
       if (!player.expanded) return;
-      player.expanded = false;
-      player.sheetOffset = 0;
-      player.draggingSheet = false;
-      player.lyricsOpen = false;
+      setExpanded(false);
       const restore = focusRestoreEl;
       focusRestoreEl = null;
       if (restore && typeof restore.focus === "function") {
