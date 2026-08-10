@@ -11,6 +11,39 @@ _LRC_TIME_RE = re.compile(
 # Metadata tags like [ar:Artist], [ti:Title]
 _LRC_META_RE = re.compile(r"^\[[a-zA-Z][^:\]]*:[^\]]*\]\s*$")
 
+# Parenthetical / bracketed annotation containing remaster(ed), e.g.
+# "(Remastered)", "[2011 Remaster]", "{Remastered Version}".
+_REMASTERED_BRACKET_RE = re.compile(
+    r"\s*[\[\(\{][^\]\)\}]*remaster(?:ed)?[^\]\)\}]*[\]\)\}]",
+    re.IGNORECASE,
+)
+# Trailing dash form: " - Remastered", " – 2011 Remaster", " — Remastered 2015".
+_REMASTERED_DASH_RE = re.compile(
+    r"\s*[-–—]\s*(?:\d{4}\s+)?remaster(?:ed)?(?:\s+\d{4})?\s*$",
+    re.IGNORECASE,
+)
+_MULTI_SPACE_RE = re.compile(r"\s{2,}")
+
+
+def strip_remastered_noise(text: str | None) -> str:
+    """
+    Remove remaster annotations from a track or album title for lyrics matching.
+
+    Strips parenthetical/bracketed segments that contain ``remaster`` /
+    ``remastered`` (any case), and common trailing dash forms. Does not alter
+    stored library metadata — only the string used for remote lookup.
+    """
+    if not text:
+        return ""
+    cleaned = text
+    prev: str | None = None
+    while prev != cleaned:
+        prev = cleaned
+        cleaned = _REMASTERED_BRACKET_RE.sub("", cleaned)
+        cleaned = _REMASTERED_DASH_RE.sub("", cleaned)
+    cleaned = _MULTI_SPACE_RE.sub(" ", cleaned)
+    return cleaned.strip(" \t-–—")
+
 
 def looks_like_lrc(text: str) -> bool:
     """True when text contains at least one timed LRC stamp."""

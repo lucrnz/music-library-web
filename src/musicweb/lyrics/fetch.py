@@ -13,6 +13,7 @@ from musicweb.config import LYRICS_FETCH, LYRICS_RETRY_DAYS, Settings
 from musicweb.db.models import Track, TrackLyrics
 from musicweb.lyrics.local import read_local_lyrics
 from musicweb.lyrics.lrclib import LrclibClient, LrclibQuery
+from musicweb.lyrics.parse import strip_remastered_noise
 from musicweb.lyrics.types import LyricsResult
 from musicweb.timeutil import in_retry_cooldown, utc_now_iso
 
@@ -32,9 +33,9 @@ def match_fingerprint(
     duration = duration_ms if duration_ms is not None else ""
     raw = "|".join(
         [
-            (title or "").strip().lower(),
+            strip_remastered_noise(title).lower(),
             (artist_name or "").strip().lower(),
-            (album_title or "").strip().lower(),
+            strip_remastered_noise(album_title).lower(),
             str(duration),
         ]
     )
@@ -195,9 +196,9 @@ class LyricsFetcher:
             album_name = track.album.title or ""
 
         query = LrclibQuery(
-            track_name=track.title or "",
+            track_name=strip_remastered_noise(track.title),
             artist_name=track.artist_name or "",
-            album_name=album_name or None,
+            album_name=strip_remastered_noise(album_name) or None,
             duration_s=duration_s,
         )
         result = self._lrclib.get(query)
