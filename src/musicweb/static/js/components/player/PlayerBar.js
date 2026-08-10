@@ -42,8 +42,16 @@ export default defineComponent({
     const volEl = ref(null);
     const closeBtn = ref(null);
     const sheetDragY = ref(null);
+    const desktopViewport = ref(isDesktop());
     /** Element to restore focus to after collapse (nice-to-have). */
     let focusRestoreEl = null;
+
+    const closeIcon = computed(() =>
+      desktopViewport.value ? "close" : "chevron-down"
+    );
+    const npModal = computed(
+      () => player.expanded && !desktopViewport.value
+    );
 
     const visible = computed(() => Boolean(pl.current) || pl.length > 0);
     const track = computed(() => pl.current);
@@ -182,7 +190,8 @@ export default defineComponent({
 
     // Collapse NP when crossing mobile ↔ desktop either way.
     let mq = null;
-    function onBreakpointChange() {
+    function onBreakpointChange(e) {
+      desktopViewport.value = e.matches;
       collapse();
     }
 
@@ -190,6 +199,7 @@ export default defineComponent({
       window.addEventListener("keydown", onKeydown);
       if (typeof window !== "undefined") {
         mq = window.matchMedia(DESKTOP_BREAKPOINT);
+        desktopViewport.value = mq.matches;
         mq.addEventListener("change", onBreakpointChange);
       }
     });
@@ -219,6 +229,8 @@ export default defineComponent({
       seekValue,
       playIcon,
       repeatIcon,
+      closeIcon,
+      npModal,
       formatTime,
       expand,
       onCoverOrMetaOpen,
@@ -252,12 +264,6 @@ export default defineComponent({
       }"
       :style="rootStyle"
     >
-      <div
-        v-if="player.expanded"
-        class="np-backdrop"
-        aria-hidden="true"
-        @click="collapse"
-      ></div>
       <div v-if="player.playNotice" class="player-notice" role="status">
         {{ player.playNotice }}
       </div>
@@ -294,8 +300,8 @@ export default defineComponent({
 
       <div
         class="player-full"
-        :role="player.expanded ? 'dialog' : undefined"
-        :aria-modal="player.expanded ? 'true' : undefined"
+        :role="npModal ? 'dialog' : player.expanded ? 'complementary' : undefined"
+        :aria-modal="npModal ? 'true' : undefined"
         :aria-label="player.expanded ? 'Now playing' : undefined"
       >
         <div
@@ -312,7 +318,7 @@ export default defineComponent({
             aria-label="Close now playing"
             @click="collapse"
           >
-            <Icon name="chevron-down" />
+            <Icon :name="closeIcon" />
           </button>
         </div>
 

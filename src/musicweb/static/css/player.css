@@ -67,11 +67,6 @@
   display: none;
 }
 
-/* Desktop bar open targets + mobile sheet: no backdrop by default */
-.np-backdrop {
-  display: none;
-}
-
 #player.expanded {
   position: fixed;
   inset: 0;
