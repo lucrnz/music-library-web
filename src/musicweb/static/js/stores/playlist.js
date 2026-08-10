@@ -275,15 +275,15 @@ export async function fetchSavedPlaylists() {
   return data.items || [];
 }
 
-export async function loadSavedPlaylist(id, playIndex) {
+export async function loadSavedPlaylist(id, stopPlayback) {
   const full = await apiGet(
     `/api/playlists/${encodeURIComponent(id)}/tracks`
   );
   const tracks = (full.items || []).filter((t) => !t.is_missing && t.id);
   if (!tracks.length) return;
+  stopPlayback();
   pl.clear();
   await addToQueue(tracks);
-  if (pl.length) playIndex(0);
 }
 
 export async function deleteSavedPlaylist(id) {

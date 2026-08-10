@@ -85,7 +85,7 @@ export default defineComponent({
 
     async function onLoadSaved(sp) {
       try {
-        await loadSavedPlaylist(sp.id, playIndex);
+        await loadSavedPlaylist(sp.id, stopPlayback);
         await refreshSaved();
       } catch (err) {
         console.error(err);
