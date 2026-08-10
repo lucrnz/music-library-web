@@ -3,6 +3,7 @@
  */
 
 import { streamUrl } from "../api.js";
+import { PLACEHOLDER_COVER } from "../util.js";
 import {
   getLocalAudioUrl,
   getLocalCoverUrl,
@@ -92,13 +93,32 @@ export async function resolvePlaySource(track, ctx) {
 
 /**
  * Prefer local cover when downloads enabled and present.
+ * Only returns a remote /api/cover URL after the local OPFS check misses
+ * and the caller allows network (opts.offline !== true). Offline / no-remote
+ * falls back to the static placeholder so <img> and Media Session never
+ * point at dead cover endpoints for already-downloaded art.
+ *
  * @param {string|null|undefined} albumId
  * @param {'thumb'|'full'} size
- * @param {string} remoteUrl
+ * @param {string|null|undefined} remoteUrl
  * @param {boolean} enabled
+ * @param {{ offline?: boolean }} [opts]
  */
-export async function resolveCoverUrl(albumId, size, remoteUrl, enabled) {
-  if (!enabled || !albumId) return remoteUrl;
-  const local = await getLocalCoverUrl(albumId, size);
-  return local || remoteUrl;
+export async function resolveCoverUrl(
+  albumId,
+  size,
+  remoteUrl,
+  enabled,
+  opts = {}
+) {
+  if (enabled && albumId) {
+    try {
+      const local = await getLocalCoverUrl(albumId, size);
+      if (local) return local;
+    } catch (err) {
+      console.warn("Local cover resolve failed", err);
+    }
+  }
+  if (opts.offline) return PLACEHOLDER_COVER;
+  return remoteUrl || PLACEHOLDER_COVER;
 }

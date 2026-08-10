@@ -3,8 +3,11 @@
  */
 import { reactive } from "vue";
 import { coverUrl, streamUrl } from "../api.js";
+import { getTrackRecord } from "../downloads/catalog.js";
 import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
+import { PLACEHOLDER_COVER } from "../util.js";
 import {
+  canReachServer,
   downloads,
   isHardOffline,
   markDownloadBroken,
@@ -22,6 +25,12 @@ audio.setAttribute("playsinline", "");
 /** @type {string | null} blob: URL we must revoke */
 let localPlayUrl = null;
 
+/** Bumps when current track / cover resolve context changes (stale-await guard). */
+let coverResolveGen = 0;
+
+/** Track id we last resolved covers for (skip redundant resolve on play/pause). */
+let lastCoverTrackId = null;
+
 export const player = reactive({
   seeking: false,
   expanded: false,
@@ -34,6 +43,9 @@ export const player = reactive({
   fromDownload: false,
   /** User-visible play block message (null when clear) */
   playNotice: null,
+  /** Resolved cover URLs for PlayerBar (local OPFS or remote / placeholder). */
+  coverThumb: PLACEHOLDER_COVER,
+  coverFull: PLACEHOLDER_COVER,
 });
 
 const msSupported = "mediaSession" in navigator;
@@ -49,33 +61,75 @@ function setPlayNotice(msg) {
   player.playNotice = msg || null;
 }
 
+function clearCovers() {
+  player.coverThumb = PLACEHOLDER_COVER;
+  player.coverFull = PLACEHOLDER_COVER;
+}
+
+/**
+ * Resolve local/remote covers into player state + Media Session.
+ *
+ * Never paints remote /api/cover URLs until OPFS has been checked — otherwise
+ * <img> tags kick off network fetches for already-downloaded album art.
+ * Same-track calls (play/pause) are no-ops so we do not re-hit the network.
+ */
 async function updateMediaSession() {
-  if (!msSupported) return;
   const t = pl.current;
   if (!t) {
-    navigator.mediaSession.metadata = null;
+    coverResolveGen += 1;
+    lastCoverTrackId = null;
+    clearCovers();
+    if (msSupported) navigator.mediaSession.metadata = null;
     return;
   }
-  const albumId = t.album_id || t.albumId;
-  const thumb = await resolveCoverUrl(
-    albumId,
-    "thumb",
-    coverUrl(t, "thumb", false),
-    downloads.enabled
-  );
-  const full = await resolveCoverUrl(
-    albumId,
-    "full",
-    coverUrl(t, "full", false),
-    downloads.enabled
-  );
+
+  const trackKey = t.id || t.path || null;
+  if (trackKey != null && trackKey === lastCoverTrackId) {
+    return;
+  }
+
+  const gen = ++coverResolveGen;
+  // Drop previous track art while we resolve — never assign remote yet.
+  clearCovers();
+
+  let albumId = t.album_id || t.albumId || null;
+  // Playlist rows sometimes omit album_id; fall back to the download catalog.
+  if (!albumId && downloads.enabled && t.id) {
+    try {
+      const rec = await getTrackRecord(t.id);
+      if (rec?.albumId) albumId = rec.albumId;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (gen !== coverResolveGen) return;
+
+  // Remote only when we can actually reach the library server.
+  const allowRemote = !isHardOffline() && canReachServer();
+  const opts = { offline: !allowRemote };
+  const remoteThumb = allowRemote ? coverUrl(t, "thumb", false) : null;
+  const remoteFull = allowRemote ? coverUrl(t, "full", false) : null;
+
+  const [thumb, full] = await Promise.all([
+    resolveCoverUrl(albumId, "thumb", remoteThumb, downloads.enabled, opts),
+    resolveCoverUrl(albumId, "full", remoteFull, downloads.enabled, opts),
+  ]);
+
+  if (gen !== coverResolveGen) return;
+  if (pl.current?.id !== t.id) return;
+
+  lastCoverTrackId = trackKey;
+  player.coverThumb = thumb || PLACEHOLDER_COVER;
+  player.coverFull = full || PLACEHOLDER_COVER;
+
+  if (!msSupported) return;
   navigator.mediaSession.metadata = new MediaMetadata({
     title: t.title,
     artist: t.artist,
     album: t.album,
     artwork: [
-      { src: thumb, sizes: "200x200", type: "image/webp" },
-      { src: full, sizes: "1000x1000", type: "image/webp" },
+      { src: player.coverThumb, sizes: "200x200", type: "image/webp" },
+      { src: player.coverFull, sizes: "1000x1000", type: "image/webp" },
     ],
   });
 }
@@ -108,7 +162,6 @@ function syncTransportFlags() {
     navigator.mediaSession.playbackState =
       pl.index >= 0 ? (audio.paused ? "paused" : "playing") : "none";
   }
-  updateMediaSession();
 }
 
 export function stopPlayback() {
@@ -118,11 +171,14 @@ export function stopPlayback() {
   revokeLocalPlayUrl();
   player.fromDownload = false;
   setPlayNotice(null);
+  lastCoverTrackId = null;
+  clearCovers();
   pl.index = -1;
   player.currentTime = 0;
   player.duration = 0;
   commit();
   syncTransportFlags();
+  updateMediaSession();
 }
 
 export async function playIndex(index) {
@@ -133,6 +189,8 @@ export async function playIndex(index) {
   }
   const track = pl.current;
   commit();
+  // Resolve covers for the new track (local-first; no remote paint until checked).
+  lastCoverTrackId = null;
   updateMediaSession();
 
   revokeLocalPlayUrl();
@@ -265,6 +323,11 @@ export function applyVolume() {
     /* ignore */
   }
   audio.volume = player.volume;
+}
+
+/** Resolve covers for the current playlist track (e.g. after session restore). */
+export function refreshPlayerCovers() {
+  return updateMediaSession();
 }
 
 export function initAudioListeners() {

@@ -1,6 +1,5 @@
 import { computed, defineComponent, nextTick, ref, watch } from "vue";
-import { coverUrl } from "../../api.js";
-import { formatTime, setRangeFill, PLACEHOLDER_COVER } from "../../util.js";
+import { formatTime, setRangeFill } from "../../util.js";
 import { pl } from "../../stores/playlist.js";
 import {
   player,
@@ -34,12 +33,9 @@ export default defineComponent({
       if (!t) return "No track";
       return [t.artist, t.album].filter(Boolean).join(" — ") || "Unknown";
     });
-    const coverThumb = computed(() =>
-      track.value ? coverUrl(track.value, "thumb") : PLACEHOLDER_COVER
-    );
-    const coverFull = computed(() =>
-      track.value ? coverUrl(track.value, "full") : PLACEHOLDER_COVER
-    );
+    // Covers resolved in player store (local OPFS when downloaded / offline).
+    const coverThumb = computed(() => player.coverThumb);
+    const coverFull = computed(() => player.coverFull);
     const seekValue = computed(() => {
       const dur = player.duration;
       if (!dur) return 0;

@@ -8,6 +8,7 @@ import { loadPlaylist } from "./stores/playlist.js";
 import {
   applyVolume,
   initAudioListeners,
+  refreshPlayerCovers,
 } from "./stores/player.js";
 import { loadCodecs } from "./stores/settings.js";
 import { initDownloads } from "./stores/downloads.js";
@@ -16,7 +17,8 @@ loadPlaylist();
 applyVolume();
 initAudioListeners();
 loadCodecs();
-initDownloads();
+// Wait for downloads catalog so restored tracks can use local OPFS covers.
+initDownloads().then(() => refreshPlayerCovers());
 
 const app = createApp(App);
 app.use(router);
