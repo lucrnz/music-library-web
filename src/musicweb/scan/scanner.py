@@ -17,10 +17,12 @@ from musicweb.db.engine import Database
 from musicweb.db.fts import fts_rebuild
 from musicweb.db.models import ScanState
 from musicweb.library import Library
+from musicweb.lyrics import LyricsFetcher
 from musicweb.scan.artist_images import fetch_artist_images
 from musicweb.scan.batch import process_batch
 from musicweb.scan.covers import extract_covers
 from musicweb.scan.finalize import mark_missing, recount_entities
+from musicweb.scan.lyrics import fetch_track_lyrics
 from musicweb.scan.walk import iter_lossless_audio
 from musicweb.timeutil import utc_now_iso
 
@@ -48,6 +50,7 @@ class LibraryScanner:
         self._artist_fetcher = ArtistImageFetcher(
             artist_image_store, library, settings
         )
+        self._lyrics_fetcher = LyricsFetcher(settings)
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._cancel = threading.Event()
@@ -231,7 +234,7 @@ class LibraryScanner:
                 self._thread = None
 
     def _scan(self, mode: ScanMode) -> None:
-        """Single-pass index, then finalize → covers → artist images."""
+        """Single-pass index, then finalize → covers → artist images → lyrics."""
         seen_count, upserted, seen_paths, cover_queue = self._phase_index(mode)
         if self._cancel.is_set():
             return
@@ -273,6 +276,24 @@ class LibraryScanner:
             self._db,
             self._artist_fetcher,
             cancel=self._cancel.is_set,
+        )
+
+        if self._cancel.is_set():
+            return
+
+        self._progress(
+            mode=mode,
+            phase="lyrics",
+            files_seen=seen_count,
+            files_upserted=upserted,
+            files_missing=missing,
+        )
+        fetch_track_lyrics(
+            self._db,
+            self._lyrics_fetcher,
+            self._library,
+            cancel=self._cancel.is_set,
+            force=(mode == "full"),
         )
 
     def _phase_index(
