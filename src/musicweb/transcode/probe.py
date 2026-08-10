@@ -39,13 +39,13 @@ def probe_source_audio_tech(
 
         meta = read_metadata(path)
         if rate is None:
-            rate = meta.get("sample_rate_hz")
+            rate = meta.sample_rate_hz
         if bits is None:
-            bits = meta.get("bit_depth")
+            bits = meta.bit_depth
         if channels is None:
-            channels = meta.get("channels")
+            channels = meta.channels
         if codec is None:
-            codec = meta.get("source_codec")
+            codec = meta.source_codec
     except Exception as exc:
         logger.debug("mutagen tech probe failed for %s: %s", path, exc)
 

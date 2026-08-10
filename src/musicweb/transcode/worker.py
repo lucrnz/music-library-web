@@ -1,20 +1,8 @@
 """On-demand multi-codec streaming via ffmpeg (Opus + FLAC).
 
-Profiles:
-  - opus_192_48000 → Opus VBR 192 kbps @ 48 kHz (libopus) — default
-  - opus_160_48000 → Opus VBR 160 kbps @ 48 kHz (libopus)
-  - flac_16_44100  → FLAC 16-bit @ 44.1 kHz (ffmpeg default compression)
-  - flac_16_48000  → FLAC 16-bit @ 48 kHz (ffmpeg default compression)
-  - flac_24_96000  → FLAC 24-bit @ 96 kHz (ffmpeg default compression)
-
-High-quality rate/bit-depth conversion uses libsoxr through aresample at
-SoX "very high quality" equivalents (``rate -v -L``):
-  - precision=28 ≈ SoX ``rate -v``
-  - linear phase ≈ SoX ``-L`` (libsoxr default; not exposed in ffmpeg)
-  - cutoff=0.95 (SoX VHQ ~95% bandwidth; ffmpeg soxr default is ~0.91)
-  - dither_method=shibata ≈ SoX ``dither -s`` **only when reducing bit depth**
-    (source bits > profile bits). Never dither when increasing bit depth
-    (e.g. 16→24). Perfect rate+depth match skips aresample entirely.
+Owns queue, preemption, subprocess lifecycle, and ``.partial`` atomic rename.
+Encode argv fragments and aresample/dither *policy* live in ``profiles``
+(``StreamProfile``, ``plan_aresample``).
 
 Cache files live under the process cache ``streams/`` subdirectory and are
 wiped with the process root on shutdown (or via scoped ``/api/cache/clear``).
@@ -38,17 +26,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from musicweb.transcode.probe import SourceAudioTech, probe_source_audio_tech
-from musicweb.transcode.profiles import DEFAULT_PROFILE_TAG, StreamProfile, get_profile
+from musicweb.transcode.profiles import (
+    DEFAULT_PROFILE_TAG,
+    StreamProfile,
+    get_profile,
+    plan_aresample,
+)
 
 logger = logging.getLogger(__name__)
-
-# SoX rate -v -L via libsoxr. Shibata dither only when reducing bit depth.
-ARESAMPLE_HQ = (
-    "aresample=resampler=soxr:precision=28:cutoff=0.95:dither_method=shibata"
-)
-ARESAMPLE_HQ_NO_DITHER = (
-    "aresample=resampler=soxr:precision=28:cutoff=0.95"
-)
 
 
 class TranscodeCanceled(Exception):
@@ -207,49 +192,6 @@ class Transcoder:
             err = (stderr or b"").decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"{label} failed: {err or proc.returncode}")
 
-    @staticmethod
-    def _sample_fmt(profile: StreamProfile) -> str:
-        """PCM sample format for the profile's encoder + bit depth."""
-        if profile.kind == "flac":
-            # FLAC: s16 or s32 (+ bits_per_raw_sample for true 24-bit).
-            return "s32" if profile.bit_depth >= 24 else "s16"
-        # Lossy codecs (Opus): 16-bit intermediate is standard.
-        return "s16"
-
-    @staticmethod
-    def _aresample_filter(
-        profile: StreamProfile,
-        source_tech: SourceAudioTech | None,
-    ) -> str | None:
-        """Return aresample filter string, or None to skip aresample.
-
-        Policy:
-          - Perfect rate+depth match → no filter
-          - Source bits > profile bits → soxr + Shibata dither
-          - Unknown bits → 16-bit target → dither (conservative)
-          - Else (rate change, same/up depth, unknown→24) → soxr without dither
-        """
-        src_rate = source_tech.sample_rate_hz if source_tech else None
-        src_bits = source_tech.bit_depth if source_tech else None
-        tgt_rate = profile.sample_rate
-        tgt_bits = profile.bit_depth
-
-        if (
-            src_rate is not None
-            and src_bits is not None
-            and src_rate == tgt_rate
-            and src_bits == tgt_bits
-        ):
-            return None
-
-        if src_bits is not None and src_bits > tgt_bits:
-            return ARESAMPLE_HQ
-
-        if src_bits is None and tgt_bits <= 16:
-            return ARESAMPLE_HQ
-
-        return ARESAMPLE_HQ_NO_DITHER
-
     def _encode_cmd(
         self,
         source: Path,
@@ -269,41 +211,22 @@ class Transcoder:
             "-map",
             "0:a:0",
         ]
-        af = self._aresample_filter(profile, source_tech)
-        if af is not None:
-            cmd.extend(["-af", af])
+        plan = plan_aresample(profile, source_tech)
+        if plan.filter is not None:
+            cmd.extend(["-af", plan.filter])
         cmd.extend(
             [
                 "-sample_fmt",
-                self._sample_fmt(profile),
+                profile.sample_fmt(),
                 "-ar",
                 str(profile.sample_rate),
                 "-vn",
+                *profile.ffmpeg_codec_args(),
+                "-f",
+                profile.ffmpeg_container_format(),
+                str(dest_partial),
             ]
         )
-
-        if profile.kind == "opus":
-            cmd.extend(
-                [
-                    "-c:a",
-                    "libopus",
-                    "-b:a",
-                    f"{profile.bitrate_kbps}k",
-                    "-vbr",
-                    "on",
-                ]
-            )
-            fmt = "opus"
-        elif profile.kind == "flac":
-            # Leave compression at ffmpeg default; set true 24-bit when needed.
-            cmd.extend(["-c:a", "flac"])
-            if profile.bit_depth >= 24:
-                cmd.extend(["-bits_per_raw_sample", "24"])
-            fmt = "flac"
-        else:
-            raise ValueError(f"Unknown profile kind: {profile.kind}")
-
-        cmd.extend(["-f", fmt, str(dest_partial)])
         return cmd
 
     def prepare(
@@ -526,12 +449,6 @@ class Transcoder:
                     self._queue_cond.notify_all()
                 job.done.set()
 
-    def _encoder_label(self, profile: StreamProfile) -> str:
-        """Human label for the encoder a profile encodes with."""
-        if profile.kind == "opus":
-            return "libopus"
-        return "flac"
-
     def _run_job(self, job: _Job) -> None:
         """Encode one job into a .partial, atomic rename on success."""
         profile = job.profile
@@ -540,20 +457,19 @@ class Transcoder:
         if tech is None or tech.sample_rate_hz is None or tech.bit_depth is None:
             tech = probe_source_audio_tech(job.source, known=tech)
             job.source_tech = tech
-        af = self._aresample_filter(profile, tech)
-        dither = af is not None and "dither_method" in af
+        plan = plan_aresample(profile, tech)
         logger.info(
             "Transcode %s → profile=%s encoder=%s ar=%s bit=%s "
             "src=%s/%s resample=%s dither=%s%s",
             job.relative_path,
             profile.tag,
-            self._encoder_label(profile),
+            profile.encoder_label(),
             profile.sample_rate,
             profile.bit_depth,
             tech.bit_depth if tech else None,
             tech.sample_rate_hz if tech else None,
-            "no" if af is None else "soxr",
-            "yes" if dither else "no",
+            "no" if plan.filter is None else "soxr",
+            "yes" if plan.dither else "no",
             " (urgent)" if job.urgent else "",
         )
 
