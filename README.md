@@ -104,7 +104,7 @@ To upgrade Vue/Router: edit versions and URLs in `vendor_deps.py`, restart — t
 - **Stable track IDs** from content fingerprints (FLAC STREAMINFO MD5; other lossless: SHA-256); renames reattach when fingerprint matches
 - **Incremental scan on startup** + Settings: **Quick rescan**, **Full re-index**, progress, cancel (full scan rebuilds FTS)
 - Packed lossless only: `.flac`, ALAC in `.m4a`/`.mp4` (WAV/AIFF and AAC `.m4a` are not indexed)
-- Session **queue** (browser sessionStorage) + **saved playlists** in SQLite (shared across LAN devices)
+- **Queue** (browser localStorage — survives restart) + **saved playlists** in SQLite (shared across LAN devices)
 - Play / pause / next / prev, seek, volume, shuffle, repeat
 - Cover art: embedded (ffmpeg) or folder `cover.jpg` / `cover.png` / etc., encoded once to WebP under the data dir (survives restarts)
   - Full ≈ 1000×1000 lossless WebP; thumb 200×200 quality 90

@@ -1,5 +1,5 @@
 /**
- * Session queue (tracks + shuffle cursor) and persistence.
+ * Playback queue (tracks + shuffle cursor) and localStorage persistence.
  * Does not import components — player store imports this.
  */
 import { reactive } from "vue";
@@ -153,7 +153,7 @@ export const pl = reactive({
 
 function savePlaylist() {
   try {
-    sessionStorage.setItem(
+    localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         playlist: pl.tracks,
@@ -167,9 +167,34 @@ function savePlaylist() {
   }
 }
 
+/** Prefer localStorage; migrate once from sessionStorage if needed. */
+function readPlaylistRaw() {
+  try {
+    const local = localStorage.getItem(STORAGE_KEY);
+    if (local) return local;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const session = sessionStorage.getItem(STORAGE_KEY);
+    if (session) {
+      try {
+        localStorage.setItem(STORAGE_KEY, session);
+        sessionStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* keep reading from session if migrate fails */
+      }
+      return session;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export function loadPlaylist() {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = readPlaylistRaw();
     if (!raw) return;
     const data = JSON.parse(raw);
     if (Array.isArray(data.playlist)) {
@@ -184,6 +209,7 @@ export function loadPlaylist() {
     ) {
       pl.repeat = data.repeat;
     }
+    if (pl.shuffle && pl.tracks.length) pl.rebuildShuffle();
     // Re-persist camelCase after migrating legacy snake_case rows.
     savePlaylist();
   } catch {
@@ -197,7 +223,7 @@ export function commit() {
 }
 
 /**
- * Add tracks to the session queue.
+ * Add tracks to the playback queue.
  * Accepts full Track objects, or bare ids / { id } (meta-fetched).
  */
 export async function addToQueue(entries) {
