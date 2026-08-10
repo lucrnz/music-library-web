@@ -12,6 +12,8 @@ import {
   preparedKeys,
   clearCache,
 } from "../api.js";
+import { downloadStatusFor } from "../downloads/catalog.js";
+import { downloads } from "./downloads.js";
 import { settings } from "./settings.js";
 
 const STORAGE_KEY = "musicweb.playlist.v1";
@@ -194,7 +196,7 @@ function normalizeTrack(meta) {
     title: meta.title || "Unknown",
     artist: meta.artist || "",
     album: meta.album || "",
-    album_id: meta.album_id || null,
+    album_id: meta.album_id || meta.albumId || null,
     duration: meta.duration ?? null,
   };
 }
@@ -240,7 +242,32 @@ export async function addToQueue(entries) {
   if (!playable.length) return;
   pl.add(playable);
   commit();
-  requestPrepare(playable, settings.stream);
+
+  // Skip /api/transcode/prepare for tracks already downloaded at the
+  // current stream codec — playback will use OPFS, not the server stream.
+  const toPrepare = downloads.enabled
+    ? await tracksNeedingPrepare(playable, settings.stream)
+    : playable;
+  if (toPrepare.length) requestPrepare(toPrepare, settings.stream);
+}
+
+/**
+ * @param {Track[]} tracks
+ * @param {string} codec
+ * @returns {Promise<Track[]>}
+ */
+async function tracksNeedingPrepare(tracks, codec) {
+  const out = [];
+  for (const t of tracks) {
+    if (!t?.id) continue;
+    try {
+      if ((await downloadStatusFor(t.id, codec)) === "ready") continue;
+    } catch {
+      /* catalog unavailable — still prepare */
+    }
+    out.push(t);
+  }
+  return out;
 }
 
 /**
