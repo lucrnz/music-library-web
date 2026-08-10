@@ -197,6 +197,7 @@ async def cover(
         result = await run_in_threadpool(
             store.get_or_fill, resolved_album_id, audio_path
         )
+        # Persist has_cover flag; get_db commits the session on success.
         album = db.get(Album, resolved_album_id)
         if album is not None:
             album.has_cover = store.has_cover(resolved_album_id)
