@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from musicweb.db.models import Playlist, PlaylistTrack, Track
 from musicweb.db.names import playlist_id_new
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+from musicweb.timeutil import utc_now_iso
 
 
 def list_all(session: Session) -> list[tuple[Playlist, int]]:
@@ -36,7 +31,7 @@ def get(session: Session, playlist_id: str) -> Playlist | None:
 
 
 def create(session: Session, name: str) -> Playlist:
-    now = _utc_now()
+    now = utc_now_iso()
     pl = Playlist(
         id=playlist_id_new(),
         name=name.strip(),
@@ -53,7 +48,7 @@ def rename(session: Session, playlist_id: str, name: str) -> Playlist | None:
     if pl is None:
         return None
     pl.name = name.strip()
-    pl.updated_at = _utc_now()
+    pl.updated_at = utc_now_iso()
     return pl
 
 
@@ -104,7 +99,7 @@ def replace_tracks(
         session.add(
             PlaylistTrack(playlist_id=playlist_id, position=pos, track_id=tid)
         )
-    pl.updated_at = _utc_now()
+    pl.updated_at = utc_now_iso()
     return True, []
 
 
@@ -133,5 +128,5 @@ def append_tracks(session: Session, playlist_id: str, track_ids: list[str]) -> i
         )
         pos += 1
         added += 1
-    pl.updated_at = _utc_now()
+    pl.updated_at = utc_now_iso()
     return added
