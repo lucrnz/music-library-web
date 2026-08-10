@@ -12,15 +12,26 @@ import { loadDownloadsView } from "../../downloads/browse.js";
 import { downloads } from "../../downloads/state.js";
 import { addToQueue } from "../../stores/playlist.js";
 import { openSettings } from "../../stores/settings.js";
+import { toggleLibraryLayout, ui } from "../../stores/ui.js";
 import Icon from "../icons/Icon.js";
 import ModeBar from "../layout/ModeBar.js";
 import AlbumCard from "../library/rows/AlbumCard.js";
+import AlbumListRow from "../library/rows/AlbumListRow.js";
+import ArtistCard from "../library/rows/ArtistCard.js";
 import ArtistRow from "../library/rows/ArtistRow.js";
 import TrackRow from "../library/rows/TrackRow.js";
 
 export default defineComponent({
   name: "DownloadsLibraryView",
-  components: { Icon, ModeBar, AlbumCard, ArtistRow, TrackRow },
+  components: {
+    Icon,
+    ModeBar,
+    AlbumCard,
+    AlbumListRow,
+    ArtistCard,
+    ArtistRow,
+    TrackRow,
+  },
   setup() {
     const route = useRoute();
     const router = useRouter();
@@ -32,7 +43,8 @@ export default defineComponent({
     const artists = ref([]);
     const albums = ref([]);
     const tracks = ref([]);
-    const albumGrid = ref(false);
+    /** True when the page is an albums collection (not tracks). */
+    const albumsPage = ref(false);
     const localArt = ref({});
     let renderSeq = 0;
 
@@ -40,6 +52,25 @@ export default defineComponent({
     const artistId = computed(() => route.params?.artistId);
     const albumId = computed(() => route.params?.albumId);
     const showAddAll = computed(() => Boolean(tracks.value.length));
+
+    /** Hide toggle on album track pages; show for artists and albums browse. */
+    const showLayoutToggle = computed(
+      () => String(routeName.value || "") !== "downloads-album"
+    );
+    const isGrid = computed(
+      () => showLayoutToggle.value && ui.libraryLayout === "grid"
+    );
+    const gridHost = computed(
+      () =>
+        isGrid.value &&
+        (artists.value.length > 0 || (albumsPage.value && albums.value.length > 0))
+    );
+    const layoutToggleIcon = computed(() =>
+      ui.libraryLayout === "grid" ? "layout-list" : "layout-grid"
+    );
+    const layoutToggleLabel = computed(() =>
+      ui.libraryLayout === "grid" ? "Switch to list view" : "Switch to grid view"
+    );
 
     function isCurrent(seq) {
       return seq === renderSeq;
@@ -52,7 +83,7 @@ export default defineComponent({
       artists.value = [];
       albums.value = [];
       tracks.value = [];
-      albumGrid.value = false;
+      albumsPage.value = false;
       loading.value = true;
       try {
         const view = await loadDownloadsView({
@@ -68,7 +99,7 @@ export default defineComponent({
         artists.value = view.artists;
         albums.value = view.albums;
         tracks.value = view.tracks;
-        albumGrid.value = view.albumGrid;
+        albumsPage.value = view.albumGrid;
         localArt.value = view.artUrls;
       } catch (err) {
         if (!isCurrent(seq)) return;
@@ -143,8 +174,14 @@ export default defineComponent({
       artists,
       albums,
       tracks,
-      albumGrid,
+      albumsPage,
       showAddAll,
+      showLayoutToggle,
+      isGrid,
+      gridHost,
+      layoutToggleIcon,
+      layoutToggleLabel,
+      toggleLibraryLayout,
       goBack,
       openArtist,
       openAlbum,
@@ -182,6 +219,16 @@ export default defineComponent({
             @click="addAll"
           >Add all</button>
           <button
+            v-if="showLayoutToggle"
+            type="button"
+            class="icon-btn"
+            :title="layoutToggleLabel"
+            :aria-label="layoutToggleLabel"
+            @click="toggleLibraryLayout"
+          >
+            <Icon :name="layoutToggleIcon" />
+          </button>
+          <button
             type="button"
             class="icon-btn"
             title="Settings"
@@ -196,23 +243,34 @@ export default defineComponent({
 
       <ModeBar />
 
-      <div class="row-list" :class="{ 'album-grid-host': albumGrid }">
+      <div class="row-list" :class="{ 'album-grid-host': gridHost }">
         <div v-if="error" class="list-empty">Error: {{ error }}</div>
         <div v-else-if="loading" class="list-empty">Loading…</div>
         <div v-else-if="emptyMsg" class="list-empty">{{ emptyMsg }}</div>
 
         <template v-else-if="artists.length">
-          <ArtistRow
-            v-for="artist in artists"
-            :key="artist.id"
-            :artist="artist"
-            :cover-src="artistCoverSrc(artist)"
-            @open="openArtist"
-          />
+          <div v-if="isGrid" class="album-grid">
+            <ArtistCard
+              v-for="artist in artists"
+              :key="artist.id"
+              :artist="artist"
+              :cover-src="artistCoverSrc(artist)"
+              @open="openArtist"
+            />
+          </div>
+          <template v-else>
+            <ArtistRow
+              v-for="artist in artists"
+              :key="artist.id"
+              :artist="artist"
+              :cover-src="artistCoverSrc(artist)"
+              @open="openArtist"
+            />
+          </template>
         </template>
 
-        <template v-else-if="albumGrid && albums.length">
-          <div class="album-grid">
+        <template v-else-if="albumsPage && albums.length">
+          <div v-if="isGrid" class="album-grid">
             <AlbumCard
               v-for="album in albums"
               :key="album.id"
@@ -221,6 +279,15 @@ export default defineComponent({
               @open="openAlbum"
             />
           </div>
+          <template v-else>
+            <AlbumListRow
+              v-for="album in albums"
+              :key="album.id"
+              :album="album"
+              :cover-src="albumCoverSrc(album)"
+              @open="openAlbum"
+            />
+          </template>
         </template>
 
         <template v-else-if="tracks.length">

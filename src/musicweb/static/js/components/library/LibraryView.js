@@ -13,6 +13,7 @@ import { useRouter } from "vue-router";
 import {
   clearLibSelection,
   toggleLibSelection,
+  toggleLibraryLayout,
   ui,
 } from "../../stores/ui.js";
 import { openSettings } from "../../stores/settings.js";
@@ -33,8 +34,11 @@ import { loadLibraryPage } from "./loaders.js";
 import { useLibraryLocation } from "./useLibraryLocation.js";
 import AlbumCard from "./rows/AlbumCard.js";
 import AlbumListRow from "./rows/AlbumListRow.js";
+import ArtistCard from "./rows/ArtistCard.js";
 import ArtistRow from "./rows/ArtistRow.js";
+import FileCard from "./rows/FileCard.js";
 import FileRow from "./rows/FileRow.js";
+import FolderCard from "./rows/FolderCard.js";
 import FolderRow from "./rows/FolderRow.js";
 import TrackRow from "./rows/TrackRow.js";
 
@@ -48,8 +52,11 @@ export default defineComponent({
     ModeBar,
     AlbumCard,
     AlbumListRow,
+    ArtistCard,
     ArtistRow,
+    FileCard,
     FileRow,
+    FolderCard,
     FolderRow,
     TrackRow,
   },
@@ -96,7 +103,33 @@ export default defineComponent({
         body.value.kind === "tracks" &&
         body.value.tracks.length > 0
     );
-    const albumGridHost = computed(() => body.value.kind === "albumGrid");
+
+    /** Layout toggle: folders / artists / albums browse — not search or track lists. */
+    const showLayoutToggle = computed(() => {
+      if (isSearch.value || mode.value === "search") return false;
+      // Album detail is always a track list.
+      if (albumId.value || body.value.kind === "tracks") return false;
+      if (body.value.kind === "search") return false;
+      return (
+        mode.value === "folders" ||
+        mode.value === "artists" ||
+        mode.value === "albums"
+      );
+    });
+    const isGrid = computed(
+      () => showLayoutToggle.value && ui.libraryLayout === "grid"
+    );
+    const gridHost = computed(() => {
+      if (!isGrid.value) return false;
+      const k = body.value.kind;
+      return k === "folders" || k === "artists" || k === "albumGrid";
+    });
+    const layoutToggleIcon = computed(() =>
+      ui.libraryLayout === "grid" ? "layout-list" : "layout-grid"
+    );
+    const layoutToggleLabel = computed(() =>
+      ui.libraryLayout === "grid" ? "Switch to list view" : "Switch to grid view"
+    );
 
     function isCurrent(seq) {
       return seq === renderSeq;
@@ -255,7 +288,12 @@ export default defineComponent({
       showAddAll,
       showAddSelected,
       showDownloadAlbum,
-      albumGridHost,
+      showLayoutToggle,
+      isGrid,
+      gridHost,
+      layoutToggleIcon,
+      layoutToggleLabel,
+      toggleLibraryLayout,
       goBack,
       openFolder,
       openArtist,
@@ -312,6 +350,16 @@ export default defineComponent({
             @click="downloadCurrentAlbum"
           ><Icon name="download" /><span>Download</span></button>
           <button
+            v-if="showLayoutToggle"
+            type="button"
+            class="icon-btn"
+            :title="layoutToggleLabel"
+            :aria-label="layoutToggleLabel"
+            @click="toggleLibraryLayout"
+          >
+            <Icon :name="layoutToggleIcon" />
+          </button>
+          <button
             type="button"
             class="icon-btn"
             title="Settings"
@@ -339,39 +387,68 @@ export default defineComponent({
         />
       </div>
 
-      <div class="row-list" :class="{ 'album-grid-host': albumGridHost }">
+      <div class="row-list" :class="{ 'album-grid-host': gridHost }">
         <div v-if="error" class="list-empty">Error: {{ error }}</div>
         <div v-else-if="body.kind === 'empty'" class="list-empty">{{ body.message }}</div>
 
         <template v-else-if="body.kind === 'folders'">
-          <FolderRow
-            v-for="dir in body.dirs"
-            :key="'d-' + dir.path"
-            :dir="dir"
-            :selected="isSelected(dir.path)"
-            @open="openFolder"
-            @select="onFolderSelect"
-          />
-          <FileRow
-            v-for="file in body.files"
-            :key="'f-' + file.path"
-            :file="file"
-            :selected="isSelected(file.path)"
-            @select="onFileSelect"
-          />
+          <div v-if="isGrid" class="album-grid">
+            <FolderCard
+              v-for="dir in body.dirs"
+              :key="'d-' + dir.path"
+              :dir="dir"
+              :selected="isSelected(dir.path)"
+              @open="openFolder"
+              @select="onFolderSelect"
+            />
+            <FileCard
+              v-for="file in body.files"
+              :key="'f-' + file.path"
+              :file="file"
+              :selected="isSelected(file.path)"
+              @select="onFileSelect"
+            />
+          </div>
+          <template v-else>
+            <FolderRow
+              v-for="dir in body.dirs"
+              :key="'d-' + dir.path"
+              :dir="dir"
+              :selected="isSelected(dir.path)"
+              @open="openFolder"
+              @select="onFolderSelect"
+            />
+            <FileRow
+              v-for="file in body.files"
+              :key="'f-' + file.path"
+              :file="file"
+              :selected="isSelected(file.path)"
+              @select="onFileSelect"
+            />
+          </template>
         </template>
 
         <template v-else-if="body.kind === 'artists'">
-          <ArtistRow
-            v-for="artist in body.artists"
-            :key="artist.id"
-            :artist="artist"
-            @open="openArtist"
-          />
+          <div v-if="isGrid" class="album-grid">
+            <ArtistCard
+              v-for="artist in body.artists"
+              :key="artist.id"
+              :artist="artist"
+              @open="openArtist"
+            />
+          </div>
+          <template v-else>
+            <ArtistRow
+              v-for="artist in body.artists"
+              :key="artist.id"
+              :artist="artist"
+              @open="openArtist"
+            />
+          </template>
         </template>
 
         <template v-else-if="body.kind === 'albumGrid'">
-          <div class="album-grid">
+          <div v-if="isGrid" class="album-grid">
             <AlbumCard
               v-for="album in body.albums"
               :key="album.id"
@@ -379,6 +456,14 @@ export default defineComponent({
               @open="openAlbum"
             />
           </div>
+          <template v-else>
+            <AlbumListRow
+              v-for="album in body.albums"
+              :key="album.id"
+              :album="album"
+              @open="openAlbum"
+            />
+          </template>
         </template>
 
         <template v-else-if="body.kind === 'tracks'">
