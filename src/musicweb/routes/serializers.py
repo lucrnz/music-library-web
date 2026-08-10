@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from musicweb.db.models import Album, Artist, Track
+from musicweb.db.models import Album, Artist, Track, TrackLyrics
 
 
 def track_dict(track: Track) -> dict:
@@ -48,4 +48,29 @@ def album_dict(album: Album, *, artist_name: str | None = None) -> dict:
         "year": album.year,
         "track_count": album.track_count,
         "has_cover": album.has_cover,
+    }
+
+
+def lyrics_dict(track_id: str, row: TrackLyrics | None) -> dict:
+    """API shape for GET /api/tracks/{id}/lyrics (never 404 for missing row)."""
+    if row is None:
+        return {
+            "track_id": track_id,
+            "status": "pending",
+            "source": None,
+            "is_synced": False,
+            "plain_text": None,
+            "synced_lrc": None,
+            "instrumental": False,
+        }
+    status = row.status or "not_found"
+    instrumental = status == "instrumental"
+    return {
+        "track_id": track_id,
+        "status": status,
+        "source": row.source,
+        "is_synced": bool(row.is_synced and row.synced_lrc and not instrumental),
+        "plain_text": None if instrumental else row.plain_text,
+        "synced_lrc": None if instrumental else row.synced_lrc,
+        "instrumental": instrumental,
     }

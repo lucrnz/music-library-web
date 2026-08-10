@@ -9,11 +9,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from musicweb.db.fts import fts_search_track_ids
+from musicweb.db.models import TrackLyrics
 from musicweb.db.repositories import albums as albums_repo
 from musicweb.db.repositories import artists as artists_repo
 from musicweb.db.repositories import tracks as tracks_repo
 from musicweb.db.session import get_db
-from musicweb.routes.serializers import album_dict, artist_dict, track_dict
+from musicweb.routes.serializers import album_dict, artist_dict, lyrics_dict, track_dict
 
 router = APIRouter(prefix="/api", tags=["discovery"])
 
@@ -95,6 +96,16 @@ def get_track(track_id: str, db: Session = Depends(get_db)) -> dict:
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found")
     return track_dict(track)
+
+
+@router.get("/tracks/{track_id}/lyrics")
+def get_track_lyrics(track_id: str, db: Session = Depends(get_db)) -> dict:
+    """Return cached lyrics for a track (filled by the post-scan lyrics phase)."""
+    track = tracks_repo.get(db, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Track not found")
+    row = db.get(TrackLyrics, track_id)
+    return lyrics_dict(track_id, row)
 
 
 class TracksMetaRequest(BaseModel):
