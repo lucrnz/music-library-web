@@ -4,6 +4,7 @@
  * apiGet for track lists.
  */
 
+import { fromApiLyrics } from "./models/lyrics.js";
 import { fromApiTrack, mapTracks } from "./models/track.js";
 
 export async function apiGet(url) {
@@ -120,6 +121,16 @@ export function streamUrl(track, codec) {
 export async function fetchTrack(id) {
   const raw = await apiGet(`/api/tracks/${encodeURIComponent(id)}`);
   return fromApiTrack(raw);
+}
+
+/**
+ * GET /api/tracks/{id}/lyrics — normalized camelCase Lyrics.
+ * @param {string} trackId
+ * @returns {Promise<import("./models/lyrics.js").Lyrics>}
+ */
+export async function fetchLyrics(trackId) {
+  const raw = await apiGet(`/api/tracks/${encodeURIComponent(trackId)}/lyrics`);
+  return fromApiLyrics(raw);
 }
 
 /**

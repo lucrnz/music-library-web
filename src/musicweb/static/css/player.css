@@ -100,6 +100,7 @@
 }
 
 .full-cover-wrap {
+  position: relative;
   display: flex;
   justify-content: center;
   flex: 1;
@@ -115,6 +116,107 @@
   border-radius: 12px;
   background: var(--surface-2);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+.full-cover-wrap.lyrics-open .full-cover {
+  filter: brightness(0.35) blur(2px);
+}
+
+/* Lyrics overlay (mobile expanded NP only) */
+.lyrics-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.lyrics-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.25) 0%,
+    rgba(0, 0, 0, 0.55) 40%,
+    rgba(0, 0, 0, 0.7) 100%
+  );
+  pointer-events: none;
+}
+
+.lyrics-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px 20px 40px;
+  text-align: center;
+  -webkit-overflow-scrolling: touch;
+}
+
+.lyrics-status {
+  margin: 40% auto 0;
+  max-width: 16em;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.4;
+}
+
+.lyrics-plain {
+  white-space: pre-wrap;
+  font-size: 16px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: left;
+  max-width: 28em;
+  margin: 0 auto;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.lyrics-lines {
+  list-style: none;
+  margin: 0;
+  padding: 20vh 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lyrics-line {
+  font-size: 17px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  user-select: none;
+}
+
+.lyrics-line.past {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.lyrics-line.active {
+  color: #fff;
+  font-weight: 600;
+  font-size: 19px;
+  transform: scale(1.02);
+}
+
+.lyrics-line:active {
+  color: var(--accent, #7dd3fc);
+}
+
+/* Lyrics toggle only on mobile expanded sheet */
+.lyrics-toggle {
+  display: none;
+}
+
+#player.expanded .lyrics-toggle {
+  display: inline-flex;
 }
 
 .full-meta {

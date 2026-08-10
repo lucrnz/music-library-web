@@ -68,6 +68,16 @@
     object-fit: cover;
   }
 
+  /* v1: lyrics UI is mobile expanded only */
+  .lyrics-toggle,
+  .lyrics-overlay {
+    display: none !important;
+  }
+
+  .full-cover-wrap.lyrics-open .full-cover {
+    filter: none;
+  }
+
   .full-meta {
     grid-column: 2;
     grid-row: 1 / 3;

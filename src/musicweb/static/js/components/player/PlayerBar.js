@@ -13,12 +13,13 @@ import {
 } from "../../stores/player.js";
 import { openSettings } from "../../stores/settings.js";
 import Icon from "../icons/Icon.js";
+import LyricsOverlay from "./LyricsOverlay.js";
 
 const DESKTOP_BREAKPOINT = "(min-width: 900px)";
 
 export default defineComponent({
   name: "PlayerBar",
-  components: { Icon },
+  components: { Icon, LyricsOverlay },
   setup() {
     const root = ref(null);
     const seekEl = ref(null);
@@ -56,7 +57,20 @@ export default defineComponent({
       player.expanded = false;
       player.sheetOffset = 0;
       player.draggingSheet = false;
+      player.lyricsOpen = false;
     }
+
+    function toggleLyrics() {
+      if (!player.expanded) return;
+      player.lyricsOpen = !player.lyricsOpen;
+    }
+
+    const trackId = computed(() => track.value?.id || null);
+
+    // Close lyrics when the current track changes.
+    watch(trackId, () => {
+      player.lyricsOpen = false;
+    });
 
     function onSheetDown(e) {
       sheetDragY.value = e.clientY;
@@ -120,7 +134,7 @@ export default defineComponent({
       { immediate: true }
     );
 
-    // Collapse sheet when growing to desktop
+    // Collapse sheet when growing to desktop (collapse clears lyricsOpen).
     if (typeof window !== "undefined") {
       const mq = window.matchMedia(DESKTOP_BREAKPOINT);
       mq.addEventListener("change", (e) => {
@@ -150,6 +164,8 @@ export default defineComponent({
       formatTime,
       expand,
       collapse,
+      toggleLyrics,
+      trackId,
       onSheetDown,
       onSheetMove,
       onSheetUp,
@@ -208,8 +224,14 @@ export default defineComponent({
           </button>
         </div>
 
-        <div class="full-cover-wrap">
+        <div class="full-cover-wrap" :class="{ 'lyrics-open': player.lyricsOpen }">
           <img class="full-cover" :src="coverFull" alt="Album cover" />
+          <LyricsOverlay
+            :open="player.lyricsOpen"
+            :track-id="trackId"
+            :current-time="player.currentTime"
+            :duration="player.duration"
+          />
         </div>
 
         <div class="full-meta">
@@ -276,6 +298,14 @@ export default defineComponent({
               @input="onVolInput"
             />
           </label>
+          <button
+            type="button"
+            class="icon-btn toggle lyrics-toggle"
+            title="Lyrics"
+            aria-label="Lyrics"
+            :aria-pressed="player.lyricsOpen ? 'true' : 'false'"
+            @click="toggleLyrics"
+          ><Icon name="lyrics" /></button>
           <button
             type="button"
             class="icon-btn"

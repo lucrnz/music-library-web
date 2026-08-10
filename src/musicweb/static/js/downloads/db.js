@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = "musicweb-downloads";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /** @type {Promise<IDBDatabase> | null} */
 let dbOpen = null;
@@ -46,6 +46,9 @@ export function openDownloadsDb() {
       }
       if (!db.objectStoreNames.contains("meta")) {
         db.createObjectStore("meta", { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains("lyrics")) {
+        db.createObjectStore("lyrics", { keyPath: "trackId" });
       }
     };
   });
@@ -142,7 +145,15 @@ export async function clearStore(storeName) {
 }
 
 export async function wipeDownloadsDb() {
-  for (const n of ["tracks", "albums", "artists", "queue", "blobs", "meta"]) {
+  for (const n of [
+    "tracks",
+    "albums",
+    "artists",
+    "queue",
+    "blobs",
+    "meta",
+    "lyrics",
+  ]) {
     try {
       await clearStore(n);
     } catch {

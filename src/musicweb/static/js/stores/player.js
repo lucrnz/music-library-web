@@ -42,6 +42,8 @@ export const player = reactive({
   /** Resolved cover URLs for PlayerBar (local OPFS or remote / placeholder). */
   coverThumb: PLACEHOLDER_COVER,
   coverFull: PLACEHOLDER_COVER,
+  /** Mobile expanded now-playing: lyrics overlay open */
+  lyricsOpen: false,
 });
 
 const msSupported = "mediaSession" in navigator;

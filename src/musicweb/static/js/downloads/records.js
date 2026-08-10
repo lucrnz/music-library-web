@@ -17,6 +17,7 @@ import {
   wipeDownloadsDb,
   withStores,
 } from "./db.js";
+import { deleteLyricsRecord } from "./lyricsStore.js";
 import {
   artistIdsOf,
   codecExt,
@@ -226,6 +227,11 @@ export async function deleteTrackDownload(trackId) {
     rec.ext || codecExt(rec.codec)
   );
   await deleteBinary(audioDirParts(), name);
+  try {
+    await deleteLyricsRecord(trackId);
+  } catch {
+    /* optional store */
+  }
 
   /** @type {{ albumId: string|null, dropAlbum: boolean, dropArtists: string[], albumHadThumb: boolean, albumHadFull: boolean, artistHadThumb: Record<string, boolean> }} */
   const cleanup = {
