@@ -1,4 +1,4 @@
-/** Search results album row (list, not grid card). */
+/** Album row (list, not grid card) — Search + library list layout. */
 import { computed, defineComponent } from "vue";
 import { coverUrl } from "../../../api.js";
 import Icon from "../../icons/Icon.js";
@@ -8,11 +8,15 @@ export default defineComponent({
   components: { Icon },
   props: {
     album: { type: Object, required: true },
+    /** Override cover (local OPFS). */
+    coverSrc: { type: String, default: "" },
   },
   emits: ["open"],
   setup(props, { emit }) {
-    const cover = computed(() =>
-      coverUrl({ albumId: props.album.id }, "thumb", false)
+    const cover = computed(
+      () =>
+        props.coverSrc ||
+        coverUrl({ albumId: props.album.id }, "thumb", false)
     );
     const sub = computed(() => {
       const a = props.album;

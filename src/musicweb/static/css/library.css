@@ -65,33 +65,79 @@
   padding: 4px 8px 16px;
 }
 
-.album-card {
+/* Shared media cards (albums, artists, folders, files) */
+.media-card {
   display: flex;
   flex-direction: column;
   gap: 6px;
   text-align: left;
   padding: 0;
+  border: none;
   border-radius: 10px;
   overflow: hidden;
   background: transparent;
   color: inherit;
   cursor: pointer;
+  font: inherit;
+  width: 100%;
+  min-width: 0;
+  user-select: none;
 }
 
-.album-card:active {
+.media-card:active {
   transform: scale(0.98);
 }
 
-.album-card-cover {
+.media-card.selected {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.media-card-cover,
+.media-card-cover-wrap {
   width: 100%;
   aspect-ratio: 1;
-  object-fit: cover;
   border-radius: 8px;
   background: var(--surface-2);
   display: block;
 }
 
-.album-card-title {
+.media-card-cover {
+  object-fit: cover;
+}
+
+.media-card-cover--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.media-card-cover--icon .icon {
+  width: 36px;
+  height: 36px;
+}
+
+.media-card-cover-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.media-card-cover-wrap .media-card-cover {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+}
+
+.media-card-add {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  border-radius: 999px;
+}
+
+.media-card-title {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.25;
@@ -101,12 +147,17 @@
   -webkit-box-orient: vertical;
 }
 
-.album-card-sub {
+.media-card-sub {
   font-size: 11px;
   color: var(--text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.media-card--file .row-download {
+  align-self: flex-start;
+  margin-top: -2px;
 }
 
 .row-list {

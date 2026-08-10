@@ -23,10 +23,10 @@ export default defineComponent({
     return { cover, sub, onClick };
   },
   template: `
-    <button type="button" class="album-card" @click="onClick">
-      <img class="album-card-cover" :src="cover" alt="" loading="lazy" />
-      <span class="album-card-title">{{ album.title }}</span>
-      <span class="album-card-sub">{{ sub }}</span>
+    <button type="button" class="media-card" @click="onClick">
+      <img class="media-card-cover" :src="cover" alt="" loading="lazy" />
+      <span class="media-card-title">{{ album.title }}</span>
+      <span class="media-card-sub">{{ sub }}</span>
     </button>
   `,
 });
