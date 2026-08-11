@@ -10,9 +10,14 @@ import { pl } from "../../stores/playlist.js";
 import { playIndex } from "../../stores/player.js";
 import { canReachServer } from "../../connectivity.js";
 import {
+  PLAYBACK_POLICIES,
   settings,
   closeSettings,
-  setStreamCodec,
+  setStreamWifi,
+  setStreamCellular,
+  setDownloadCodec,
+  setPlaybackPolicy,
+  setOnlyDownloadOnWifi,
 } from "../../stores/settings.js";
 import {
   disableDownloads,
@@ -23,26 +28,32 @@ import {
 } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
 import Icon from "../icons/Icon.js";
+import QualitySelect from "./QualitySelect.js";
+
+const SAME_AS_WIFI = "__same_as_wifi__";
 
 export default defineComponent({
   name: "SettingsModal",
-  components: { Icon },
+  components: { Icon, QualitySelect },
   setup() {
     const statusText = ref("—");
     const progressPct = ref(0);
     const showProgress = ref(false);
     const scanning = ref(false);
     const downloadsBusy = ref(false);
-    const codecOpen = ref(false);
-    const codecRoot = ref(null);
+    /** @type {import('vue').Ref<string|null>} */
+    const openMenu = ref(null);
+    const qualityRoot = ref(null);
     let pollTimer = null;
 
-    /** Server reachable for library scan/index management. */
     const libraryReachable = computed(() => {
-      // Depend on reactive connectivity mirror; then re-check navigator/state.
       void downloads.connectivity;
       return canReachServer();
     });
+
+    const showNetworkQuality = computed(
+      () => settings.canDetectConnectionType
+    );
 
     function stopPoll() {
       if (pollTimer != null) {
@@ -122,29 +133,72 @@ export default defineComponent({
       }
     }
 
-    const streamLabel = computed(() => {
-      const id = settings.stream;
+    function labelFor(id) {
       const hit = settings.options.find((o) => o.id === id);
       return hit?.label || id || "—";
+    }
+
+    const wifiLabel = computed(() => labelFor(settings.streamWifi));
+    const cellularLabel = computed(() => {
+      if (settings.streamCellular == null) return "Same as Wi‑Fi";
+      return labelFor(settings.streamCellular);
+    });
+    const downloadLabel = computed(() => labelFor(settings.download));
+    const policyLabel = computed(() => {
+      const hit = PLAYBACK_POLICIES.find((p) => p.id === settings.playbackPolicy);
+      return hit?.label || settings.playbackPolicy;
+    });
+    const policyHint = computed(() => {
+      const hit = PLAYBACK_POLICIES.find((p) => p.id === settings.playbackPolicy);
+      return hit?.hint || "";
     });
 
-    function chooseCodec(id) {
-      codecOpen.value = false;
-      setStreamCodec(id, {
-        tracks: pl.tracks,
-        index: pl.index,
-        playIndex,
-      });
+    const cellularLeading = [
+      { id: SAME_AS_WIFI, label: "Same as Wi‑Fi" },
+    ];
+    /** selectedId for cellular: SAME_AS_WIFI token when null */
+    const cellularSelectedId = computed(() =>
+      settings.streamCellular == null ? SAME_AS_WIFI : settings.streamCellular
+    );
+
+    const playbackCtx = () => ({
+      tracks: pl.tracks,
+      index: pl.index,
+      playIndex,
+    });
+
+    function toggleMenu(id) {
+      openMenu.value = openMenu.value === id ? null : id;
     }
 
-    function toggleCodecMenu() {
-      codecOpen.value = !codecOpen.value;
+    function chooseWifi(id) {
+      openMenu.value = null;
+      setStreamWifi(id, playbackCtx());
     }
 
-    function onCodecDocPointer(e) {
-      if (!codecOpen.value) return;
-      const el = codecRoot.value;
-      if (el && !el.contains(e.target)) codecOpen.value = false;
+    function chooseCellular(id) {
+      openMenu.value = null;
+      setStreamCellular(id === SAME_AS_WIFI ? null : id, playbackCtx());
+    }
+
+    function chooseDownload(id) {
+      openMenu.value = null;
+      setDownloadCodec(id);
+    }
+
+    function choosePolicy(id) {
+      openMenu.value = null;
+      setPlaybackPolicy(id);
+    }
+
+    function onOnlyWifiChange(e) {
+      setOnlyDownloadOnWifi(e.target.checked);
+    }
+
+    function onDocPointer(e) {
+      if (!openMenu.value) return;
+      const el = qualityRoot.value;
+      if (el && !el.contains(e.target)) openMenu.value = null;
     }
 
     const downloadsStorageLine = computed(() => {
@@ -190,8 +244,8 @@ export default defineComponent({
 
     function onKey(e) {
       if (e.key !== "Escape" || !settings.open) return;
-      if (codecOpen.value) {
-        codecOpen.value = false;
+      if (openMenu.value) {
+        openMenu.value = null;
         e.preventDefault();
         return;
       }
@@ -220,12 +274,12 @@ export default defineComponent({
           syncLibrarySection();
           if (downloads.enabled) refreshStorageInfo();
           document.addEventListener("keydown", onKey);
-          document.addEventListener("pointerdown", onCodecDocPointer, true);
+          document.addEventListener("pointerdown", onDocPointer, true);
         } else {
-          codecOpen.value = false;
+          openMenu.value = null;
           stopPoll();
           document.removeEventListener("keydown", onKey);
-          document.removeEventListener("pointerdown", onCodecDocPointer, true);
+          document.removeEventListener("pointerdown", onDocPointer, true);
         }
       }
     );
@@ -237,7 +291,7 @@ export default defineComponent({
     onUnmounted(() => {
       stopPoll();
       document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onCodecDocPointer, true);
+      document.removeEventListener("pointerdown", onDocPointer, true);
     });
 
     const progressStyle = computed(() => ({
@@ -248,18 +302,30 @@ export default defineComponent({
       settings,
       downloads,
       libraryReachable,
+      showNetworkQuality,
       statusText,
       showProgress,
       progressStyle,
       scanning,
       downloadsBusy,
       downloadsStorageLine,
-      codecOpen,
-      codecRoot,
-      streamLabel,
+      openMenu,
+      qualityRoot,
+      wifiLabel,
+      cellularLabel,
+      cellularLeading,
+      cellularSelectedId,
+      downloadLabel,
+      policyLabel,
+      policyHint,
+      playbackPolicies: PLAYBACK_POLICIES,
       closeSettings,
-      chooseCodec,
-      toggleCodecMenu,
+      toggleMenu,
+      chooseWifi,
+      chooseCellular,
+      chooseDownload,
+      choosePolicy,
+      onOnlyWifiChange,
       startScan,
       cancelScan,
       onToggleDownloads,
@@ -287,53 +353,76 @@ export default defineComponent({
             @click="closeSettings"
           ><Icon name="chevron-down" /></button>
         </div>
-        <div class="modal-section">
-          <div class="modal-section-title" id="codec-label">Streaming quality</div>
-          <div
-            ref="codecRoot"
-            class="codec-dropdown"
-            :class="{ open: codecOpen }"
+
+        <div class="modal-section" ref="qualityRoot">
+          <div class="modal-section-title">Quality</div>
+          <p class="modal-hint">
+            Choose streaming quality
+            <template v-if="showNetworkQuality"> for Wi‑Fi and mobile data</template>.
+            Downloads use their own quality setting.
+          </p>
+
+          <QualitySelect
+            menu-id="wifi"
+            label-id="wifi-codec-label"
+            field-label="Streaming — Wi‑Fi"
+            :options="settings.options"
+            :selected-id="settings.streamWifi"
+            :trigger-label="wifiLabel"
+            :open-menu="openMenu"
+            @toggle="toggleMenu"
+            @choose="chooseWifi"
+          />
+
+          <QualitySelect
+            v-if="showNetworkQuality"
+            menu-id="cellular"
+            label-id="cell-codec-label"
+            field-label="Streaming — Mobile data"
+            :options="settings.options"
+            :selected-id="cellularSelectedId"
+            :trigger-label="cellularLabel"
+            :open-menu="openMenu"
+            :leading-options="cellularLeading"
+            @toggle="toggleMenu"
+            @choose="chooseCellular"
+          />
+
+          <QualitySelect
+            menu-id="download"
+            label-id="dl-codec-label"
+            field-label="Downloads quality"
+            :options="settings.options"
+            :selected-id="settings.download"
+            :trigger-label="downloadLabel"
+            :open-menu="openMenu"
+            @toggle="toggleMenu"
+            @choose="chooseDownload"
           >
-            <button
-              type="button"
-              class="codec-trigger"
-              aria-haspopup="listbox"
-              :aria-expanded="codecOpen ? 'true' : 'false'"
-              aria-labelledby="codec-label"
-              aria-controls="codec-listbox"
-              @click="toggleCodecMenu"
-            >
-              <span class="codec-trigger-label">{{ streamLabel }}</span>
-              <Icon name="chevron-down" />
-            </button>
-            <ul
-              v-show="codecOpen"
-              id="codec-listbox"
-              class="codec-menu"
-              role="listbox"
-              aria-labelledby="codec-label"
-            >
-              <li
-                v-for="opt in settings.options"
-                :key="opt.id"
-                role="option"
-                class="codec-option"
-                :class="{ selected: opt.id === settings.stream }"
-                :aria-selected="opt.id === settings.stream ? 'true' : 'false'"
-                tabindex="-1"
-                @click="chooseCodec(opt.id)"
-              >
-                <span class="codec-option-label">{{ opt.label }}</span>
-                <Icon v-if="opt.id === settings.stream" name="check" />
-              </li>
-            </ul>
-          </div>
+            <p class="modal-hint" style="margin-top:8px;margin-bottom:0">
+              Existing downloads keep their quality. Only new downloads use this setting.
+            </p>
+          </QualitySelect>
+
+          <QualitySelect
+            menu-id="policy"
+            label-id="policy-label"
+            field-label="When a download exists"
+            :options="playbackPolicies"
+            :selected-id="settings.playbackPolicy"
+            :trigger-label="policyLabel"
+            :open-menu="openMenu"
+            @toggle="toggleMenu"
+            @choose="choosePolicy"
+          >
+            <p class="modal-hint" style="margin-top:8px;margin-bottom:0">{{ policyHint }}</p>
+          </QualitySelect>
         </div>
+
         <div class="modal-section">
           <div class="modal-section-title">Downloads</div>
           <p class="modal-hint">
             Store tracks on this device to save data and play offline.
-            Downloads use the streaming quality selected above.
           </p>
           <label class="toggle-row">
             <span class="toggle-label">Enable downloads</span>
@@ -343,6 +432,18 @@ export default defineComponent({
               :checked="downloads.enabled"
               :disabled="downloadsBusy"
               @change="onToggleDownloads"
+            />
+          </label>
+          <label
+            v-if="showNetworkQuality && downloads.enabled"
+            class="toggle-row"
+          >
+            <span class="toggle-label">Only download on Wi‑Fi</span>
+            <input
+              type="checkbox"
+              class="toggle-input"
+              :checked="settings.onlyDownloadOnWifi"
+              @change="onOnlyWifiChange"
             />
           </label>
           <p v-if="downloads.enabled && downloadsStorageLine" class="modal-hint" style="margin-top:8px">

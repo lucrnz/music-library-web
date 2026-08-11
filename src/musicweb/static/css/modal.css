@@ -82,6 +82,21 @@
   transition: width 0.2s ease;
 }
 
+.quality-field {
+  margin-top: 14px;
+}
+
+.quality-field:first-of-type {
+  margin-top: 0;
+}
+
+.quality-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
 /* Streaming quality custom dropdown (native <select> cannot match theme) */
 .codec-dropdown {
   position: relative;
