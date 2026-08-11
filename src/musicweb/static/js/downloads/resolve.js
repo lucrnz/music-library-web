@@ -3,35 +3,98 @@
  */
 
 import { streamUrl } from "../api.js";
+import { localAtLeastAsGood } from "../qualityRank.js";
 import { PLACEHOLDER_COVER } from "../util.js";
 import { getLocalCoverUrl } from "./art.js";
-import { getLocalAudioUrl, getTrackRecord } from "./records.js";
+import { getLocalAudioUrlForRecord, getTrackRecord } from "./records.js";
 
 /**
  * @typedef {'local'|'remote'|'unavailable'} PlaySourceType
- * @typedef {'missing'|'other_codec'|'broken'|'no_id'|'offline_no_local'} PlayBlockReason
+ * @typedef {'missing'|'broken'|'no_id'|'offline_no_local'} PlayBlockReason
+ * @typedef {'prefer_better'|'prefer_offline'|'prefer_stream'} PlaybackPolicy
  *
  * @typedef {object} PlaySource
  * @property {PlaySourceType} type
  * @property {string|null} url
  * @property {PlayBlockReason|null} reason
  * @property {string|null} message
+ * @property {string|null} [codec] codec used for local source
  */
 
 const MESSAGES = {
   missing: "Not downloaded for offline play. Download it while online.",
-  other_codec:
-    "Downloaded in a different quality. Go online or re-download at the current streaming quality.",
   broken: "Local file is unreadable. Re-download when online.",
   no_id: "Track has no id.",
   offline_no_local:
-    "You're offline and this track isn't downloaded for the current quality.",
+    "You're offline and this track isn't downloaded.",
 };
 
 /**
+ * @param {object|null} rec
+ * @returns {boolean}
+ */
+function recordPlayable(rec) {
+  return !!(rec && rec.status !== "broken" && rec.codec);
+}
+
+/**
+ * Whether current policy prefers a local file over streaming when online.
+ * @param {string} localCodec
+ * @param {string} activeStreamCodec
+ * @param {PlaybackPolicy} policy
+ * @param {{ id: string }[]} catalog
+ */
+export function shouldPreferLocalOnline(
+  localCodec,
+  activeStreamCodec,
+  policy,
+  catalog = []
+) {
+  if (policy === "prefer_offline") return true;
+  if (policy === "prefer_stream") return false;
+  // prefer_better
+  return localAtLeastAsGood(localCodec, activeStreamCodec, catalog);
+}
+
+/**
+ * Open local blob only after policy decides local wins.
+ * @param {object} rec
+ * @returns {Promise<PlaySource>}
+ */
+async function openLocalSource(rec) {
+  try {
+    const url = await getLocalAudioUrlForRecord(rec);
+    if (url) {
+      return {
+        type: "local",
+        url,
+        reason: null,
+        message: null,
+        codec: rec.codec,
+      };
+    }
+  } catch (err) {
+    console.warn("Local download open failed", err);
+  }
+  return {
+    type: "unavailable",
+    url: null,
+    reason: "broken",
+    message: MESSAGES.broken,
+  };
+}
+
+/**
  * Resolve where to play a track from.
+ * Decision-first: load record once, decide local vs remote, open blob only if local wins.
  * @param {{ id?: string, title?: string }|null} track
- * @param {{ enabled: boolean, codec: string, offline: boolean }} ctx
+ * @param {{
+ *   enabled: boolean,
+ *   offline: boolean,
+ *   activeStreamCodec: string,
+ *   playbackPolicy?: PlaybackPolicy,
+ *   catalog?: { id: string }[],
+ * }} ctx
  * @returns {Promise<PlaySource>}
  */
 export async function resolvePlaySource(track, ctx) {
@@ -44,39 +107,44 @@ export async function resolvePlaySource(track, ctx) {
     };
   }
 
+  const policy = ctx.playbackPolicy || "prefer_better";
+  const catalog = ctx.catalog || [];
+  const active = ctx.activeStreamCodec;
+
+  /** @type {object|null} */
+  let rec = null;
   if (ctx.enabled) {
     try {
-      const local = await getLocalAudioUrl(track.id, ctx.codec);
-      if (local) {
-        return { type: "local", url: local, reason: null, message: null };
-      }
+      rec = await getTrackRecord(track.id);
     } catch (err) {
       console.warn("Local download resolve failed", err);
     }
+  }
+  const playable = recordPlayable(rec);
 
-    if (ctx.offline) {
-      const rec = await getTrackRecord(track.id);
-      let reason = /** @type {PlayBlockReason} */ ("missing");
-      if (rec?.status === "broken") reason = "broken";
-      else if (rec && rec.codec !== ctx.codec) reason = "other_codec";
-      else if (!rec) reason = "offline_no_local";
-      return {
-        type: "unavailable",
-        url: null,
-        reason,
-        message: MESSAGES[reason],
-      };
-    }
-  } else if (ctx.offline) {
+  if (ctx.offline) {
+    if (playable) return openLocalSource(rec);
+    let reason = /** @type {PlayBlockReason} */ ("missing");
+    if (rec?.status === "broken") reason = "broken";
+    else if (!rec) reason = "offline_no_local";
     return {
       type: "unavailable",
       url: null,
-      reason: "offline_no_local",
-      message: MESSAGES.offline_no_local,
+      reason,
+      message: MESSAGES[reason],
     };
   }
 
-  const remote = streamUrl(track, ctx.codec);
+  if (
+    playable &&
+    shouldPreferLocalOnline(rec.codec, active, policy, catalog)
+  ) {
+    const local = await openLocalSource(rec);
+    if (local.type === "local") return local;
+    // Blob missing despite record — fall through to stream when online.
+  }
+
+  const remote = streamUrl(track, active);
   if (!remote) {
     return {
       type: "unavailable",

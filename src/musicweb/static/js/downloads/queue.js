@@ -12,6 +12,8 @@ import {
   requestHealthProbe,
   setHealthContext,
 } from "../connectivity.js";
+import { isConstrainedConnection } from "../networkConstraints.js";
+import { settings } from "../stores/settings.js";
 import {
   audioDirParts,
   audioFileName,
@@ -418,6 +420,21 @@ let schedulePumpFn = null;
 let downloadsEnabled = false;
 
 /**
+ * Combined auto-pause: offline / server / mobile data (when only-download-on-Wi‑Fi).
+ * Sole expression of auto-pause causes — call sites use this or `reapplyNetworkPolicy`
+ * instead of re-checking metered conditions.
+ * @returns {null | 'offline' | 'server' | 'metered'}
+ */
+export function downloadAutoPauseReason() {
+  const base = autoPauseReason();
+  if (base) return base;
+  if (settings.onlyDownloadOnWifi && isConstrainedConnection()) {
+    return "metered";
+  }
+  return null;
+}
+
+/**
  * @param {{ schedulePump: () => void }} hooks
  */
 export function initPolicy(hooks) {
@@ -426,7 +443,7 @@ export function initPolicy(hooks) {
   policyBound = true;
 
   onConnectivityChange(() => {
-    const reason = autoPauseReason();
+    const reason = downloadAutoPauseReason();
     if (reason) {
       freezeWork(reason).catch(console.error);
     }
@@ -435,8 +452,27 @@ export function initPolicy(hooks) {
   });
 
   onConnectivityRecovered(() => {
-    onNetworkRecovered().catch(console.error);
+    reapplyNetworkPolicy().catch(console.error);
   });
+
+  // Network constraint flips are owned by settings → downloads → reapplyNetworkPolicy
+  // (bindNetworkConstraintEffects). Do not subscribe to onConstraintChange here.
+}
+
+/**
+ * Re-evaluate offline / server / metered policy after constraint, setting, or recovery.
+ * Single path for freeze / unpause / health sync used by downloads fan-out and resume.
+ */
+export async function reapplyNetworkPolicy() {
+  const reason = downloadAutoPauseReason();
+  if (reason) {
+    await freezeWork(reason);
+  } else if (!userPaused) {
+    await unpauseItemsToPending();
+    if (schedulePumpFn) schedulePumpFn();
+  }
+  await syncHealthFromPolicy();
+  emitQueueChange();
 }
 
 /**
@@ -471,11 +507,11 @@ async function saveUserPausedFlag(on) {
 }
 
 export function canPump() {
-  return !userPaused && canReachServer() && !isHardOffline();
+  return !userPaused && !downloadAutoPauseReason();
 }
 
 export function getQueueControlState() {
-  const reason = autoPauseReason();
+  const reason = downloadAutoPauseReason();
   return {
     userPaused,
     autoPausedReason: reason,
@@ -487,12 +523,15 @@ export function getPauseBanner() {
   if (userPaused) {
     return "Paused by you — downloads won't start until you resume.";
   }
-  const reason = autoPauseReason();
+  const reason = downloadAutoPauseReason();
   if (reason === "offline") {
     return "Paused — you're offline. Downloads will resume when you're back online.";
   }
   if (reason === "server") {
     return "Paused — waiting for the library server. Retrying automatically…";
+  }
+  if (reason === "metered") {
+    return "Paused — waiting for Wi‑Fi. Downloads won't use mobile data.";
   }
   return "";
 }
@@ -520,36 +559,15 @@ export async function pauseAllDownloads() {
 
 export async function resumeAllDownloads() {
   await saveUserPausedFlag(false);
-  if (isHardOffline()) {
-    emitQueueChange();
-    await syncHealthFromPolicy();
-    return;
-  }
-  if (!canReachServer()) {
+  // Keep probe kick when server is down so recovery can unpause later.
+  if (!isHardOffline() && !canReachServer()) {
     requestHealthProbe(0);
-    emitQueueChange();
-    await syncHealthFromPolicy();
-    return;
   }
-  await unpauseItemsToPending();
-  if (schedulePumpFn) schedulePumpFn();
-  await syncHealthFromPolicy();
-  emitQueueChange();
-}
-
-async function onNetworkRecovered() {
-  if (userPaused || isHardOffline() || !canReachServer()) {
-    await syncHealthFromPolicy();
-    return;
-  }
-  await unpauseItemsToPending();
-  if (schedulePumpFn) schedulePumpFn();
-  await syncHealthFromPolicy();
-  emitQueueChange();
+  await reapplyNetworkPolicy();
 }
 
 export async function onJobNetworkFailure() {
-  await freezeWork(autoPauseReason() || "server");
+  await freezeWork(downloadAutoPauseReason() || "server");
   await syncHealthFromPolicy();
 }
 

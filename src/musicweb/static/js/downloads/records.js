@@ -56,16 +56,50 @@ export async function listArtistRecords() {
 }
 
 /**
+ * Pure catalog UI status vs preferred download codec.
+ * @param {object|null|undefined} rec
+ * @param {string} preferredDownloadCodec
+ * @returns {'ready'|'other'|'failed'|null}
+ */
+export function catalogUiStatus(rec, preferredDownloadCodec) {
+  if (!rec) return null;
+  if (rec.status === "broken") return "failed";
+  if (!rec.codec) return null;
+  if (rec.codec !== preferredDownloadCodec) return "other";
+  return "ready";
+}
+
+/**
+ * Catalog status vs preferred download codec (async wrapper over record fetch).
  * @param {string} trackId
- * @param {string} codec
+ * @param {string} [preferredCodec]
  * @returns {Promise<'ready'|'other'|'none'|'failed'>}
  */
-export async function downloadStatusFor(trackId, codec) {
+export async function downloadStatusFor(trackId, preferredCodec) {
   const rec = await getTrackRecord(trackId);
-  if (!rec) return "none";
-  if (rec.status === "broken") return "failed";
-  if (rec.codec === codec) return "ready";
-  return "other";
+  const st = catalogUiStatus(
+    rec,
+    preferredCodec != null ? preferredCodec : rec?.codec
+  );
+  if (st == null) return "none";
+  return st;
+}
+
+/**
+ * Open blob URL for a playable track record. Caller owns the URL and must revoke it.
+ * @param {{ trackId: string, codec: string, ext?: string, status?: string }} rec
+ * @returns {Promise<string|null>}
+ */
+export async function getLocalAudioUrlForRecord(rec) {
+  if (!rec || !rec.codec || rec.status === "broken") return null;
+  const name = audioFileName(
+    rec.trackId,
+    rec.codec,
+    rec.ext || codecExt(rec.codec)
+  );
+  const blob = await readBinary(audioDirParts(), name);
+  if (!blob) return null;
+  return URL.createObjectURL(blob);
 }
 
 /**
@@ -76,14 +110,7 @@ export async function downloadStatusFor(trackId, codec) {
 export async function getLocalAudioUrl(trackId, codec) {
   const rec = await getTrackRecord(trackId);
   if (!rec || rec.codec !== codec || rec.status === "broken") return null;
-  const name = audioFileName(
-    trackId,
-    rec.codec,
-    rec.ext || codecExt(rec.codec)
-  );
-  const blob = await readBinary(audioDirParts(), name);
-  if (!blob) return null;
-  return URL.createObjectURL(blob);
+  return getLocalAudioUrlForRecord(rec);
 }
 
 export async function markTrackBroken(trackId) {

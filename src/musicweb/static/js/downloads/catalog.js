@@ -4,12 +4,14 @@
  */
 
 export {
+  catalogUiStatus,
   commitTrackDownload,
   deleteAlbumDownloads,
   deleteArtistDownloads,
   deleteTrackDownload,
   downloadStatusFor,
   getLocalAudioUrl,
+  getLocalAudioUrlForRecord,
   getTrackRecord,
   listAlbumRecords,
   listArtistRecords,

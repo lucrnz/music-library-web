@@ -43,6 +43,7 @@ import {
   syncHealthFromPolicy,
 } from "./queue.js";
 import {
+  catalogUiStatus,
   deleteAlbumDownloads,
   deleteArtistDownloads,
   deleteTrackDownload,
@@ -162,15 +163,14 @@ const QUEUE_STATUS = new Set(["pending", "active", "failed", "paused"]);
 
 /**
  * Catalog-only status for a track id (no queue overlay).
+ * ready/other track settings.download, not active stream.
  * @param {string} trackId
  * @returns {Promise<string|null>} null means none / remove key
  */
 async function catalogStatusFor(trackId) {
   try {
     const rec = await getTrackRecord(trackId);
-    if (!rec) return null;
-    if (rec.status === "broken") return "failed";
-    return rec.codec === settings.stream ? "ready" : "other";
+    return catalogUiStatus(rec, settings.download);
   } catch {
     return null;
   }
@@ -182,9 +182,10 @@ async function rebuildStatusMapFull() {
   const map = {};
   try {
     const tracks = await listTrackRecords();
+    const preferred = settings.download;
     for (const t of tracks) {
-      if (t.status === "broken") map[t.trackId] = "failed";
-      else map[t.trackId] = t.codec === settings.stream ? "ready" : "other";
+      const st = catalogUiStatus(t, preferred);
+      if (st) map[t.trackId] = st;
     }
   } catch {
     /* ignore */
@@ -445,7 +446,7 @@ export async function downloadTrack(track) {
   if (!downloads.enabled) throw new Error("Downloads are disabled");
   if (isHardOffline()) throw new Error("Can't download while offline");
   if (!(await confirmIfNearQuota(1))) return;
-  await enqueueTrack(track, settings.stream);
+  await enqueueTrack(track, settings.download);
   await refreshQueue();
 }
 
@@ -458,7 +459,7 @@ export async function downloadTracks(tracks) {
   const list = tracks.filter((t) => t?.id && !t.isMissing);
   if (!list.length) return;
   if (!(await confirmIfNearQuota(list.length))) return;
-  await enqueueMany(list, settings.stream);
+  await enqueueMany(list, settings.download);
   await refreshQueue();
 }
 
@@ -514,10 +515,18 @@ export async function checkOrphans() {
   }
 }
 
-export function onStreamCodecChanged() {
+export function onDownloadCodecChanged() {
   if (!downloads.enabled) return;
   if (statusRefreshTimer) clearTimeout(statusRefreshTimer);
   statusRefreshTimer = setTimeout(() => {
     rebuildStatusMapFull().catch(() => {});
   }, 50);
+}
+
+/** Cellular / Wi‑Fi constraint flip — re-evaluate only-download-on-Wi‑Fi pause. */
+export function onNetworkConstraintChanged() {
+  syncControlFlags();
+  import("./queue.js")
+    .then((q) => q.reapplyNetworkPolicy?.())
+    .catch(() => {});
 }

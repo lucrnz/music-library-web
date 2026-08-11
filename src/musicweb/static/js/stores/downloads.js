@@ -38,7 +38,8 @@ export {
   noteServerUnreachable,
   noteServerReachable,
   bindConnectivityListeners,
-  onStreamCodecChanged,
+  onDownloadCodecChanged,
+  onNetworkConstraintChanged,
   checkOrphans,
   confirmIfNearQuota,
 } from "../downloads/index.js";

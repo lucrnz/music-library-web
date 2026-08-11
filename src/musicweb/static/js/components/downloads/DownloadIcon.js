@@ -27,7 +27,7 @@ export default defineComponent({
         case "ready":
           return "Downloaded";
         case "other":
-          return "Downloaded in another codec — tap to download current";
+          return "Downloaded at a different quality — tap to download at download quality";
         case "pending":
           return "Queued";
         case "active":
