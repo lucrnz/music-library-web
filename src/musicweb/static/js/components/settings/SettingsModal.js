@@ -29,6 +29,8 @@ import {
   refreshStorageInfo,
 } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
+import { confirmDialog } from "../../stores/dialog.js";
+import { showToast } from "../../stores/ui.js";
 import Icon from "../icons/Icon.js";
 import LibraryScanPanel from "./LibraryScanPanel.js";
 import QualitySelect from "./QualitySelect.js";
@@ -149,22 +151,12 @@ export default defineComponent({
           await enableDownloads();
           await refreshStorageInfo();
         } else {
-          if (
-            !confirm(
-              "Disable downloads? You can keep files on this device or delete them."
-            )
-          ) {
-            e.target.checked = true;
-            return;
-          }
-          const wipe = confirm(
-            "Delete all downloaded music from this device?\n\nOK = Delete everything\nCancel = Keep files (idle until re-enabled)"
-          );
-          await disableDownloads({ wipe });
+          // Keep files on device; idle summary + Clear can wipe later.
+          await disableDownloads({ wipe: false });
         }
       } catch (err) {
         console.error(err);
-        alert(err.message || "Could not update downloads setting");
+        showToast(err.message || "Could not update downloads setting");
         e.target.checked = downloads.enabled;
       } finally {
         downloadsBusy.value = false;
@@ -177,17 +169,19 @@ export default defineComponent({
     }
 
     async function onClearStoredDownloads() {
-      if (
-        !confirm("Delete all downloaded music from this device?")
-      ) {
-        return;
-      }
+      const ok = await confirmDialog({
+        title: "Clear downloads",
+        message: "Delete all downloaded music from this device?",
+        confirmLabel: "Clear",
+        danger: true,
+      });
+      if (!ok) return;
       downloadsBusy.value = true;
       try {
         await clearStoredDownloads();
       } catch (err) {
         console.error(err);
-        alert(err.message || "Could not clear downloads");
+        showToast(err.message || "Could not clear downloads");
       } finally {
         downloadsBusy.value = false;
       }

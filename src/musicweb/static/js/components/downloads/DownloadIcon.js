@@ -2,13 +2,12 @@
  * Compact download control for track rows.
  */
 import { computed, defineComponent } from "vue";
-import {
-  downloadTrack,
-  trackDownloadState,
-} from "../../downloads/index.js";
+import { trackDownloadState } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
 import { catalogIndex } from "../../downloads/status.js";
+import { downloadTrack } from "../../downloads/ui.js";
 import { settings } from "../../stores/settings.js";
+import { showToast } from "../../stores/ui.js";
 import Icon from "../icons/Icon.js";
 
 export default defineComponent({
@@ -81,7 +80,7 @@ export default defineComponent({
         await downloadTrack(props.track);
       } catch (err) {
         console.error(err);
-        alert(err.message || "Download failed");
+        showToast(err.message || "Download failed");
       }
     }
 

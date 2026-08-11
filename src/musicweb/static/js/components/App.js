@@ -7,6 +7,7 @@ import PlayerBar from "./player/PlayerBar.js";
 import SettingsModal from "./settings/SettingsModal.js";
 import DownloadsModal from "./downloads/DownloadsModal.js";
 import DownloadsLibraryView from "./downloads/DownloadsLibraryView.js";
+import AppDialog from "./dialog/AppDialog.js";
 import TabBar from "./layout/TabBar.js";
 
 /**
@@ -22,6 +23,7 @@ export default defineComponent({
     PlayerBar,
     SettingsModal,
     DownloadsModal,
+    AppDialog,
     TabBar,
   },
   setup() {
@@ -39,6 +41,7 @@ export default defineComponent({
     <PlayerBar />
     <SettingsModal />
     <DownloadsModal />
+    <AppDialog />
     <TabBar />
     <div
       v-if="ui.toast"

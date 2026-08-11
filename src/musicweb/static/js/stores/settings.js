@@ -10,6 +10,7 @@ import {
   isConstrainedConnection,
   onConstraintChange,
 } from "../networkConstraints.js";
+import { acquireModalLock, releaseModalLock } from "./modalLock.js";
 
 const KEY_STREAM_WIFI = "musicweb.streamCodec";
 const KEY_STREAM_CELLULAR = "musicweb.streamCodecCellular";
@@ -363,12 +364,12 @@ export function setOnlyDownloadOnWifi(on) {
 export function openSettings() {
   settings.open = true;
   refreshNetworkFlags();
-  document.body.classList.add("modal-open");
+  acquireModalLock("settings");
 }
 
 export function closeSettings() {
   settings.open = false;
-  document.body.classList.remove("modal-open");
+  releaseModalLock("settings");
 }
 
 /**

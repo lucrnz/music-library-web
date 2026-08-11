@@ -26,6 +26,7 @@ import {
   retryQueueItem,
 } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
+import { confirmDialog } from "../../stores/dialog.js";
 import { settings } from "../../stores/settings.js";
 import Icon from "../icons/Icon.js";
 
@@ -154,19 +155,37 @@ export default defineComponent({
     onUnmounted(() => document.removeEventListener("keydown", onKey));
 
     async function onDeleteTrack(trackId) {
-      if (!confirm("Remove this download from this device?")) return;
+      const ok = await confirmDialog({
+        title: "Remove download",
+        message: "Remove this download from this device?",
+        confirmLabel: "Remove",
+        danger: true,
+      });
+      if (!ok) return;
       await removeDownloadedTrack(trackId);
       await loadTree();
     }
 
     async function onDeleteAlbum(albumId, title) {
-      if (!confirm(`Delete all downloaded tracks from “${title}”?`)) return;
+      const ok = await confirmDialog({
+        title: "Delete album downloads",
+        message: `Delete all downloaded tracks from “${title}”?`,
+        confirmLabel: "Delete",
+        danger: true,
+      });
+      if (!ok) return;
       await removeDownloadedAlbum(albumId);
       await loadTree();
     }
 
     async function onDeleteArtist(artistId, name) {
-      if (!confirm(`Delete all downloaded tracks by “${name}”?`)) return;
+      const ok = await confirmDialog({
+        title: "Delete artist downloads",
+        message: `Delete all downloaded tracks by “${name}”?`,
+        confirmLabel: "Delete",
+        danger: true,
+      });
+      if (!ok) return;
       await removeDownloadedArtist(artistId);
       await loadTree();
     }

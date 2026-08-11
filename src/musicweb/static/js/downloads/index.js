@@ -3,6 +3,7 @@
  *
  * Pattern:
  *   - Actions / lifecycle: import from `downloads/index.js`
+ *   - User-initiated download (near-quota confirm): `downloads/ui.js`
  *   - Reactive fields: import `{ downloads }` from `downloads/state.js`
  *   - Per-track UI status: `trackDownloadState(id)` (queue ∩ catalog join)
  *
@@ -17,6 +18,7 @@ import {
   reportFailure,
 } from "../connectivity.js";
 import { settings } from "../stores/settings.js";
+import { acquireModalLock, releaseModalLock } from "../stores/modalLock.js";
 import { getLocalArtistImageUrl, getLocalCoverUrl } from "./art.js";
 import { openDownloadsDb } from "./db.js";
 import { buildDownloadsHierarchy } from "./hierarchy.js";
@@ -222,14 +224,20 @@ export async function markDownloadBroken(trackId) {
   await markTrackBroken(trackId);
 }
 
-export async function confirmIfNearQuota(trackCount = 1) {
+/**
+ * Pure near-quota probe for UI (no dialogs).
+ * @param {number} [trackCount=1]
+ * @returns {Promise<{ near: boolean, message?: string }>}
+ */
+export async function getNearQuotaWarning(trackCount = 1) {
   await refreshStorageInfo();
-  if (!downloads.nearQuota) return true;
-  const msg =
-    trackCount > 1
-      ? `Storage almost full (${formatBytes(downloads.storageUsage)} used). Download ${trackCount} tracks anyway?`
+  if (!downloads.nearQuota) return { near: false };
+  const n = Math.max(1, Number(trackCount) || 1);
+  const message =
+    n > 1
+      ? `Storage almost full (${formatBytes(downloads.storageUsage)} used). Download ${n} tracks anyway?`
       : `Storage almost full (${formatBytes(downloads.storageUsage)} used). Download anyway?`;
-  return confirm(msg);
+  return { near: true, message };
 }
 
 export async function refreshStorageInfo() {
@@ -372,14 +380,14 @@ export async function disableDownloads({ wipe }) {
 
 export function openDownloadsManager() {
   downloads.managerOpen = true;
-  document.body.classList.add("modal-open");
+  acquireModalLock("downloads");
   refreshQueue({ includeStorage: true });
   checkOrphans().catch(() => {});
 }
 
 export function closeDownloadsManager() {
   downloads.managerOpen = false;
-  if (!settings.open) document.body.classList.remove("modal-open");
+  releaseModalLock("downloads");
 }
 
 /**
@@ -395,17 +403,18 @@ export async function clearStoredDownloads() {
 }
 
 /**
+ * Enqueue a single track (no UI confirm). Prefer `downloads/ui.js` for user actions.
  * @param {import("../models/track.js").Track} track
  */
 export async function downloadTrack(track) {
   if (!downloads.enabled) throw new Error("Downloads are disabled");
   if (isHardOffline()) throw new Error("Can't download while offline");
-  if (!(await confirmIfNearQuota(1))) return;
   await enqueueTrack(track, settings.download);
   await refreshQueue();
 }
 
 /**
+ * Enqueue many tracks (no UI confirm). Prefer `downloads/ui.js` for user actions.
  * @param {import("../models/track.js").Track[]} tracks
  */
 export async function downloadTracks(tracks) {
@@ -413,7 +422,6 @@ export async function downloadTracks(tracks) {
   if (isHardOffline()) throw new Error("Can't download while offline");
   const list = tracks.filter((t) => t?.id && !t.isMissing);
   if (!list.length) return;
-  if (!(await confirmIfNearQuota(list.length))) return;
   await enqueueMany(list, settings.download);
   await refreshQueue();
 }

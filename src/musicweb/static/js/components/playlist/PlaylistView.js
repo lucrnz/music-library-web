@@ -17,8 +17,10 @@ import {
   playIndex,
   stopPlayback,
 } from "../../stores/player.js";
-import { downloadTracks } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
+import { downloadTracks } from "../../downloads/ui.js";
+import { confirmDialog, promptDialog } from "../../stores/dialog.js";
+import { showToast } from "../../stores/ui.js";
 import Icon from "../icons/Icon.js";
 
 export default defineComponent({
@@ -91,27 +93,36 @@ export default defineComponent({
 
     async function onDeleteSaved(sp, e) {
       e.stopPropagation();
-      if (!confirm(`Delete playlist “${sp.name}”?`)) return;
+      const ok = await confirmDialog({
+        title: "Delete playlist",
+        message: `Delete playlist “${sp.name}”?`,
+        confirmLabel: "Delete",
+        danger: true,
+      });
+      if (!ok) return;
       try {
         await deleteSavedPlaylist(sp.id);
         await refreshSaved();
       } catch (err) {
         console.error(err);
+        showToast(err.message || "Could not delete playlist");
       }
     }
 
     async function onSave() {
       try {
-        const name = prompt(
-          "Playlist name",
-          `Playlist ${new Date().toLocaleDateString()}`
-        );
-        if (!name || !name.trim()) return;
+        const name = await promptDialog({
+          title: "Save playlist",
+          message: "Playlist name",
+          defaultValue: `Playlist ${new Date().toLocaleDateString()}`,
+          confirmLabel: "Save",
+        });
+        if (!name) return;
         await saveQueueAsPlaylist(name);
         await refreshSaved();
       } catch (err) {
         console.error(err);
-        alert(`Could not save playlist: ${err.message}`);
+        showToast(`Could not save playlist: ${err.message}`);
       }
     }
 
@@ -123,13 +134,13 @@ export default defineComponent({
           (t) => t.id && !t.isMissing
         );
         if (!tracks.length) {
-          alert("Playlist has no downloadable tracks");
+          showToast("Playlist has no downloadable tracks");
           return;
         }
         await downloadTracks(tracks);
       } catch (err) {
         console.error(err);
-        alert(err.message || "Download failed");
+        showToast(err.message || "Download failed");
       }
     }
 
@@ -140,7 +151,7 @@ export default defineComponent({
         await downloadTracks(tracks);
       } catch (err) {
         console.error(err);
-        alert(err.message || "Download failed");
+        showToast(err.message || "Download failed");
       }
     }
 

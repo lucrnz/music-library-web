@@ -8,9 +8,9 @@ import {
   fetchArtistAlbums,
 } from "../../api.js";
 import { addToQueue } from "../../stores/playlist.js";
-import { clearLibSelection, ui } from "../../stores/ui.js";
-import { downloadTracks } from "../../downloads/index.js";
+import { clearLibSelection, showToast, ui } from "../../stores/ui.js";
 import { downloads } from "../../downloads/state.js";
+import { downloadTracks } from "../../downloads/ui.js";
 
 /**
  * Add all playable tracks for the current library location.
@@ -75,6 +75,6 @@ export async function downloadCurrentAlbum(tracks) {
     await downloadTracks(tracks.filter((t) => t.id && !t.isMissing));
   } catch (err) {
     console.error(err);
-    alert(err.message || "Download failed");
+    showToast(err.message || "Download failed");
   }
 }
