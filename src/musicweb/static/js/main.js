@@ -18,6 +18,7 @@ import {
 import { pl } from "./stores/playlist.js";
 import { bindConnectivityToasts } from "./connectivityUi.js";
 import { initDownloads } from "./downloads/index.js";
+import { bindConnectivityStore } from "./stores/connectivity.js";
 import { registerServiceWorker } from "./pwa.js";
 
 loadPlaylist();
@@ -26,6 +27,8 @@ applyExpanded();
 initAudioListeners();
 loadCodecs();
 bindNetworkConstraintEffects(() => pl.tracks);
+// Connectivity store before downloads (downloads only hooks policy/orphans).
+bindConnectivityStore();
 bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.
 initDownloads().then(() => refreshPlayerCovers());
