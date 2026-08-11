@@ -20,7 +20,9 @@ import {
   setOnlyDownloadOnWifi,
 } from "../../stores/settings.js";
 import {
+  clearStoredDownloads,
   disableDownloads,
+  downloadsIdleSummaryLine,
   downloadsStorageLine as formatDlStorage,
   enableDownloads,
   openDownloadsManager,
@@ -127,6 +129,13 @@ export default defineComponent({
       return formatDlStorage("short");
     });
 
+    /** Leftover OPFS/IDB catalog while the feature is off. */
+    const showIdleDownloads = computed(
+      () => !downloads.enabled && downloads.trackCount > 0
+    );
+
+    const idleDownloadsSummary = computed(() => downloadsIdleSummaryLine());
+
     async function onToggleDownloads(e) {
       const want = e.target.checked;
       if (want === downloads.enabled) return;
@@ -163,6 +172,23 @@ export default defineComponent({
       openDownloadsManager();
     }
 
+    async function onClearStoredDownloads() {
+      if (
+        !confirm("Delete all downloaded music from this device?")
+      ) {
+        return;
+      }
+      downloadsBusy.value = true;
+      try {
+        await clearStoredDownloads();
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "Could not clear downloads");
+      } finally {
+        downloadsBusy.value = false;
+      }
+    }
+
     function onKey(e) {
       if (e.key !== "Escape" || !settings.open) return;
       if (openMenu.value) {
@@ -177,7 +203,8 @@ export default defineComponent({
       () => settings.open,
       (open) => {
         if (open) {
-          if (downloads.enabled) refreshStorageInfo();
+          // Needed when disabled so idle leftover counts are correct.
+          refreshStorageInfo().catch(() => {});
           document.addEventListener("keydown", onKey);
           document.addEventListener("pointerdown", onDocPointer, true);
         } else {
@@ -201,6 +228,8 @@ export default defineComponent({
       showNetworkQuality,
       downloadsBusy,
       downloadsStorageLine,
+      showIdleDownloads,
+      idleDownloadsSummary,
       openMenu,
       qualityRoot,
       wifiLabel,
@@ -220,6 +249,7 @@ export default defineComponent({
       onOnlyWifiChange,
       onToggleDownloads,
       onOpenManager,
+      onClearStoredDownloads,
     };
   },
   template: `
@@ -342,14 +372,26 @@ export default defineComponent({
           <p v-if="downloads.enabled && downloads.nearQuota" class="modal-hint warn">
             Storage almost full — free space or delete downloads.
           </p>
-          <div class="scan-actions" style="margin-top:10px">
+          <div v-if="downloads.enabled" class="scan-actions" style="margin-top:10px">
             <button
               type="button"
               class="pill"
-              :disabled="!downloads.enabled && !downloads.trackCount"
               @click="onOpenManager"
             >Download manager</button>
           </div>
+          <template v-else-if="showIdleDownloads">
+            <p class="modal-hint" style="margin-top:8px">
+              {{ idleDownloadsSummary }}
+            </p>
+            <div class="scan-actions" style="margin-top:10px">
+              <button
+                type="button"
+                class="pill danger"
+                :disabled="downloadsBusy"
+                @click="onClearStoredDownloads"
+              >Clear</button>
+            </div>
+          </template>
         </div>
 
         <LibraryScanPanel

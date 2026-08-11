@@ -53,13 +53,13 @@ import {
 import { resolveCoverUrl, resolvePlaySource } from "./resolve.js";
 import { downloads } from "./state.js";
 import {
-  clearCatalogProjection,
   setCatalogProjectionMap,
   trackDownloadState,
 } from "./status.js";
 import {
   formatBytes,
   formatDownloadsStorageLine,
+  formatIdleDownloadsSummary,
   getStorageEstimate,
   isNearQuota,
   requestPersistentStorage,
@@ -75,7 +75,7 @@ export {
   retryQueueItem,
   clearFinishedQueue,
 } from "./queue.js";
-export { formatBytes } from "./storageInfo.js";
+export { formatBytes, formatIdleDownloadsSummary } from "./storageInfo.js";
 export { trackDownloadState } from "./status.js";
 export { noteServerReachable, noteServerUnreachable } from "../stores/connectivity.js";
 
@@ -286,6 +286,12 @@ export async function initDownloads() {
   const on = loadEnabledFlag();
   downloads.enabled = on;
   if (!on) {
+    // Read leftover catalog size without starting queue/workers.
+    try {
+      await refreshStorageInfo();
+    } catch {
+      /* ignore */
+    }
     downloads.ready = true;
     syncControlFlags();
     return;
@@ -322,22 +328,29 @@ export async function enableDownloads() {
 }
 
 /**
+ * Wipe OPFS/IDB download catalog and refresh reactive size fields.
+ * Caller must ensure the download queue/workers are already stopped
+ * (or downloads are disabled with an empty queue).
+ */
+async function wipeCatalogStorage() {
+  await wipeAllDownloads();
+  downloads.trackCount = 0;
+  downloads.downloadedBytes = 0;
+  try {
+    await refreshStorageInfo();
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * @param {{ wipe: boolean }} opts
  */
 export async function disableDownloads({ wipe }) {
   await clearAllQueue(() => stopAllWorkers());
   await setDownloadsEnabled(false);
   if (wipe) {
-    await wipeAllDownloads();
-    downloads.trackCount = 0;
-    downloads.downloadedBytes = 0;
-    clearCatalogProjection();
-  } else {
-    try {
-      await refreshStorageInfo();
-    } catch {
-      /* ignore */
-    }
+    await wipeCatalogStorage();
   }
   saveEnabledFlag(false);
   downloads.enabled = false;
@@ -347,7 +360,13 @@ export async function disableDownloads({ wipe }) {
   downloads.autoPausedReason = null;
   downloads.pauseBanner = "";
   downloads.managerOpen = false;
-  await refreshStorageInfo();
+  if (!wipe) {
+    try {
+      await refreshStorageInfo();
+    } catch {
+      /* ignore */
+    }
+  }
   syncControlFlags();
 }
 
@@ -361,6 +380,18 @@ export function openDownloadsManager() {
 export function closeDownloadsManager() {
   downloads.managerOpen = false;
   if (!settings.open) document.body.classList.remove("modal-open");
+}
+
+/**
+ * Delete all kept download files while downloads remain disabled.
+ * Does not enable the feature or open the manager.
+ * @throws {Error} if downloads are still enabled
+ */
+export async function clearStoredDownloads() {
+  if (downloads.enabled) {
+    throw new Error("Clear stored downloads only when downloads are disabled");
+  }
+  await wipeCatalogStorage();
 }
 
 /**
@@ -414,6 +445,11 @@ export async function resumeAllDownloads() {
 
 export function downloadsStorageLine(style = "long") {
   return formatDownloadsStorageLine(downloads, style);
+}
+
+/** Catalog-only leftover summary when downloads are off. */
+export function downloadsIdleSummaryLine() {
+  return formatIdleDownloadsSummary(downloads);
 }
 
 export async function checkOrphans() {

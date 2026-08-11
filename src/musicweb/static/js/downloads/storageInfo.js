@@ -71,6 +71,18 @@ export function formatBytes(bytes) {
 }
 
 /**
+ * Catalog-only line for leftover downloads when the feature is off.
+ * Empty string when there is nothing to clear (caller hides the block).
+ * @param {{ trackCount?: number, downloadedBytes?: number }} d
+ */
+export function formatIdleDownloadsSummary(d) {
+  const n = d.trackCount || 0;
+  if (!n) return "";
+  const label = n === 1 ? "1 track" : `${n} tracks`;
+  return `${label} · ${formatBytes(d.downloadedBytes || 0)}`;
+}
+
+/**
  * Shared storage line for Settings + Downloads manager.
  * @param {{
  *   storageSupported?: boolean,
