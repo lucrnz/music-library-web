@@ -15,9 +15,10 @@ import {
   clearCache,
 } from "../api.js";
 import { coerceTrack, isTrack, mapTracks } from "../models/track.js";
-import { downloadStatusFor } from "../downloads/records.js";
+import { getTrackRecord } from "../downloads/records.js";
+import { shouldPreferLocalOnline } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
-import { settings } from "./settings.js";
+import { getActiveStreamCodec, settings } from "./settings.js";
 
 const STORAGE_KEY = "musicweb.playlist.v1";
 
@@ -268,25 +269,35 @@ export async function addToQueue(entries) {
   pl.add(playable);
   commit();
 
-  // Skip /api/transcode/prepare for tracks already downloaded at the
-  // current stream codec — playback will use OPFS, not the server stream.
+  // Skip prepare when playback policy will prefer a local download.
+  const active = getActiveStreamCodec();
   const toPrepare = downloads.enabled
-    ? await tracksNeedingPrepare(playable, settings.stream)
+    ? await tracksNeedingPrepare(playable, active)
     : playable;
-  if (toPrepare.length) requestPrepare(toPrepare, settings.stream);
+  if (toPrepare.length) requestPrepare(toPrepare, active);
 }
 
 /**
  * @param {Track[]} tracks
- * @param {string} codec
+ * @param {string} activeCodec
  * @returns {Promise<Track[]>}
  */
-async function tracksNeedingPrepare(tracks, codec) {
+async function tracksNeedingPrepare(tracks, activeCodec) {
   const out = [];
+  const policy = settings.playbackPolicy;
+  const catalog = settings.options;
   for (const t of tracks) {
     if (!t?.id) continue;
     try {
-      if ((await downloadStatusFor(t.id, codec)) === "ready") continue;
+      const rec = await getTrackRecord(t.id);
+      if (
+        rec &&
+        rec.status !== "broken" &&
+        rec.codec &&
+        shouldPreferLocalOnline(rec.codec, activeCodec, policy, catalog)
+      ) {
+        continue;
+      }
     } catch {
       /* catalog unavailable — still prepare */
     }

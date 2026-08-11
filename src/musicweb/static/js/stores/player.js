@@ -9,7 +9,7 @@ import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
 import { PLACEHOLDER_COVER } from "../util.js";
 import { pl, commit } from "./playlist.js";
-import { settings } from "./settings.js";
+import { getActiveStreamCodec, settings } from "./settings.js";
 
 const VOLUME_STORAGE_KEY = "musicweb.volume";
 const EXPANDED_STORAGE_KEY = "musicweb.nowPlayingExpanded.v1";
@@ -189,9 +189,12 @@ export async function playIndex(index) {
   player.fromDownload = false;
   setPlayNotice(null);
 
+  const activeCodec = getActiveStreamCodec();
   const source = await resolvePlaySource(track, {
     enabled: downloads.enabled,
-    codec: settings.stream,
+    activeStreamCodec: activeCodec,
+    playbackPolicy: settings.playbackPolicy,
+    catalog: settings.options,
     offline: isHardOffline(),
   });
 
@@ -224,7 +227,7 @@ export async function playIndex(index) {
         syncTransportFlags();
         return;
       }
-      const remote = streamUrl(track, settings.stream);
+      const remote = streamUrl(track, getActiveStreamCodec());
       if (remote) {
         audio.src = remote;
         try {
