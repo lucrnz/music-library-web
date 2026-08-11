@@ -10,7 +10,8 @@ Musicweb is a **personal LAN library player**: browse and stream your own lossle
 - **Browse modes:** Folders (filesystem), Artists → Albums → Tracks, Albums grid, Search. Routes should remain bookmarkable.
 - **Queue vs playlists:** Session queue lives in the browser (survives reload). Saved playlists live in SQLite and are shared across devices on the same server.
 - **Honest capability:** Codec profile pickers should list only formats the **current browser can actually decode** (runtime media probes), not optimistic `canPlayType` / UA guesses alone.
-- **Offline downloads (client):** Optional download-to-device features use browser storage (OPFS); they must not corrupt the server index.
+- **Quality preferences (client):** Streaming quality can differ for Wi‑Fi vs mobile data when the browser reports `connection.type` (hidden on typical desktop). Download quality is independent. Playback may prefer a local download when it is at least as good as the active stream profile (user-selectable policy). Network cost hints never replace an explicit user setting.
+- **Offline downloads (client):** Optional download-to-device features use browser storage (OPFS); they must not corrupt the server index. Optional “only download on Wi‑Fi” pauses the queue on cellular when connection type is detectable.
 
 ## Audio quality principles
 

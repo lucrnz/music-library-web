@@ -38,6 +38,7 @@ Exact argv fragments and profile tags live in `profiles.py`.
 
 - Stream by stable track id (preferred) with a codec/profile tag.
 - Settings UI should only offer profiles the browser can decode (client probes).
+- Client may pick different profile tags for Wi‑Fi vs cellular streaming and for offline downloads; `/api/codecs` exposes bitrate/depth/rate so the client can rank quality. Network detection is browser-side only.
 - Optional prepare endpoint prewarms encodes without blocking the main UX path.
 
 ## Guardrails
