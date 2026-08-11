@@ -17,10 +17,7 @@ import {
   playIndex,
   stopPlayback,
 } from "../../stores/player.js";
-import {
-  downloadTracks,
-  refreshDownloadStatuses,
-} from "../../downloads/index.js";
+import { downloadTracks } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
 import Icon from "../icons/Icon.js";
 
@@ -130,7 +127,6 @@ export default defineComponent({
           return;
         }
         await downloadTracks(tracks);
-        await refreshDownloadStatuses();
       } catch (err) {
         console.error(err);
         alert(err.message || "Download failed");
@@ -142,7 +138,6 @@ export default defineComponent({
       try {
         const tracks = pl.tracks.filter((t) => t.id && !t.isMissing);
         await downloadTracks(tracks);
-        await refreshDownloadStatuses();
       } catch (err) {
         console.error(err);
         alert(err.message || "Download failed");

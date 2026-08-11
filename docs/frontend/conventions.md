@@ -15,9 +15,9 @@
 
 - **No bundler / no Node.** Browser loads Vue and Vue Router as ESM from `/static/vendor/` via import map.
 - **SPA fallback:** FastAPI serves the same shell for client routes so refresh works on `/folders`, `/artists/…`, etc.
-- **Stores** hold player, playlist/queue, settings, UI chrome, and downloads state. Components should prefer store APIs over ad-hoc globals.
+- **Stores** hold player, playlist/queue, settings, and UI chrome. Components should prefer store APIs over ad-hoc globals.
 - **Library UI** lives under `components/library/`; player under `components/player/`; settings modal under `components/settings/`.
-- **Downloads** (`static/js/downloads/`) implement client-side offline catalog (OPFS, workers). Keep offline concerns out of server index code.
+- **Downloads** (`static/js/downloads/`) implement client-side offline catalog (OPFS, workers). Import actions from `downloads/index.js` and reactive state from `downloads/state.js`. Keep offline concerns out of server index code.
 
 ## Vendor assets
 

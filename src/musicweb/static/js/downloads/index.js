@@ -4,19 +4,17 @@
  * Pattern:
  *   - Actions / lifecycle: import from `downloads/index.js`
  *   - Reactive fields: import `{ downloads }` from `downloads/state.js`
- *     (or from `stores/downloads.js` which re-exports both)
+ *   - Per-track UI status: `trackDownloadState(id)` (queue ∩ catalog join)
  *
  * Modules: enable → queue.js → worker.js → records/art. OPFS in opfs.js.
  */
 
 import { fetchTracksMeta } from "../api.js";
 import {
-  bindWindowConnectivity,
   getConnectivityState,
   isHardOffline,
   onConnectivityChange,
   reportFailure,
-  reportSuccess,
 } from "../connectivity.js";
 import { settings } from "../stores/settings.js";
 import { getLocalArtistImageUrl, getLocalCoverUrl } from "./art.js";
@@ -37,17 +35,15 @@ import {
   onQueueChange,
   pauseAllDownloads as queuePauseAll,
   resumeAllDownloads as queueResumeAll,
+  QueueState,
   resumeQueue,
   retryQueueItem,
   setDownloadsEnabled,
-  syncHealthFromPolicy,
 } from "./queue.js";
 import {
-  catalogUiStatus,
   deleteAlbumDownloads,
   deleteArtistDownloads,
   deleteTrackDownload,
-  getTrackRecord,
   listTrackRecords,
   markTrackBroken,
   markTrackOrphan,
@@ -56,6 +52,11 @@ import {
 } from "./records.js";
 import { resolveCoverUrl, resolvePlaySource } from "./resolve.js";
 import { downloads } from "./state.js";
+import {
+  clearCatalogProjection,
+  setCatalogProjectionMap,
+  trackDownloadState,
+} from "./status.js";
 import {
   formatBytes,
   formatDownloadsStorageLine,
@@ -75,14 +76,13 @@ export {
   clearFinishedQueue,
 } from "./queue.js";
 export { formatBytes } from "./storageInfo.js";
+export { trackDownloadState } from "./status.js";
+export { noteServerReachable, noteServerUnreachable } from "../stores/connectivity.js";
 
 const DOWNLOADS_STORAGE_KEY = "musicweb.downloadsEnabled";
 
-let statusRefreshTimer = null;
 let queueListenerBound = false;
-let connectivityMirrorBound = false;
-/** After first full rebuild, queue refresh uses incremental statusMap updates. */
-let statusMapReady = false;
+let downloadsConnectivityBound = false;
 
 function loadEnabledFlag() {
   try {
@@ -99,11 +99,6 @@ function saveEnabledFlag(on) {
   } catch {
     /* ignore */
   }
-}
-
-function mirrorConnectivity() {
-  downloads.connectivity = getConnectivityState();
-  syncControlFlags();
 }
 
 function syncControlFlags() {
@@ -134,12 +129,16 @@ function computeQueueSummary(items) {
   let progressItems = 0;
 
   for (const q of items) {
-    if (q.state === "active") active++;
-    else if (q.state === "pending") pending++;
-    else if (q.state === "paused") paused++;
-    else if (q.state === "failed") failed++;
+    if (q.state === QueueState.ACTIVE) active++;
+    else if (q.state === QueueState.PENDING) pending++;
+    else if (q.state === QueueState.PAUSED) paused++;
+    else if (q.state === QueueState.FAILED) failed++;
 
-    if (q.state === "active" || q.state === "pending" || q.state === "paused") {
+    if (
+      q.state === QueueState.ACTIVE ||
+      q.state === QueueState.PENDING ||
+      q.state === QueueState.PAUSED
+    ) {
       progressItems++;
       loadedBytes += q.loaded || 0;
       if (q.total && q.total > 0) totalBytes += q.total;
@@ -159,75 +158,26 @@ function computeQueueSummary(items) {
   };
 }
 
-const QUEUE_STATUS = new Set(["pending", "active", "failed", "paused"]);
-
 /**
- * Catalog-only status for a track id (no queue overlay).
- * ready/other track settings.download, not active stream.
- * @param {string} trackId
- * @returns {Promise<string|null>} null means none / remove key
+ * Reload catalog-only projection from IDB (boot / enable).
+ * Queue overlay is always joined at read time — not stored here.
  */
-async function catalogStatusFor(trackId) {
-  try {
-    const rec = await getTrackRecord(trackId);
-    return catalogUiStatus(rec, settings.download);
-  } catch {
-    return null;
-  }
-}
-
-/** Full rebuild: catalog + queue overlay. Init / enable / codec / wipe / explicit. */
-async function rebuildStatusMapFull() {
-  /** @type {Record<string, string>} */
+export async function hydrateCatalogProjection() {
+  /** @type {Record<string, { codec: string, status: string }>} */
   const map = {};
   try {
     const tracks = await listTrackRecords();
-    const preferred = settings.download;
     for (const t of tracks) {
-      const st = catalogUiStatus(t, preferred);
-      if (st) map[t.trackId] = st;
+      if (!t?.trackId || !t.codec) continue;
+      map[t.trackId] = {
+        codec: t.codec,
+        status: t.status || "ready",
+      };
     }
   } catch {
     /* ignore */
   }
-  for (const q of downloads.queue) {
-    if (QUEUE_STATUS.has(q.state)) {
-      map[q.trackId] = q.state;
-    }
-  }
-  downloads.statusMap = map;
-  statusMapReady = true;
-}
-
-/**
- * Incremental statusMap after a queue refresh.
- * Queue states overlay; tracks that left active queue recompute from catalog.
- * @param {Set<string>} prevQueueTrackIds
- */
-async function updateStatusMapIncremental(prevQueueTrackIds) {
-  if (!statusMapReady) {
-    await rebuildStatusMapFull();
-    return;
-  }
-  /** @type {Record<string, string>} */
-  const map = { ...downloads.statusMap };
-  const nextActive = new Set();
-
-  for (const q of downloads.queue) {
-    if (QUEUE_STATUS.has(q.state)) {
-      map[q.trackId] = q.state;
-      nextActive.add(q.trackId);
-    }
-  }
-
-  for (const tid of prevQueueTrackIds) {
-    if (nextActive.has(tid)) continue;
-    const st = await catalogStatusFor(tid);
-    if (st) map[tid] = st;
-    else delete map[tid];
-  }
-
-  downloads.statusMap = map;
+  setCatalogProjectionMap(map);
 }
 
 function bindQueueListener() {
@@ -237,7 +187,6 @@ function bindQueueListener() {
     refreshQueue({ includeStorage: true }).catch(() => {});
   });
   onProgressChange((id, loaded, total) => {
-    // Progress ticks must not rebuild statusMap.
     downloads.liveProgress = {
       ...downloads.liveProgress,
       [id]: { loaded, total },
@@ -253,35 +202,24 @@ function bindQueueListener() {
   });
 }
 
+/**
+ * Downloads-specific connectivity hooks (orphan check + pause banners).
+ * Window/probe binding lives in stores/connectivity.js — call bindConnectivityStore first.
+ */
 export function bindConnectivityListeners() {
-  if (connectivityMirrorBound || typeof window === "undefined") return;
-  connectivityMirrorBound = true;
-  bindWindowConnectivity();
+  if (downloadsConnectivityBound || typeof window === "undefined") return;
+  downloadsConnectivityBound = true;
   onConnectivityChange(() => {
-    mirrorConnectivity();
+    syncControlFlags();
     if (downloads.enabled && getConnectivityState() === "online") {
       checkOrphans().catch(() => {});
     }
   });
-  // Initial mirror only — transition toasts live in connectivityUi (shell boot).
-  mirrorConnectivity();
-}
-
-/** @param {unknown} [err] */
-export function noteServerUnreachable(err) {
-  reportFailure(err);
-  mirrorConnectivity();
-}
-
-export function noteServerReachable() {
-  reportSuccess();
-  mirrorConnectivity();
+  syncControlFlags();
 }
 
 export async function markDownloadBroken(trackId) {
   await markTrackBroken(trackId);
-  const map = { ...downloads.statusMap, [trackId]: "failed" };
-  downloads.statusMap = map;
 }
 
 export async function confirmIfNearQuota(trackCount = 1) {
@@ -310,10 +248,9 @@ export async function refreshStorageInfo() {
 }
 
 /**
- * @param {{ includeStorage?: boolean, fullStatus?: boolean }} [opts]
+ * @param {{ includeStorage?: boolean }} [opts]
  */
 export async function refreshQueue(opts = {}) {
-  const prevIds = new Set(downloads.queue.map((q) => q.trackId));
   try {
     const items = await listQueue();
     downloads.queue = overlayQueue(items);
@@ -322,53 +259,40 @@ export async function refreshQueue(opts = {}) {
   }
   computeQueueSummary(downloads.queue);
   syncControlFlags();
-  if (opts.fullStatus || !statusMapReady) {
-    await rebuildStatusMapFull();
-  } else {
-    await updateStatusMapIncremental(prevIds);
-  }
-  if (downloads.enabled) {
-    await syncHealthFromPolicy();
-  }
+  // Health + pump run from queue mutation bus (emitQueueChange), not here.
   if (opts.includeStorage) {
     await refreshStorageInfo();
   }
 }
 
-/** Explicit full status rebuild (e.g. after library nav). */
-export async function refreshDownloadStatuses() {
-  await rebuildStatusMapFull();
-}
-
-/** @deprecated use refreshDownloadStatuses */
-export async function refreshTrackStatuses() {
-  await refreshDownloadStatuses();
-}
-
-export function trackDownloadState(trackId) {
-  if (!downloads.enabled || !trackId) return "none";
-  return downloads.statusMap[trackId] || "none";
+/**
+ * Shared enable path: OPFS + IDB + queue resume + UI listeners.
+ * Safe to call when already booted (idempotent open/bind guards).
+ */
+async function bootDownloadsRuntime() {
+  await import("./worker.js");
+  await requireOpfs();
+  await openDownloadsDb();
+  downloads.persistent = await requestPersistentStorage();
+  await setDownloadsEnabled(true);
+  await resumeQueue();
+  bindQueueListener();
+  await hydrateCatalogProjection();
+  await refreshQueue({ includeStorage: true });
 }
 
 export async function initDownloads() {
-  // Ensure worker module loads (registers schedulePump with policy).
-  await import("./worker.js");
   bindConnectivityListeners();
   const on = loadEnabledFlag();
   downloads.enabled = on;
   if (!on) {
     downloads.ready = true;
-    mirrorConnectivity();
+    syncControlFlags();
     return;
   }
   try {
-    await requireOpfs();
-    await openDownloadsDb();
-    downloads.persistent = await requestPersistentStorage();
-    await setDownloadsEnabled(true);
-    await resumeQueue();
-    bindQueueListener();
-    await refreshQueue({ includeStorage: true, fullStatus: true });
+    await bootDownloadsRuntime();
+    downloads.enabled = true;
     downloads.ready = true;
   } catch (err) {
     console.error("Downloads init failed", err);
@@ -377,22 +301,24 @@ export async function initDownloads() {
     saveEnabledFlag(false);
     downloads.ready = true;
   }
-  mirrorConnectivity();
+  syncControlFlags();
 }
 
 export async function enableDownloads() {
-  await import("./worker.js");
-  await requireOpfs();
   saveEnabledFlag(true);
   downloads.enabled = true;
-  await openDownloadsDb();
-  downloads.persistent = await requestPersistentStorage();
-  await setDownloadsEnabled(true);
-  await resumeQueue();
-  bindQueueListener();
-  await refreshQueue({ includeStorage: true, fullStatus: true });
-  downloads.ready = true;
-  mirrorConnectivity();
+  try {
+    await bootDownloadsRuntime();
+    downloads.ready = true;
+  } catch (err) {
+    console.error("Downloads enable failed", err);
+    downloads.error = err?.message || String(err);
+    downloads.enabled = false;
+    saveEnabledFlag(false);
+    downloads.ready = true;
+    throw err;
+  }
+  syncControlFlags();
 }
 
 /**
@@ -405,8 +331,7 @@ export async function disableDownloads({ wipe }) {
     await wipeAllDownloads();
     downloads.trackCount = 0;
     downloads.downloadedBytes = 0;
-    downloads.statusMap = {};
-    statusMapReady = false;
+    clearCatalogProjection();
   } else {
     try {
       await refreshStorageInfo();
@@ -421,10 +346,9 @@ export async function disableDownloads({ wipe }) {
   downloads.userPaused = false;
   downloads.autoPausedReason = null;
   downloads.pauseBanner = "";
-  if (wipe) downloads.statusMap = {};
   downloads.managerOpen = false;
   await refreshStorageInfo();
-  mirrorConnectivity();
+  syncControlFlags();
 }
 
 export function openDownloadsManager() {
@@ -465,20 +389,17 @@ export async function downloadTracks(tracks) {
 
 export async function removeDownloadedTrack(trackId) {
   await deleteTrackDownload(trackId);
-  const map = { ...downloads.statusMap };
-  delete map[trackId];
-  downloads.statusMap = map;
   await refreshQueue({ includeStorage: true });
 }
 
 export async function removeDownloadedAlbum(albumId) {
   await deleteAlbumDownloads(albumId);
-  await refreshQueue({ includeStorage: true, fullStatus: true });
+  await refreshQueue({ includeStorage: true });
 }
 
 export async function removeDownloadedArtist(artistId) {
   await deleteArtistDownloads(artistId);
-  await refreshQueue({ includeStorage: true, fullStatus: true });
+  await refreshQueue({ includeStorage: true });
 }
 
 export async function pauseAllDownloads() {
@@ -515,12 +436,12 @@ export async function checkOrphans() {
   }
 }
 
+/**
+ * Preferred download codec changed — UI re-joins via settings.download;
+ * no status map rebuild.
+ */
 export function onDownloadCodecChanged() {
-  if (!downloads.enabled) return;
-  if (statusRefreshTimer) clearTimeout(statusRefreshTimer);
-  statusRefreshTimer = setTimeout(() => {
-    rebuildStatusMapFull().catch(() => {});
-  }, 50);
+  /* reactive settings.download is enough for trackDownloadState */
 }
 
 /** Cellular / Wi‑Fi constraint flip — re-evaluate only-download-on-Wi‑Fi pause. */

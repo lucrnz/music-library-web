@@ -17,15 +17,14 @@ import {
   wipeDownloadsDb,
   withStores,
 } from "./db.js";
-import { deleteLyricsRecord } from "./lyricsStore.js";
 import {
   artistIdsOf,
-  codecExt,
-  codecMediaType,
   normalizeTrack,
   primaryArtistIdOf,
   primaryArtistNameOf,
-} from "./normalize.js";
+} from "../models/track.js";
+import { codecExt, codecMediaType } from "./codec.js";
+import { deleteLyricsRecord } from "./lyricsStore.js";
 import {
   albumCoverDirParts,
   albumCoverFileName,
@@ -37,6 +36,16 @@ import {
   readBinary,
   wipeOpfsDownloads,
 } from "./opfs.js";
+import {
+  catalogUiStatus,
+  clearCatalogProjection,
+  syncCatalogProjection,
+} from "./status.js";
+
+export { catalogUiStatus } from "./status.js";
+export { codecExt, codecMediaType } from "./codec.js";
+export { audioDirParts, audioFileName } from "./opfs.js";
+export { normalizeTrack } from "../models/track.js";
 
 /** @param {string} trackId */
 export async function getTrackRecord(trackId) {
@@ -53,20 +62,6 @@ export async function listAlbumRecords() {
 
 export async function listArtistRecords() {
   return getAll("artists");
-}
-
-/**
- * Pure catalog UI status vs preferred download codec.
- * @param {object|null|undefined} rec
- * @param {string} preferredDownloadCodec
- * @returns {'ready'|'other'|'failed'|null}
- */
-export function catalogUiStatus(rec, preferredDownloadCodec) {
-  if (!rec) return null;
-  if (rec.status === "broken") return "failed";
-  if (!rec.codec) return null;
-  if (rec.codec !== preferredDownloadCodec) return "other";
-  return "ready";
 }
 
 /**
@@ -118,6 +113,7 @@ export async function markTrackBroken(trackId) {
   if (!rec) return;
   rec.status = "broken";
   await putOne("tracks", rec);
+  syncCatalogProjection(trackId, rec);
 }
 
 export async function markTrackOrphan(trackId) {
@@ -125,6 +121,7 @@ export async function markTrackOrphan(trackId) {
   if (!rec) return;
   if (rec.status !== "broken") rec.status = "orphan";
   await putOne("tracks", rec);
+  syncCatalogProjection(trackId, rec);
 }
 
 /**
@@ -238,6 +235,7 @@ export async function commitTrackDownload(track, codec, audioMeta) {
     stores.tracks.put(rec);
   });
 
+  syncCatalogProjection(n.id, rec);
   return rec;
 }
 
@@ -332,6 +330,8 @@ export async function deleteTrackDownload(trackId) {
       );
     }
   }
+
+  syncCatalogProjection(trackId, null);
 }
 
 export async function deleteAlbumDownloads(albumId) {
@@ -355,17 +355,10 @@ export async function wipeAllDownloads() {
   wipeArtUrlCache();
   await wipeOpfsDownloads();
   await wipeDownloadsDb();
+  clearCatalogProjection();
 }
 
 export async function sumDownloadedBytes() {
   const tracks = await listTrackRecords();
   return tracks.reduce((s, t) => s + (t.bytes || 0), 0);
 }
-
-export {
-  audioDirParts,
-  audioFileName,
-  codecExt,
-  codecMediaType,
-  normalizeTrack,
-};

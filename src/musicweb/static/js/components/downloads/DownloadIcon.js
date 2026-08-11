@@ -7,6 +7,8 @@ import {
   trackDownloadState,
 } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
+import { catalogIndex } from "../../downloads/status.js";
+import { settings } from "../../stores/settings.js";
 import Icon from "../icons/Icon.js";
 
 export default defineComponent({
@@ -19,6 +21,10 @@ export default defineComponent({
     const state = computed(() => {
       if (!downloads.enabled) return "hidden";
       if (!props.track?.id || props.track.isMissing) return "hidden";
+      // Touch reactive sources used by the on-read join.
+      void downloads.queue;
+      void settings.download;
+      void catalogIndex.byTrack;
       return trackDownloadState(props.track.id);
     });
 

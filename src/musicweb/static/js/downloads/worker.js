@@ -9,35 +9,42 @@ import {
   isNetworkClassError,
   reportFailure,
 } from "../connectivity.js";
-import {
-  audioDirParts,
-  audioFileName,
-  codecExt,
-  codecMediaType,
-  commitTrackDownload,
-} from "./catalog.js";
+import { codecExt, codecMediaType } from "./codec.js";
 import { deleteOne, getOne, putOne } from "./db.js";
 import {
   DownloadWriteAbortError,
+  audioDirParts,
+  audioFileName,
   deleteBinary,
   partialByteSize,
   removePartial,
   writeResponseToFile,
 } from "./opfs.js";
+import { commitTrackDownload } from "./records.js";
+import { emitQueueChange } from "./queueEvents.js";
 import {
-  activeIds,
   canPump,
-  clearLiveProgress,
-  controllers,
-  discardPartialForItem,
-  emitQueueChange,
-  flushProgressToIdb,
   initPolicy,
-  listQueue,
   onJobNetworkFailure,
-  syncHealthFromPolicy,
+} from "./queuePolicy.js";
+import {
+  clearLiveProgress,
+  flushProgressToIdb,
   updateLiveProgress,
-} from "./queue.js";
+} from "./queueProgress.js";
+import { activeIds, controllers } from "./queueRuntime.js";
+import {
+  discardPartialForItem,
+  listQueue,
+} from "./queueStore.js";
+import {
+  QueueState,
+  markActive,
+  markFailed,
+  markPaused,
+  markPending,
+  resolveAbortKind,
+} from "./queueTransitions.js";
 
 const MAX_CONCURRENT = 2;
 
@@ -59,11 +66,10 @@ async function pump() {
   if (!canPump()) return;
   while (activeIds.size < MAX_CONCURRENT && canPump()) {
     const items = await listQueue();
-    const next = items.find((i) => i.state === "pending");
+    const next = items.find((i) => i.state === QueueState.PENDING);
     if (!next) break;
     activeIds.add(next.id);
-    next.state = "active";
-    next.error = null;
+    markActive(next);
     await putOne("queue", next);
     emitQueueChange();
     runJob(next).finally(() => {
@@ -80,10 +86,9 @@ async function pump() {
  * @typedef {{ dirParts?: string[], fileName?: string, track?: object, codec?: string, mediaType?: string, ext?: string, bytes?: number }} JobCtx
  */
 
-async function finishQueueRow(id, { syncHealth = true } = {}) {
+async function finishQueueRow(id) {
   clearLiveProgress(id);
   emitQueueChange();
-  if (syncHealth) await syncHealthFromPolicy();
 }
 
 /**
@@ -107,7 +112,7 @@ async function removeQueueAndFiles(id, current, ctx) {
 /** @type {Record<JobOutcomeKind, (id: number, outcome: JobOutcome, ctx: JobCtx, current: object|null|undefined) => Promise<void>>} */
 const outcomeHandlers = {
   async done(id, _outcome, ctx, current) {
-    if (current?.state === "canceled") {
+    if (current?.state === QueueState.CANCELED) {
       if (ctx.dirParts && ctx.fileName) {
         await deleteBinary(ctx.dirParts, ctx.fileName);
       }
@@ -132,7 +137,7 @@ const outcomeHandlers = {
 
   async retry(id, _outcome, _ctx, current) {
     if (current) {
-      current.state = "pending";
+      markPending(current);
       current.loaded = 0;
       current.total = null;
       await putOne("queue", current);
@@ -142,9 +147,8 @@ const outcomeHandlers = {
   },
 
   async failed(id, outcome, _ctx, current) {
-    if (current && current.state !== "paused") {
-      current.state = "failed";
-      current.error = outcome.error || "Download failed";
+    if (current && current.state !== QueueState.PAUSED) {
+      markFailed(current, outcome.error);
       await putOne("queue", current);
     }
     await flushProgressToIdb(id);
@@ -152,21 +156,24 @@ const outcomeHandlers = {
   },
 
   async network(id, outcome, _ctx, current) {
-    if (current && current.state !== "canceled") {
-      current.state = "paused";
+    if (current && current.state !== QueueState.CANCELED) {
+      markPaused(current, "network");
       if (outcome.loaded != null) current.loaded = outcome.loaded;
       if (outcome.total !== undefined) current.total = outcome.total;
       await putOne("queue", current);
     }
     await flushProgressToIdb(id);
+    // freezeWork emits once (bus → health + pump).
     await onJobNetworkFailure();
-    emitQueueChange();
   },
 
   async paused(id, outcome, ctx, current) {
     if (current) {
-      if (current.state === "active" || current.state === "pending") {
-        current.state = "paused";
+      if (
+        current.state === QueueState.ACTIVE ||
+        current.state === QueueState.PENDING
+      ) {
+        markPaused(current, "abort");
       }
       if (outcome.loaded != null) current.loaded = outcome.loaded;
       if (ctx.dirParts && ctx.fileName) {
@@ -181,7 +188,6 @@ const outcomeHandlers = {
     }
     await flushProgressToIdb(id);
     emitQueueChange();
-    await syncHealthFromPolicy();
   },
 };
 
@@ -194,11 +200,11 @@ const outcomeHandlers = {
 async function applyJobOutcome(id, outcome, ctx = {}) {
   const current = await getOne("queue", id);
   let kind = outcome.kind;
-  if (kind === "paused" && current?.state === "canceled") {
+  if (kind === "paused" && current?.state === QueueState.CANCELED) {
     kind = "canceled";
   } else if (
     kind !== "canceled" &&
-    current?.state === "canceled" &&
+    current?.state === QueueState.CANCELED &&
     kind !== "done"
   ) {
     kind = "canceled";
@@ -241,10 +247,10 @@ async function executeDownloadJob(item, ac, fileCtx) {
   const ext = codecExt(item.codec);
 
   let current = await getOne("queue", item.id);
-  if (!current || current.state === "canceled") {
+  if (!current || current.state === QueueState.CANCELED) {
     return { outcome: { kind: "canceled" } };
   }
-  if (current.state === "paused" || !canPump()) {
+  if (current.state === QueueState.PAUSED || !canPump()) {
     return { outcome: { kind: "paused" } };
   }
 
@@ -261,11 +267,7 @@ async function executeDownloadJob(item, ac, fileCtx) {
 
   if (ac.signal.aborted) {
     const cur = await getOne("queue", item.id);
-    return {
-      outcome: {
-        kind: cur?.state === "canceled" ? "canceled" : "paused",
-      },
-    };
+    return { outcome: { kind: resolveAbortKind(cur) } };
   }
 
   let offset = await partialByteSize(dirParts, fileName);
@@ -287,11 +289,7 @@ async function executeDownloadJob(item, ac, fileCtx) {
   } catch (err) {
     if (ac.signal.aborted) {
       const cur = await getOne("queue", item.id);
-      return {
-        outcome: {
-          kind: cur?.state === "canceled" ? "canceled" : "paused",
-        },
-      };
+      return { outcome: { kind: resolveAbortKind(cur) } };
     }
     if (isNetworkClassError(err)) {
       reportFailure(err);
@@ -344,7 +342,7 @@ async function executeDownloadJob(item, ac, fileCtx) {
     });
 
     current = await getOne("queue", item.id);
-    if (!current || current.state === "canceled") {
+    if (!current || current.state === QueueState.CANCELED) {
       return { outcome: { kind: "canceled" } };
     }
 
@@ -362,11 +360,7 @@ async function executeDownloadJob(item, ac, fileCtx) {
   } catch (err) {
     if (err instanceof DownloadWriteAbortError || ac.signal.aborted) {
       const cur = await getOne("queue", item.id);
-      return {
-        outcome: {
-          kind: cur?.state === "canceled" ? "canceled" : "paused",
-        },
-      };
+      return { outcome: { kind: resolveAbortKind(cur) } };
     }
 
     console.error("Download job failed", err);

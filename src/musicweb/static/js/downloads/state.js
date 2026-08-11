@@ -4,14 +4,10 @@
  */
 import { reactive } from "vue";
 
-/** @typedef {'online'|'offline'|'server_down'} Connectivity */
-
 export const downloads = reactive({
   enabled: false,
   ready: false,
   managerOpen: false,
-  /** @type {Connectivity} */
-  connectivity: "online",
   /** @type {object[]} */
   queue: [],
   /** @type {Record<number, { loaded: number, total: number|null }>} */
@@ -23,11 +19,9 @@ export const downloads = reactive({
   storageSupported: false,
   nearQuota: false,
   persistent: false,
-  /** trackId → ready|other|none|pending|active|failed|paused */
-  statusMap: /** @type {Record<string, string>} */ ({}),
   error: "",
   userPaused: false,
-  /** @type {null | 'offline' | 'server'} */
+  /** @type {null | 'offline' | 'server' | 'metered'} */
   autoPausedReason: null,
   pauseBanner: "",
   queueSummary: {

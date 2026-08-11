@@ -244,7 +244,7 @@ function applyActiveStreamSideEffects(tracks, opts = {}) {
     requestPrepare(list, active, { replace: true });
   }
   if (opts.notifyDownloads) {
-    import("./downloads.js")
+    import("../downloads/index.js")
       .then((m) => m.onNetworkConstraintChanged?.())
       .catch(() => {});
   }
@@ -324,7 +324,7 @@ export function setDownloadCodec(v) {
   if (v === settings.download) return false;
   settings.download = v;
   persistAll();
-  import("./downloads.js")
+  import("../downloads/index.js")
     .then((m) => m.onDownloadCodecChanged?.())
     .catch(() => {});
   return true;
@@ -354,7 +354,7 @@ export function setOnlyDownloadOnWifi(on) {
   if (next === settings.onlyDownloadOnWifi) return false;
   settings.onlyDownloadOnWifi = next;
   persistAll();
-  import("./downloads.js")
+  import("../downloads/index.js")
     .then((m) => m.onNetworkConstraintChanged?.())
     .catch(() => {});
   return true;
