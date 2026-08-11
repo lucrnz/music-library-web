@@ -53,6 +53,10 @@ export default defineComponent({
       () => settings.canDetectConnectionType
     );
 
+    const streamFieldLabel = computed(() =>
+      showNetworkQuality.value ? "Streaming — Wi‑Fi" : "Streaming"
+    );
+
     const scanPanelActive = computed(
       () => settings.open && libraryReachable.value
     );
@@ -226,6 +230,7 @@ export default defineComponent({
       libraryReachable,
       scanPanelActive,
       showNetworkQuality,
+      streamFieldLabel,
       downloadsBusy,
       downloadsStorageLine,
       showIdleDownloads,
@@ -271,7 +276,10 @@ export default defineComponent({
             title="Close"
             aria-label="Close settings"
             @click="closeSettings"
-          ><Icon name="chevron-down" /></button>
+          >
+            <Icon class="modal-close-sheet" name="chevron-down" />
+            <Icon class="modal-close-card" name="close" />
+          </button>
         </div>
 
         <div class="modal-section" ref="qualityRoot">
@@ -279,13 +287,13 @@ export default defineComponent({
           <p class="modal-hint">
             Choose streaming quality
             <template v-if="showNetworkQuality"> for Wi‑Fi and mobile data</template>.
-            Downloads use their own quality setting.
+            <template v-if="downloads.enabled"> Downloads use their own quality setting.</template>
           </p>
 
           <QualitySelect
             menu-id="wifi"
             label-id="wifi-codec-label"
-            field-label="Streaming — Wi‑Fi"
+            :field-label="streamFieldLabel"
             :options="settings.options"
             :selected-id="settings.streamWifi"
             :trigger-label="wifiLabel"
@@ -309,6 +317,7 @@ export default defineComponent({
           />
 
           <QualitySelect
+            v-if="downloads.enabled"
             menu-id="download"
             label-id="dl-codec-label"
             field-label="Downloads quality"
