@@ -5,10 +5,10 @@ import {
   ref,
   watch,
 } from "vue";
-import { apiGet, apiPost } from "../../api.js";
 import { pl } from "../../stores/playlist.js";
 import { playIndex } from "../../stores/player.js";
 import { canReachServer } from "../../connectivity.js";
+import { connectivity } from "../../stores/connectivity.js";
 import {
   PLAYBACK_POLICIES,
   settings,
@@ -28,26 +28,22 @@ import {
 } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
 import Icon from "../icons/Icon.js";
+import LibraryScanPanel from "./LibraryScanPanel.js";
 import QualitySelect from "./QualitySelect.js";
 
 const SAME_AS_WIFI = "__same_as_wifi__";
 
 export default defineComponent({
   name: "SettingsModal",
-  components: { Icon, QualitySelect },
+  components: { Icon, QualitySelect, LibraryScanPanel },
   setup() {
-    const statusText = ref("—");
-    const progressPct = ref(0);
-    const showProgress = ref(false);
-    const scanning = ref(false);
     const downloadsBusy = ref(false);
     /** @type {import('vue').Ref<string|null>} */
     const openMenu = ref(null);
     const qualityRoot = ref(null);
-    let pollTimer = null;
 
     const libraryReachable = computed(() => {
-      void downloads.connectivity;
+      void connectivity.state;
       return canReachServer();
     });
 
@@ -55,83 +51,9 @@ export default defineComponent({
       () => settings.canDetectConnectionType
     );
 
-    function stopPoll() {
-      if (pollTimer != null) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    }
-
-    function startPoll() {
-      stopPoll();
-      if (!libraryReachable.value) return;
-      pollTimer = setInterval(refreshScanStatus, 1000);
-    }
-
-    async function refreshScanStatus() {
-      if (!libraryReachable.value) return;
-      try {
-        const st = await apiGet("/api/library/scan/status");
-        const stats = await apiGet("/api/library/stats").catch(() => null);
-        const running = st.status === "running" || st.status === "canceling";
-        scanning.value = running;
-
-        let line = `Status: ${st.status}`;
-        if (st.mode) line += ` (${st.mode})`;
-        if (st.phase) line += ` · ${st.phase}`;
-        if (running) {
-          line += ` · seen ${st.files_seen || 0}`;
-          if (st.files_total_hint) line += ` / ~${st.files_total_hint}`;
-          line += ` · updated ${st.files_upserted || 0}`;
-        } else if (st.finished_at) {
-          line += ` · last finished ${st.finished_at}`;
-        }
-        if (stats) {
-          line += `\nIndexed: ${stats.tracks} tracks · ${stats.albums} albums · ${stats.artists} artists`;
-          if (stats.missing_tracks) line += ` · ${stats.missing_tracks} missing`;
-        }
-        if (st.last_error) line += `\nError: ${st.last_error}`;
-        statusText.value = line;
-
-        if (running && st.files_total_hint) {
-          showProgress.value = true;
-          progressPct.value = Math.min(
-            100,
-            Math.round(((st.files_seen || 0) / st.files_total_hint) * 100)
-          );
-        } else if (running) {
-          showProgress.value = true;
-          progressPct.value = 30;
-        } else {
-          showProgress.value = false;
-          progressPct.value = 0;
-        }
-      } catch (err) {
-        statusText.value = `Scan status unavailable: ${err.message}`;
-      }
-    }
-
-    async function startScan(mode) {
-      if (!libraryReachable.value) return;
-      try {
-        await apiPost("/api/library/scan", { mode });
-        await refreshScanStatus();
-        startPoll();
-      } catch (err) {
-        console.error(err);
-        statusText.value = `Could not start scan: ${err.message}`;
-      }
-    }
-
-    async function cancelScan() {
-      if (!libraryReachable.value) return;
-      try {
-        await apiPost("/api/library/scan/cancel", {});
-        await refreshScanStatus();
-      } catch (err) {
-        console.error(err);
-      }
-    }
+    const scanPanelActive = computed(
+      () => settings.open && libraryReachable.value
+    );
 
     function labelFor(id) {
       const hit = settings.options.find((o) => o.id === id);
@@ -156,7 +78,6 @@ export default defineComponent({
     const cellularLeading = [
       { id: SAME_AS_WIFI, label: "Same as Wi‑Fi" },
     ];
-    /** selectedId for cellular: SAME_AS_WIFI token when null */
     const cellularSelectedId = computed(() =>
       settings.streamCellular == null ? SAME_AS_WIFI : settings.streamCellular
     );
@@ -252,61 +173,32 @@ export default defineComponent({
       closeSettings();
     }
 
-    function syncLibrarySection() {
-      if (!settings.open) {
-        stopPoll();
-        return;
-      }
-      if (libraryReachable.value) {
-        refreshScanStatus();
-        startPoll();
-      } else {
-        stopPoll();
-        scanning.value = false;
-        showProgress.value = false;
-      }
-    }
-
     watch(
       () => settings.open,
       (open) => {
         if (open) {
-          syncLibrarySection();
           if (downloads.enabled) refreshStorageInfo();
           document.addEventListener("keydown", onKey);
           document.addEventListener("pointerdown", onDocPointer, true);
         } else {
           openMenu.value = null;
-          stopPoll();
           document.removeEventListener("keydown", onKey);
           document.removeEventListener("pointerdown", onDocPointer, true);
         }
       }
     );
 
-    watch(libraryReachable, () => {
-      if (settings.open) syncLibrarySection();
-    });
-
     onUnmounted(() => {
-      stopPoll();
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onDocPointer, true);
     });
-
-    const progressStyle = computed(() => ({
-      width: `${progressPct.value}%`,
-    }));
 
     return {
       settings,
       downloads,
       libraryReachable,
+      scanPanelActive,
       showNetworkQuality,
-      statusText,
-      showProgress,
-      progressStyle,
-      scanning,
       downloadsBusy,
       downloadsStorageLine,
       openMenu,
@@ -326,8 +218,6 @@ export default defineComponent({
       chooseDownload,
       choosePolicy,
       onOnlyWifiChange,
-      startScan,
-      cancelScan,
       onToggleDownloads,
       onOpenManager,
     };
@@ -461,26 +351,11 @@ export default defineComponent({
             >Download manager</button>
           </div>
         </div>
-        <div class="modal-section">
-          <div class="modal-section-title">Library index</div>
-          <template v-if="libraryReachable">
-            <p class="modal-hint" style="white-space: pre-wrap">{{ statusText }}</p>
-            <div class="scan-actions">
-              <button type="button" class="pill" :disabled="scanning" @click="startScan('quick')">Quick rescan</button>
-              <button type="button" class="pill" :disabled="scanning" @click="startScan('full')">Full re-index</button>
-              <button
-                v-if="scanning"
-                type="button"
-                class="pill danger"
-                @click="cancelScan"
-              >Cancel</button>
-            </div>
-            <div class="scan-progress-wrap" :class="{ hidden: !showProgress }">
-              <div class="scan-progress-bar" :style="progressStyle"></div>
-            </div>
-          </template>
-          <p v-else class="modal-hint">Go online to manage this section</p>
-        </div>
+
+        <LibraryScanPanel
+          :active="scanPanelActive"
+          :library-reachable="libraryReachable"
+        />
       </div>
     </div>
   `,
