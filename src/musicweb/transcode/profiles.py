@@ -156,6 +156,17 @@ PROFILES: dict[str, StreamProfile] = {
             can_play=_CAN_PLAY_OPUS,
         ),
         StreamProfile(
+            tag="opus_128_48000",
+            sample_rate=48000,
+            bitrate_kbps=128,
+            extension="opus",
+            media_type="audio/ogg",
+            kind="opus",
+            label="Opus 128k 48kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_OPUS,
+        ),
+        StreamProfile(
             tag="flac_16_44100",
             sample_rate=44100,
             bitrate_kbps=0,
