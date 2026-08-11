@@ -59,6 +59,9 @@ async def codecs() -> dict:
                 "kind": p.kind,
                 "media_type": p.media_type,
                 "can_play": p.can_play,
+                "bitrate_kbps": p.bitrate_kbps,
+                "bit_depth": p.bit_depth,
+                "sample_rate": p.sample_rate,
             }
             for p in PROFILES.values()
         ],
