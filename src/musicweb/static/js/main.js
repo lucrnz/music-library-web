@@ -11,7 +11,11 @@ import {
   initAudioListeners,
   refreshPlayerCovers,
 } from "./stores/player.js";
-import { loadCodecs } from "./stores/settings.js";
+import {
+  bindNetworkConstraintEffects,
+  loadCodecs,
+} from "./stores/settings.js";
+import { pl } from "./stores/playlist.js";
 import { bindConnectivityToasts } from "./connectivityUi.js";
 import { initDownloads } from "./downloads/index.js";
 import { registerServiceWorker } from "./pwa.js";
@@ -21,6 +25,7 @@ applyVolume();
 applyExpanded();
 initAudioListeners();
 loadCodecs();
+bindNetworkConstraintEffects(() => pl.tracks);
 bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.
 initDownloads().then(() => refreshPlayerCovers());
