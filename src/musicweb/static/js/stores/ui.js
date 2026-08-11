@@ -6,6 +6,11 @@ import { reactive } from "vue";
 /** @typedef {"list" | "grid"} LibraryLayout */
 
 const LAYOUT_STORAGE_KEY = "musicweb.libraryLayout.v1";
+const TOAST_DEFAULT_MS = 2800;
+
+/** @type {ReturnType<typeof setTimeout> | null} */
+let toastTimer = null;
+let toastSeq = 0;
 
 /** @returns {LibraryLayout} */
 function loadLibraryLayout() {
@@ -47,7 +52,33 @@ export const ui = reactive({
     query: {},
     meta: { mode: "folders", pane: "library", title: "Folders" },
   },
+  /**
+   * Short-lived global toast (connectivity transitions, etc.).
+   * @type {{ id: number, message: string } | null}
+   */
+  toast: null,
 });
+
+/**
+ * Show a muted auto-dismissing toast. Replaces any existing toast.
+ * @param {string} message
+ * @param {number} [durationMs]
+ */
+export function showToast(message, durationMs = TOAST_DEFAULT_MS) {
+  const text = String(message || "").trim();
+  if (!text) return;
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+    toastTimer = null;
+  }
+  toastSeq += 1;
+  const id = toastSeq;
+  ui.toast = { id, message: text };
+  toastTimer = setTimeout(() => {
+    toastTimer = null;
+    if (ui.toast?.id === id) ui.toast = null;
+  }, Math.max(0, durationMs));
+}
 
 export function clearLibSelection() {
   ui.libSelected = new Map();

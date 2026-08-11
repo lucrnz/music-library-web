@@ -12,6 +12,7 @@ import {
   refreshPlayerCovers,
 } from "./stores/player.js";
 import { loadCodecs } from "./stores/settings.js";
+import { bindConnectivityToasts } from "./connectivityUi.js";
 import { initDownloads } from "./downloads/index.js";
 import { registerServiceWorker } from "./pwa.js";
 
@@ -20,6 +21,7 @@ applyVolume();
 applyExpanded();
 initAudioListeners();
 loadCodecs();
+bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.
 initDownloads().then(() => refreshPlayerCovers());
 registerServiceWorker();

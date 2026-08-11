@@ -18,6 +18,10 @@ import {
 } from "../../stores/ui.js";
 import { openSettings } from "../../stores/settings.js";
 import {
+  connectivityBanner,
+  connectivityLoadError,
+} from "../../connectivity.js";
+import {
   noteServerReachable,
   noteServerUnreachable,
   refreshDownloadStatuses,
@@ -172,7 +176,9 @@ export default defineComponent({
         if (!isCurrent(seq)) return;
         const msg = err.message || String(err);
         noteServerUnreachable(err);
-        error.value = downloads.connectivityNote || msg;
+        error.value =
+          connectivityLoadError(downloads.connectivity, downloads.enabled) ||
+          msg;
         body.value = INITIAL_BODY;
       } finally {
         if (isCurrent(seq)) loading.value = false;
@@ -295,6 +301,10 @@ export default defineComponent({
 
     onMounted(load);
 
+    const offlineBanner = computed(() =>
+      connectivityBanner(downloads.connectivity, downloads.enabled)
+    );
+
     return {
       isSearch,
       title,
@@ -326,15 +336,16 @@ export default defineComponent({
       onSearchEnter,
       openSettings,
       downloads,
+      offlineBanner,
     };
   },
   template: `
     <section id="view-library" class="view" aria-label="Library">
       <div
-        v-if="downloads.connectivityNote"
+        v-if="offlineBanner"
         class="offline-banner"
         role="status"
-      >{{ downloads.connectivityNote }}</div>
+      >{{ offlineBanner }}</div>
       <div class="view-bar">
         <button
           v-if="showBack"

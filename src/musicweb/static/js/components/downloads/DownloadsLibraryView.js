@@ -8,6 +8,7 @@ import {
   watch,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { connectivityBanner } from "../../connectivity.js";
 import { loadDownloadsView } from "../../downloads/browse.js";
 import { downloads } from "../../downloads/state.js";
 import { addToQueue } from "../../stores/playlist.js";
@@ -173,6 +174,10 @@ export default defineComponent({
       { immediate: true }
     );
 
+    const offlineBanner = computed(() =>
+      connectivityBanner(downloads.connectivity, downloads.enabled)
+    );
+
     return {
       downloads,
       title,
@@ -199,15 +204,16 @@ export default defineComponent({
       artistCoverSrc,
       trackCoverSrc,
       openSettings,
+      offlineBanner,
     };
   },
   template: `
     <section id="view-library" class="view" aria-label="Downloads library">
       <div
-        v-if="downloads.connectivityNote"
+        v-if="offlineBanner"
         class="offline-banner"
         role="status"
-      >{{ downloads.connectivityNote }}</div>
+      >{{ offlineBanner }}</div>
       <div class="view-bar">
         <button
           v-if="showBack"

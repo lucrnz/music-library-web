@@ -12,13 +12,11 @@
 import { fetchTracksMeta } from "../api.js";
 import {
   bindWindowConnectivity,
-  connectivityNote as connNote,
   getConnectivityState,
   isHardOffline,
   onConnectivityChange,
   reportFailure,
   reportSuccess,
-  setDownloadsEnabledForNotes,
 } from "../connectivity.js";
 import { settings } from "../stores/settings.js";
 import { getLocalArtistImageUrl, getLocalCoverUrl } from "./art.js";
@@ -104,7 +102,6 @@ function saveEnabledFlag(on) {
 
 function mirrorConnectivity() {
   downloads.connectivity = getConnectivityState();
-  downloads.connectivityNote = connNote(downloads.enabled);
   syncControlFlags();
 }
 
@@ -265,6 +262,7 @@ export function bindConnectivityListeners() {
       checkOrphans().catch(() => {});
     }
   });
+  // Initial mirror only — transition toasts live in connectivityUi (shell boot).
   mirrorConnectivity();
 }
 
@@ -357,7 +355,6 @@ export async function initDownloads() {
   bindConnectivityListeners();
   const on = loadEnabledFlag();
   downloads.enabled = on;
-  setDownloadsEnabledForNotes(on);
   if (!on) {
     downloads.ready = true;
     mirrorConnectivity();
@@ -377,7 +374,6 @@ export async function initDownloads() {
     downloads.error = err?.message || String(err);
     downloads.enabled = false;
     saveEnabledFlag(false);
-    setDownloadsEnabledForNotes(false);
     downloads.ready = true;
   }
   mirrorConnectivity();
@@ -388,7 +384,6 @@ export async function enableDownloads() {
   await requireOpfs();
   saveEnabledFlag(true);
   downloads.enabled = true;
-  setDownloadsEnabledForNotes(true);
   await openDownloadsDb();
   downloads.persistent = await requestPersistentStorage();
   await setDownloadsEnabled(true);
@@ -420,7 +415,6 @@ export async function disableDownloads({ wipe }) {
   }
   saveEnabledFlag(false);
   downloads.enabled = false;
-  setDownloadsEnabledForNotes(false);
   downloads.queue = [];
   downloads.liveProgress = {};
   downloads.userPaused = false;

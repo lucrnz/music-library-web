@@ -1,5 +1,6 @@
 import { computed, defineComponent } from "vue";
 import { useRoute } from "vue-router";
+import { ui } from "../stores/ui.js";
 import LibraryView from "./library/LibraryView.js";
 import PlaylistView from "./playlist/PlaylistView.js";
 import PlayerBar from "./player/PlayerBar.js";
@@ -27,7 +28,7 @@ export default defineComponent({
     const route = useRoute();
     const onQueue = computed(() => route.meta.pane === "queue");
     const onDownloads = computed(() => route.meta.mode === "downloads");
-    return { onQueue, onDownloads };
+    return { onQueue, onDownloads, ui };
   },
   template: `
     <main>
@@ -39,5 +40,11 @@ export default defineComponent({
     <SettingsModal />
     <DownloadsModal />
     <TabBar />
+    <div
+      v-if="ui.toast"
+      class="app-toast"
+      role="status"
+      aria-live="polite"
+    >{{ ui.toast.message }}</div>
   `,
 });

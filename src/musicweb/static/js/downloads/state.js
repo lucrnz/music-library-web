@@ -12,7 +12,6 @@ export const downloads = reactive({
   managerOpen: false,
   /** @type {Connectivity} */
   connectivity: "online",
-  connectivityNote: "",
   /** @type {object[]} */
   queue: [],
   /** @type {Record<number, { loaded: number, total: number|null }>} */

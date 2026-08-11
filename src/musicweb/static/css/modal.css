@@ -425,8 +425,8 @@ body.modal-open {
   padding: 8px 16px;
   font-size: 13px;
   line-height: 1.35;
-  background: rgba(248, 113, 113, 0.15);
-  color: var(--danger);
+  background: color-mix(in srgb, var(--surface-2) 85%, var(--accent) 15%);
+  color: var(--text-dim);
   border-bottom: 1px solid var(--border);
 }
 

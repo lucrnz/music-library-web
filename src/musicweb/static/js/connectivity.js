@@ -1,6 +1,6 @@
 /**
  * Platform network connectivity: online / offline / server_down.
- * Health probes, error classification, and banner copy.
+ * Health probes, error classification, banner/toast copy.
  * No Vue imports — stores mirror state via onConnectivityChange.
  */
 
@@ -18,10 +18,14 @@ let healthInFlight = false;
 let backoffMs = BACKOFF_START_MS;
 let healthEnabled = false;
 let healthQueueHasWork = false;
-/** @type {boolean} */
-let downloadsEnabledForNotes = false;
+/**
+ * Private: schedule/run a health probe without advertising server_down.
+ * Not part of ConnectivityState; never emitted to listeners.
+ * Cleared on success, real server_down, hard offline, or when health is disabled.
+ */
+let probeRequested = false;
 
-/** @type {Set<(s: ConnectivityState) => void>} */
+/** @type {Set<(s: ConnectivityState, prev: ConnectivityState) => void>} */
 const listeners = new Set();
 /** @type {Set<() => void>} */
 const recoveredListeners = new Set();
@@ -39,7 +43,7 @@ function setState(next) {
   state = next;
   for (const fn of listeners) {
     try {
-      fn(state);
+      fn(state, prev);
     } catch (err) {
       console.error(err);
     }
@@ -69,26 +73,78 @@ export function canReachServer() {
 }
 
 /**
- * @param {boolean} enabled
+ * Single copy table for banner / load error / toast labels.
+ * One source string per meaning — getters only look up and gate.
  */
-export function setDownloadsEnabledForNotes(enabled) {
-  downloadsEnabledForNotes = !!enabled;
+const MESSAGES = {
+  offline: {
+    toast: "Offline",
+    banner: "You're offline. Enable Downloads in Settings to save music for offline use.",
+    loadOn: "Offline — use the Downloads tab for saved music.",
+  },
+  server_down: {
+    toast: "Can't reach server",
+    banner: "Can't reach the library server.",
+    loadOn: "Can't reach server — use the Downloads tab for saved music.",
+  },
+  online: {
+    toastRecovered: "Back online",
+  },
+};
+
+/**
+ * Resolve effective connectivity for copy (hard browser offline wins).
+ * @param {ConnectivityState} s
+ * @returns {ConnectivityState}
+ */
+function effectiveConnectivityState(s) {
+  if (browserOffline() || s === "offline") return "offline";
+  return s;
 }
 
 /**
- * Banner copy for UI.
- * @param {boolean} [enabled]
+ * Persistent guidance banner when Downloads are off and the library is unreachable.
+ * Empty when Downloads are enabled (intentional offline uses a toast instead).
+ * Pure: pass reactive `(state, enabled)` so Vue tracks deps.
+ * @param {ConnectivityState} s
+ * @param {boolean} enabled
  */
-export function connectivityNote(enabled = downloadsEnabledForNotes) {
-  if (state === "offline" || browserOffline()) {
-    return enabled
-      ? "You're offline. Use the Downloads tab to browse and play saved music."
-      : "You're offline. Enable Downloads in Settings to save music for offline use.";
+export function connectivityBanner(s, enabled) {
+  if (enabled) return "";
+  const eff = effectiveConnectivityState(s);
+  if (eff === "offline") return MESSAGES.offline.banner;
+  if (eff === "server_down") return MESSAGES.server_down.banner;
+  return "";
+}
+
+/**
+ * Short copy for in-view load failures when the library is unreachable.
+ * Pure: pass reactive `(state, enabled)` so Vue tracks deps.
+ * @param {ConnectivityState} s
+ * @param {boolean} enabled
+ */
+export function connectivityLoadError(s, enabled) {
+  const eff = effectiveConnectivityState(s);
+  if (eff === "offline") {
+    return enabled ? MESSAGES.offline.loadOn : MESSAGES.offline.banner;
   }
-  if (state === "server_down") {
-    return enabled
-      ? "Can't reach the library server. Use the Downloads tab for saved music."
-      : "Can't reach the library server.";
+  if (eff === "server_down") {
+    return enabled ? MESSAGES.server_down.loadOn : MESSAGES.server_down.banner;
+  }
+  return "";
+}
+
+/**
+ * Minimal toast label for a connectivity transition. Empty if none needed.
+ * @param {ConnectivityState} next
+ * @param {ConnectivityState} [prev]
+ */
+export function connectivityToastLabel(next, prev) {
+  if (prev != null && prev === next) return "";
+  if (next === "offline") return MESSAGES.offline.toast;
+  if (next === "server_down") return MESSAGES.server_down.toast;
+  if (next === "online" && prev != null && prev !== "online") {
+    return MESSAGES.online.toastRecovered;
   }
   return "";
 }
@@ -153,10 +209,12 @@ export function isNetworkClassError(err, httpStatus) {
 
 export function reportSuccess() {
   if (browserOffline()) {
+    probeRequested = false;
     setState("offline");
     return;
   }
   backoffMs = BACKOFF_START_MS;
+  probeRequested = false;
   setState("online");
 }
 
@@ -166,15 +224,19 @@ export function reportSuccess() {
  */
 export function reportFailure(err, httpStatus) {
   if (browserOffline()) {
+    probeRequested = false;
     setState("offline");
     return;
   }
   const c = classifyError(err, httpStatus);
   if (c === "offline") {
+    probeRequested = false;
     setState("offline");
     return;
   }
   if (c === "server_down") {
+    // Real failure — public server_down drives further probing; drop private flag.
+    probeRequested = false;
     setState("server_down");
     return;
   }
@@ -182,7 +244,7 @@ export function reportFailure(err, httpStatus) {
 }
 
 /**
- * @param {(s: ConnectivityState) => void} fn
+ * @param {(s: ConnectivityState, prev: ConnectivityState) => void} fn
  */
 export function onConnectivityChange(fn) {
   listeners.add(fn);
@@ -228,13 +290,14 @@ function scheduleHealthProbe(delayMs) {
 function needsHealthProbe() {
   if (!healthEnabled || !healthQueueHasWork) return false;
   if (browserOffline() || state === "offline") return false;
-  // Probe while server_down, or when online but we want confirmation after work exists
-  // Only probe when not confidently online OR recovering
-  return state === "server_down" || state !== "online";
+  // Probe on real server_down, or while a recovery/confirmation probe was requested
+  // without flipping public state to server_down.
+  return state === "server_down" || probeRequested;
 }
 
 function syncHealthLoop() {
   if (!healthEnabled || !healthQueueHasWork) {
+    probeRequested = false;
     stopHealthLoop();
     return;
   }
@@ -242,11 +305,11 @@ function syncHealthLoop() {
     stopHealthLoop();
     return;
   }
-  if (state === "online") {
+  if (!needsHealthProbe()) {
     stopHealthLoop();
     return;
   }
-  // server_down — ensure a probe is scheduled
+  // server_down or probeRequested — ensure a probe is scheduled
   if (!healthTimer && !healthInFlight) {
     scheduleHealthProbe(backoffMs);
   }
@@ -255,10 +318,12 @@ function syncHealthLoop() {
 async function runHealthProbe() {
   if (healthInFlight) return;
   if (!healthEnabled || !healthQueueHasWork) {
+    probeRequested = false;
     stopHealthLoop();
     return;
   }
   if (browserOffline()) {
+    probeRequested = false;
     setState("offline");
     return;
   }
@@ -285,17 +350,19 @@ async function runHealthProbe() {
   }
 }
 
-/** Request an immediate health probe (e.g. after going online with queue work). */
+/**
+ * Request a health probe without flipping public state for bookkeeping.
+ * server_down is set only if the probe (or other reportFailure) proves the server is down.
+ * @param {number} [delayMs]
+ */
 export function requestHealthProbe(delayMs = 0) {
   if (!healthEnabled || !healthQueueHasWork) return;
   if (browserOffline()) {
+    probeRequested = false;
     setState("offline");
     return;
   }
-  if (state === "online") {
-    // Still verify when asked after recovery
-    setState("server_down");
-  }
+  probeRequested = true;
   scheduleHealthProbe(delayMs);
 }
 
@@ -303,16 +370,16 @@ export function bindWindowConnectivity() {
   if (windowBound || typeof window === "undefined") return;
   windowBound = true;
   window.addEventListener("offline", () => {
+    probeRequested = false;
     setState("offline");
   });
   window.addEventListener("online", () => {
-    // Do not assume server is up — leave server_down or set online then probe
+    // Optimistic online — do not advertise server_down just to start a probe.
+    // If the server is still down, the probe (or the next request) sets server_down.
+    setState("online");
     if (healthEnabled && healthQueueHasWork) {
-      setState("server_down");
+      probeRequested = true;
       scheduleHealthProbe(0);
-    } else {
-      // No queue work: optimistic online; browse will reportFailure if wrong
-      setState("online");
     }
   });
   if (browserOffline()) {
