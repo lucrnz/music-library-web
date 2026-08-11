@@ -18,7 +18,7 @@ from musicweb.config import Settings, load_settings
 from musicweb.cover import CoverStore
 from musicweb.db.engine import init_database
 from musicweb.library import Library, PathEscapeError
-from musicweb.routes import api, pages
+from musicweb.routes import api, pages, pwa
 from musicweb.scan.scanner import LibraryScanner
 from musicweb.transcode import Transcoder, check_dependencies
 from musicweb.vendor_deps import ensure_vendor_assets
@@ -64,6 +64,7 @@ async def lifespan(app: FastAPI):
     print(f"  Listening on http://{settings.listen}:{settings.port}")
     if lan and settings.listen in ("0.0.0.0", "::"):
         print(f"  LAN URL : http://{lan}:{settings.port}")
+    print(settings.public_origin.boot_banner_line())
     print(f"  Streams : {process_cache.path(CACHE_STREAMS)} (temp)")
     print("  Tools   :")
     for name, ver in report.tools.items():
@@ -129,13 +130,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     for exc_type, status_code in _EXCEPTION_STATUS:
         app.add_exception_handler(exc_type, _make_exception_handler(status_code))
 
-    # API + static before SPA catch-all (pages.router includes /{path}).
+    # API + static + PWA before SPA catch-all (pages.router includes /{path}).
     app.include_router(api.router)
     app.mount(
         "/static",
         StaticFiles(directory=str(PACKAGE_DIR / "static")),
         name="static",
     )
+    app.include_router(pwa.router)
     app.include_router(pages.router)
     return app
 

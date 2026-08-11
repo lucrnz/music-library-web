@@ -36,6 +36,10 @@ Browser-compatible delivery is produced by ffmpeg, not browser demux of arbitrar
 
 Vue 3 and Vue Router ship as pinned browser ESM builds downloaded into `static/vendor/` on startup. Avoids Node toolchain drift for a small SPA and keeps `uv` as the only project package manager.
 
+### Shell-only PWA with configurable public origin
+
+The app can be installed as a standalone PWA when clients open a **secure-context** origin (`https` or loopback `http`). A **generated** service worker (`GET /sw.js` from on-disk static inventory) caches the app shell only; offline audio stays in client Downloads (OPFS). Operators set `MUSICWEB_PUBLIC_ORIGIN` (parsed as `PublicOrigin`) so manifest/install identity matches their real entry URL — not hard-coded to one deployment recipe. Details: `docs/systems/pwa.md`, `docs/development/environment.md`.
+
 ### Alembic for schema evolution
 
 SQLAlchemy models define the intended schema; Alembic revisions under `db/migrations/versions/` evolve existing databases. Startup migrates (or stamps legacy DBs) so operators are not required to run CLI migrations for normal use.

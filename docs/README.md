@@ -32,6 +32,7 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 - `docs/architecture/technical-decisions.md`: guiding technical decisions.
 - `docs/systems/library-scan.md`: indexing, fingerprints, covers, artist images, lyrics.
 - `docs/systems/transcoding.md`: stream profiles, encode policy, cache lifetime.
+- `docs/systems/pwa.md`: installable shell, service worker scope, public origin.
 
 ## Data and UI
 

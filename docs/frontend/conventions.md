@@ -9,6 +9,7 @@
 - Client stores: `src/musicweb/static/js/stores/`
 - Vendor pin registry: `src/musicweb/vendor_deps.py`
 - HTML shell + import map: `src/musicweb/templates/index.html`
+- PWA registration: `src/musicweb/static/js/pwa.js`; SW generation: `src/musicweb/pwa_shell.py` + `routes/pwa.py` (see `docs/systems/pwa.md`)
 
 ## Architecture
 
