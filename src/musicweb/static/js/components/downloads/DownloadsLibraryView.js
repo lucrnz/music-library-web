@@ -11,27 +11,17 @@ import { useRoute, useRouter } from "vue-router";
 import { connectivityBanner } from "../../connectivity.js";
 import { loadDownloadsView } from "../../downloads/browse.js";
 import { downloads } from "../../downloads/state.js";
+import { connectivity } from "../../stores/connectivity.js";
 import { addToQueue } from "../../stores/playlist.js";
-import { openSettings } from "../../stores/settings.js";
-import { toggleLibraryLayout, ui } from "../../stores/ui.js";
-import Icon from "../icons/Icon.js";
-import ModeBar from "../layout/ModeBar.js";
-import AlbumCard from "../library/rows/AlbumCard.js";
-import AlbumListRow from "../library/rows/AlbumListRow.js";
-import ArtistCard from "../library/rows/ArtistCard.js";
-import ArtistRow from "../library/rows/ArtistRow.js";
-import TrackRow from "../library/rows/TrackRow.js";
+import { ui } from "../../stores/ui.js";
+import EntityListHost from "../library/EntityListHost.js";
+import LibraryChrome from "../library/LibraryChrome.js";
 
 export default defineComponent({
   name: "DownloadsLibraryView",
   components: {
-    Icon,
-    ModeBar,
-    AlbumCard,
-    AlbumListRow,
-    ArtistCard,
-    ArtistRow,
-    TrackRow,
+    LibraryChrome,
+    EntityListHost,
   },
   setup() {
     const route = useRoute();
@@ -63,11 +53,26 @@ export default defineComponent({
     const isGrid = computed(
       () => showLayoutToggle.value && ui.libraryLayout === "grid"
     );
-    const gridHost = computed(
-      () =>
-        isGrid.value &&
-        (artists.value.length > 0 || (albumsPage.value && albums.value.length > 0))
-    );
+
+    /** Map downloads page data into EntityListHost body kinds. */
+    const body = computed(() => {
+      if (artists.value.length) {
+        return { kind: "artists", artists: artists.value };
+      }
+      if (albumsPage.value && albums.value.length) {
+        return { kind: "albumGrid", albums: albums.value };
+      }
+      if (tracks.value.length) {
+        return { kind: "tracks", tracks: tracks.value };
+      }
+      return { kind: "empty", message: emptyMsg.value || "" };
+    });
+
+    const gridHost = computed(() => {
+      if (!isGrid.value) return false;
+      const k = body.value.kind;
+      return k === "artists" || k === "albumGrid";
+    });
     const layoutToggleIcon = computed(() =>
       ui.libraryLayout === "grid" ? "layout-list" : "layout-grid"
     );
@@ -155,15 +160,15 @@ export default defineComponent({
       }
     }
 
-    function albumCoverSrc(album) {
+    function albumCover(album) {
       return localArt.value[`al:${album.id}`] || "";
     }
 
-    function artistCoverSrc(artist) {
+    function artistCover(artist) {
       return localArt.value[`a:${artist.id}`] || "";
     }
 
-    function trackCoverSrc(track) {
+    function trackCover(track) {
       const id = track.albumId;
       return (id && localArt.value[`al:${id}`]) || "";
     }
@@ -175,146 +180,64 @@ export default defineComponent({
     );
 
     const offlineBanner = computed(() =>
-      connectivityBanner(downloads.connectivity, downloads.enabled)
+      connectivityBanner(connectivity.state, downloads.enabled)
     );
 
     return {
-      downloads,
       title,
       showBack,
-      emptyMsg,
       error,
       loading,
-      artists,
-      albums,
-      tracks,
-      albumsPage,
+      body,
       showAddAll,
       showLayoutToggle,
       isGrid,
       gridHost,
       layoutToggleIcon,
       layoutToggleLabel,
-      toggleLibraryLayout,
       goBack,
       openArtist,
       openAlbum,
       addAll,
-      albumCoverSrc,
-      artistCoverSrc,
-      trackCoverSrc,
-      openSettings,
+      albumCover,
+      artistCover,
+      trackCover,
       offlineBanner,
     };
   },
   template: `
-    <section id="view-library" class="view" aria-label="Downloads library">
-      <div
-        v-if="offlineBanner"
-        class="offline-banner"
-        role="status"
-      >{{ offlineBanner }}</div>
-      <div class="view-bar">
+    <LibraryChrome
+      aria-label="Downloads library"
+      :title="title"
+      :show-back="showBack"
+      :offline-banner="offlineBanner"
+      :show-layout-toggle="showLayoutToggle"
+      :layout-toggle-icon="layoutToggleIcon"
+      :layout-toggle-label="layoutToggleLabel"
+      @back="goBack"
+    >
+      <template #actions>
         <button
-          v-if="showBack"
+          v-if="showAddAll"
           type="button"
-          class="icon-btn"
-          title="Back"
-          aria-label="Back"
-          @click="goBack"
-        >
-          <Icon name="chevron-left" />
-        </button>
-        <div class="view-title">{{ title }}</div>
-        <div class="view-actions">
-          <button
-            v-if="showAddAll"
-            type="button"
-            class="pill"
-            @click="addAll"
-          >Add all</button>
-          <button
-            v-if="showLayoutToggle"
-            type="button"
-            class="icon-btn"
-            :title="layoutToggleLabel"
-            :aria-label="layoutToggleLabel"
-            @click="toggleLibraryLayout"
-          >
-            <Icon :name="layoutToggleIcon" />
-          </button>
-          <button
-            type="button"
-            class="icon-btn"
-            title="Settings"
-            aria-label="Settings"
-            aria-haspopup="dialog"
-            @click="openSettings"
-          >
-            <Icon name="settings" />
-          </button>
-        </div>
-      </div>
+          class="pill"
+          @click="addAll"
+        >Add all</button>
+      </template>
 
-      <ModeBar />
-
-      <div class="row-list" :class="{ 'album-grid-host': gridHost }">
-        <div v-if="error" class="list-empty">Error: {{ error }}</div>
-        <div v-else-if="loading" class="list-empty">Loading…</div>
-        <div v-else-if="emptyMsg" class="list-empty">{{ emptyMsg }}</div>
-
-        <template v-else-if="artists.length">
-          <div v-if="isGrid" class="album-grid">
-            <ArtistCard
-              v-for="artist in artists"
-              :key="artist.id"
-              :artist="artist"
-              :cover-src="artistCoverSrc(artist)"
-              @open="openArtist"
-            />
-          </div>
-          <template v-else>
-            <ArtistRow
-              v-for="artist in artists"
-              :key="artist.id"
-              :artist="artist"
-              :cover-src="artistCoverSrc(artist)"
-              @open="openArtist"
-            />
-          </template>
-        </template>
-
-        <template v-else-if="albumsPage && albums.length">
-          <div v-if="isGrid" class="album-grid">
-            <AlbumCard
-              v-for="album in albums"
-              :key="album.id"
-              :album="album"
-              :cover-src="albumCoverSrc(album)"
-              @open="openAlbum"
-            />
-          </div>
-          <template v-else>
-            <AlbumListRow
-              v-for="album in albums"
-              :key="album.id"
-              :album="album"
-              :cover-src="albumCoverSrc(album)"
-              @open="openAlbum"
-            />
-          </template>
-        </template>
-
-        <template v-else-if="tracks.length">
-          <TrackRow
-            v-for="track in tracks"
-            :key="track.id"
-            :track="track"
-            :cover-src="trackCoverSrc(track)"
-            :show-download="false"
-          />
-        </template>
-      </div>
-    </section>
+      <EntityListHost
+        :body="body"
+        :error="error"
+        :loading="loading"
+        :is-grid="isGrid"
+        :grid-host="gridHost"
+        :show-track-download="false"
+        :artist-cover="artistCover"
+        :album-cover="albumCover"
+        :track-cover="trackCover"
+        @open-artist="openArtist"
+        @open-album="openAlbum"
+      />
+    </LibraryChrome>
   `,
 });

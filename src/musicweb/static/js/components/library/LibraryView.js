@@ -1,6 +1,5 @@
 /**
- * Library pane shell: chrome, ModeBar, search, body host.
- * Page data comes from loaders (discriminated body); actions from libraryActions.
+ * Online library pane: location → loaders → chrome + entity list.
  */
 import {
   computed,
@@ -11,24 +10,23 @@ import {
 } from "vue";
 import { useRouter } from "vue-router";
 import {
-  clearLibSelection,
-  toggleLibSelection,
-  toggleLibraryLayout,
-  ui,
-} from "../../stores/ui.js";
-import { openSettings } from "../../stores/settings.js";
-import {
   connectivityBanner,
   connectivityLoadError,
 } from "../../connectivity.js";
+import { downloads } from "../../downloads/state.js";
 import {
+  connectivity,
   noteServerReachable,
   noteServerUnreachable,
-  refreshDownloadStatuses,
-} from "../../downloads/index.js";
-import { downloads } from "../../downloads/state.js";
+} from "../../stores/connectivity.js";
+import {
+  clearLibSelection,
+  toggleLibSelection,
+  ui,
+} from "../../stores/ui.js";
 import Icon from "../icons/Icon.js";
-import ModeBar from "../layout/ModeBar.js";
+import EntityListHost from "./EntityListHost.js";
+import LibraryChrome from "./LibraryChrome.js";
 import {
   addAll as addAllAction,
   addSelected as addSelectedAction,
@@ -36,15 +34,6 @@ import {
 } from "./libraryActions.js";
 import { loadLibraryPage } from "./loaders.js";
 import { useLibraryLocation } from "./useLibraryLocation.js";
-import AlbumCard from "./rows/AlbumCard.js";
-import AlbumListRow from "./rows/AlbumListRow.js";
-import ArtistCard from "./rows/ArtistCard.js";
-import ArtistRow from "./rows/ArtistRow.js";
-import FileCard from "./rows/FileCard.js";
-import FileRow from "./rows/FileRow.js";
-import FolderCard from "./rows/FolderCard.js";
-import FolderRow from "./rows/FolderRow.js";
-import TrackRow from "./rows/TrackRow.js";
 
 /** @type {import("./loaders.js").LibraryBody} */
 const INITIAL_BODY = { kind: "empty", message: "" };
@@ -53,16 +42,8 @@ export default defineComponent({
   name: "LibraryView",
   components: {
     Icon,
-    ModeBar,
-    AlbumCard,
-    AlbumListRow,
-    ArtistCard,
-    ArtistRow,
-    FileCard,
-    FileRow,
-    FolderCard,
-    FolderRow,
-    TrackRow,
+    LibraryChrome,
+    EntityListHost,
   },
   setup() {
     const router = useRouter();
@@ -113,7 +94,6 @@ export default defineComponent({
     /** Layout toggle: folders / artists / albums browse — not search or track lists. */
     const showLayoutToggle = computed(() => {
       if (isSearch.value || mode.value === "search") return false;
-      // Album detail is always a track list.
       if (albumId.value || body.value.kind === "tracks") return false;
       if (body.value.kind === "search") return false;
       return (
@@ -177,17 +157,13 @@ export default defineComponent({
         const msg = err.message || String(err);
         noteServerUnreachable(err);
         error.value =
-          connectivityLoadError(downloads.connectivity, downloads.enabled) ||
-          msg;
+          connectivityLoadError(connectivity.state, downloads.enabled) || msg;
         body.value = INITIAL_BODY;
       } finally {
         if (isCurrent(seq)) loading.value = false;
       }
       if (!error.value) {
         noteServerReachable();
-      }
-      if (downloads.enabled && isCurrent(seq)) {
-        refreshDownloadStatuses().catch(() => {});
       }
     }
 
@@ -204,7 +180,6 @@ export default defineComponent({
         return;
       }
       if (routeName.value === "album") {
-        // Prefer the album's artist when known (set while loading album chrome).
         const aid = backArtistId.value;
         if (aid) {
           router.push({ name: "artist", params: { artistId: aid } });
@@ -292,7 +267,6 @@ export default defineComponent({
           load();
           return;
         }
-        // /queue: load library pane once if never loaded.
         if (!hasLoadedOnce.value) {
           load();
         }
@@ -302,7 +276,7 @@ export default defineComponent({
     onMounted(load);
 
     const offlineBanner = computed(() =>
-      connectivityBanner(downloads.connectivity, downloads.enabled)
+      connectivityBanner(connectivity.state, downloads.enabled)
     );
 
     return {
@@ -321,7 +295,6 @@ export default defineComponent({
       gridHost,
       layoutToggleIcon,
       layoutToggleLabel,
-      toggleLibraryLayout,
       goBack,
       openFolder,
       openArtist,
@@ -334,207 +307,69 @@ export default defineComponent({
       downloadCurrentAlbum,
       onSearchInput,
       onSearchEnter,
-      openSettings,
-      downloads,
       offlineBanner,
     };
   },
   template: `
-    <section id="view-library" class="view" aria-label="Library">
-      <div
-        v-if="offlineBanner"
-        class="offline-banner"
-        role="status"
-      >{{ offlineBanner }}</div>
-      <div class="view-bar">
+    <LibraryChrome
+      aria-label="Library"
+      :title="title"
+      :show-back="showBack"
+      :offline-banner="offlineBanner"
+      :show-layout-toggle="showLayoutToggle"
+      :layout-toggle-icon="layoutToggleIcon"
+      :layout-toggle-label="layoutToggleLabel"
+      @back="goBack"
+    >
+      <template #actions>
         <button
-          v-if="showBack"
+          v-if="showAddSelected"
           type="button"
-          class="icon-btn"
-          title="Back"
-          aria-label="Back"
-          @click="goBack"
-        >
-          <Icon name="chevron-left" />
-        </button>
-        <div class="view-title">{{ title }}</div>
-        <div class="view-actions">
-          <button
-            v-if="showAddSelected"
-            type="button"
-            class="pill"
-            @click="addSelected"
-          >Add selected</button>
-          <button
-            v-if="showAddAll"
-            type="button"
-            class="pill"
-            @click="addAll"
-          >Add all</button>
-          <button
-            v-if="showDownloadAlbum"
-            type="button"
-            class="pill"
-            title="Download album"
-            @click="downloadCurrentAlbum"
-          ><Icon name="download" /><span>Download</span></button>
-          <button
-            v-if="showLayoutToggle"
-            type="button"
-            class="icon-btn"
-            :title="layoutToggleLabel"
-            :aria-label="layoutToggleLabel"
-            @click="toggleLibraryLayout"
-          >
-            <Icon :name="layoutToggleIcon" />
-          </button>
-          <button
-            type="button"
-            class="icon-btn"
-            title="Settings"
-            aria-label="Settings"
-            aria-haspopup="dialog"
-            @click="openSettings"
-          >
-            <Icon name="settings" />
-          </button>
-        </div>
-      </div>
+          class="pill"
+          @click="addSelected"
+        >Add selected</button>
+        <button
+          v-if="showAddAll"
+          type="button"
+          class="pill"
+          @click="addAll"
+        >Add all</button>
+        <button
+          v-if="showDownloadAlbum"
+          type="button"
+          class="pill"
+          title="Download album"
+          @click="downloadCurrentAlbum"
+        ><Icon name="download" /><span>Download</span></button>
+      </template>
 
-      <ModeBar />
-
-      <div v-if="isSearch" class="search-bar">
-        <input
-          type="search"
-          class="search-input"
-          v-model="searchQuery"
-          placeholder="Search artists, albums, tracks…"
-          autocomplete="off"
-          enterkeyhint="search"
-          @input="onSearchInput"
-          @keydown.enter.prevent="onSearchEnter"
-        />
-      </div>
-
-      <div class="row-list" :class="{ 'album-grid-host': gridHost }">
-        <div v-if="error" class="list-empty">Error: {{ error }}</div>
-        <div v-else-if="body.kind === 'empty'" class="list-empty">{{ body.message }}</div>
-
-        <template v-else-if="body.kind === 'folders'">
-          <div v-if="isGrid" class="album-grid">
-            <FolderCard
-              v-for="dir in body.dirs"
-              :key="'d-' + dir.path"
-              :dir="dir"
-              :selected="isSelected(dir.path)"
-              @open="openFolder"
-              @select="onFolderSelect"
-            />
-            <FileCard
-              v-for="file in body.files"
-              :key="'f-' + file.path"
-              :file="file"
-              :selected="isSelected(file.path)"
-              @select="onFileSelect"
-            />
-          </div>
-          <template v-else>
-            <FolderRow
-              v-for="dir in body.dirs"
-              :key="'d-' + dir.path"
-              :dir="dir"
-              :selected="isSelected(dir.path)"
-              @open="openFolder"
-              @select="onFolderSelect"
-            />
-            <FileRow
-              v-for="file in body.files"
-              :key="'f-' + file.path"
-              :file="file"
-              :selected="isSelected(file.path)"
-              @select="onFileSelect"
-            />
-          </template>
-        </template>
-
-        <template v-else-if="body.kind === 'artists'">
-          <div v-if="isGrid" class="album-grid">
-            <ArtistCard
-              v-for="artist in body.artists"
-              :key="artist.id"
-              :artist="artist"
-              @open="openArtist"
-            />
-          </div>
-          <template v-else>
-            <ArtistRow
-              v-for="artist in body.artists"
-              :key="artist.id"
-              :artist="artist"
-              @open="openArtist"
-            />
-          </template>
-        </template>
-
-        <template v-else-if="body.kind === 'albumGrid'">
-          <div v-if="isGrid" class="album-grid">
-            <AlbumCard
-              v-for="album in body.albums"
-              :key="album.id"
-              :album="album"
-              @open="openAlbum"
-            />
-          </div>
-          <template v-else>
-            <AlbumListRow
-              v-for="album in body.albums"
-              :key="album.id"
-              :album="album"
-              @open="openAlbum"
-            />
-          </template>
-        </template>
-
-        <template v-else-if="body.kind === 'tracks'">
-          <TrackRow
-            v-for="track in body.tracks"
-            :key="track.id"
-            :track="track"
+      <template #after-bar>
+        <div v-if="isSearch" class="search-bar">
+          <input
+            type="search"
+            class="search-input"
+            v-model="searchQuery"
+            placeholder="Search artists, albums, tracks…"
+            autocomplete="off"
+            enterkeyhint="search"
+            @input="onSearchInput"
+            @keydown.enter.prevent="onSearchEnter"
           />
-        </template>
+        </div>
+      </template>
 
-        <template v-else-if="body.kind === 'search'">
-          <template v-if="body.sections.artists.length">
-            <div class="section-label">Artists</div>
-            <ArtistRow
-              v-for="artist in body.sections.artists"
-              :key="'sa-' + artist.id"
-              :artist="artist"
-              :show-counts="false"
-              @open="openArtist"
-            />
-          </template>
-          <template v-if="body.sections.albums.length">
-            <div class="section-label">Albums</div>
-            <AlbumListRow
-              v-for="album in body.sections.albums"
-              :key="'sal-' + album.id"
-              :album="album"
-              @open="openAlbum"
-            />
-          </template>
-          <template v-if="body.sections.tracks.length">
-            <div class="section-label">Tracks</div>
-            <TrackRow
-              v-for="track in body.sections.tracks"
-              :key="'st-' + track.id"
-              :track="track"
-              title-mode="title"
-              subtitle-mode="artist-album"
-            />
-          </template>
-        </template>
-      </div>
-    </section>
+      <EntityListHost
+        :body="body"
+        :error="error"
+        :is-grid="isGrid"
+        :grid-host="gridHost"
+        :is-selected="isSelected"
+        @open-artist="openArtist"
+        @open-album="openAlbum"
+        @open-folder="openFolder"
+        @select-folder="onFolderSelect"
+        @select-file="onFileSelect"
+      />
+    </LibraryChrome>
   `,
 });
