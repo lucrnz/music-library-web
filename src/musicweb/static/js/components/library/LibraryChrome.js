@@ -4,13 +4,13 @@
  */
 import { defineComponent } from "vue";
 import { openSettings } from "../../stores/settings.js";
-import { toggleLibraryLayout } from "../../stores/ui.js";
 import Icon from "../icons/Icon.js";
+import LayoutMenu from "../layout/LayoutMenu.js";
 import ModeBar from "../layout/ModeBar.js";
 
 export default defineComponent({
   name: "LibraryChrome",
-  components: { Icon, ModeBar },
+  components: { Icon, ModeBar, LayoutMenu },
   props: {
     /** Section aria-label */
     ariaLabel: { type: String, default: "Library" },
@@ -18,8 +18,6 @@ export default defineComponent({
     showBack: { type: Boolean, default: false },
     offlineBanner: { type: String, default: "" },
     showLayoutToggle: { type: Boolean, default: false },
-    layoutToggleIcon: { type: String, default: "layout-grid" },
-    layoutToggleLabel: { type: String, default: "Switch layout" },
     /** When false, hide settings button (rare). */
     showSettings: { type: Boolean, default: true },
   },
@@ -28,13 +26,10 @@ export default defineComponent({
     function onBack() {
       emit("back");
     }
-    function onToggleLayout() {
-      toggleLibraryLayout();
-    }
     function onSettings() {
       openSettings();
     }
-    return { onBack, onToggleLayout, onSettings };
+    return { onBack, onSettings };
   },
   template: `
     <section id="view-library" class="view" :aria-label="ariaLabel">
@@ -57,16 +52,7 @@ export default defineComponent({
         <div class="view-title">{{ title }}</div>
         <div class="view-actions">
           <slot name="actions" />
-          <button
-            v-if="showLayoutToggle"
-            type="button"
-            class="icon-btn"
-            :title="layoutToggleLabel"
-            :aria-label="layoutToggleLabel"
-            @click="onToggleLayout"
-          >
-            <Icon :name="layoutToggleIcon" />
-          </button>
+          <LayoutMenu v-if="showLayoutToggle" />
           <button
             v-if="showSettings"
             type="button"

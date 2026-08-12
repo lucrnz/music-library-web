@@ -3,7 +3,7 @@
  */
 import { reactive } from "vue";
 
-/** @typedef {"list" | "grid"} LibraryLayout */
+/** @typedef {"list" | "grid" | "tree"} LibraryLayout */
 
 const LAYOUT_STORAGE_KEY = "musicweb.libraryLayout.v1";
 const TOAST_DEFAULT_MS = 2800;
@@ -16,7 +16,7 @@ let toastSeq = 0;
 function loadLibraryLayout() {
   try {
     const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
-    if (raw === "list" || raw === "grid") return raw;
+    if (raw === "list" || raw === "grid" || raw === "tree") return raw;
   } catch {
     /* ignore */
   }
@@ -93,13 +93,9 @@ export function toggleLibSelection(path, kind) {
 
 /** @param {LibraryLayout} mode */
 export function setLibraryLayout(mode) {
-  if (mode !== "list" && mode !== "grid") return;
+  if (mode !== "list" && mode !== "grid" && mode !== "tree") return;
   ui.libraryLayout = mode;
   saveLibraryLayout(mode);
-}
-
-export function toggleLibraryLayout() {
-  setLibraryLayout(ui.libraryLayout === "grid" ? "list" : "grid");
 }
 
 export function rememberLibraryRoute(route) {
