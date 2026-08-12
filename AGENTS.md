@@ -4,7 +4,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (no bundler). Strea
 
 ## Essentials
 
-- Entrypoint: `uv run musicweb`
+- Entrypoint: `uv run musicweb` (bare = serve; also `scan`, `regen-*`, `stats`, `doctor` — see `docs/development/commands.md`)
 - Package manager / tooling: uv only for Python. No Node/npm build step.
 - Browser frontend is plain ESM JavaScript (Vue 3 + Vue Router - no build step).
 - Config: `.env` at project root (see `.env.example`); settings load via `musicweb/config.py`.

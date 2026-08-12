@@ -2,24 +2,30 @@
 
 ## Source of truth
 
-- Scanner orchestration: `src/musicweb/scan/scanner.py`
+- Job orchestration (scan + regen kinds): `src/musicweb/jobs/runner.py`
 - Walk / formats: `src/musicweb/scan/walk.py`, `formats.py`
 - Fingerprints / identity: `src/musicweb/scan/fingerprint.py`, `identity.py`
 - Batch upsert: `src/musicweb/scan/batch.py`
 - Covers / artist images / lyrics phases: `scan/covers.py`, `scan/artist_images.py`, `scan/lyrics.py`
 - Finalize (missing + counts): `src/musicweb/scan/finalize.py`
 - HTTP triggers: `src/musicweb/routes/library_scan.py`
+- CLI: `src/musicweb/cli/`; live control plane: `src/musicweb/control/`
 
 ## Purpose
 
-Build and refresh the SQLite index from the lossless files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. Scan runs on a **single background thread** with cancel support and persisted `ScanState` progress.
+Build and refresh the SQLite index from the lossless files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. All library jobs (scan and regen) share a **single-flight** runner with cancel support and persisted `ScanState` progress. HTTP, CLI (local or via UDS), and startup use the same runner.
 
-## Modes
+## Modes and kinds
 
 | Mode | Intent |
 |------|--------|
 | **quick** | Incremental refresh (startup default): notice new/changed/missing material efficiently |
-| **full** | Deeper re-index path; rebuilds FTS as part of a thorough pass |
+| **full** | Deeper re-index; rebuilds FTS; forces covers, artist images, and lyrics enrichment |
+
+| Job kind | Intent |
+|----------|--------|
+| **scan** | Full pipeline (walk → finalize → enrichment) |
+| **regen-covers** / **regen-artist-images** / **regen-lyrics** | Enrichment-only (DB-driven cover paths; no re-walk) |
 
 Exact skip/rehash heuristics live in source; docs only state the product intent.
 
@@ -41,8 +47,9 @@ Exact skip/rehash heuristics live in source; docs only state the product intent.
 
 ## Guardrails
 
-- One scanner at a time; start returns failure/false if already running.
-- Do not perform heavy scan work on the request thread.
+- One library job at a time; start returns failure/false if already running.
+- Do not perform heavy scan work on the request thread (HTTP starts the job thread).
 - Prefer fingerprint identity over path identity for playlists and clients.
 - Outbound fetch must respect configured intervals; never log API secrets.
 - Cancel should be cooperative between phases — check the cancel event in long loops.
+- CLI write jobs go through the job runner (local exclusive or control RPC) — not ad-hoc phase calls.

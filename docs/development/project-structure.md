@@ -26,6 +26,10 @@ This page describes **ownership boundaries** — where code lives and what each 
 | Area | Responsibility |
 |------|----------------|
 | `main.py` | FastAPI app factory, lifespan, static mount, SPA shell wiring |
+| `cli/` | Typer entry (`serve`, `scan`, regen, `stats`, `doctor`); argv only |
+| `runtime/` | Data-dir flock, bootstrap, exclusive maintenance, `run_library_job` |
+| `jobs/` | Single-flight library job runner (scan + regen kinds, ScanState) |
+| `control/` | Private UDS JSON control plane (health + job RPC) for live CLI |
 | `config.py` | Settings from env + source-level tuning constants |
 | `library.py` | Safe path resolution under `MUSIC_LIBRARY_PATH` |
 | `metadata.py` | Tag / audio tech reading (mutagen) |
@@ -34,7 +38,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `http_client.py` | Shared HTTP client helpers for outbound fetch |
 | `vendor_deps.py` | Pinned frontend vendor registry + download-on-startup |
 | `db/` | Engine, models, FTS helpers, repositories, Alembic migrations |
-| `scan/` | Walk, fingerprint, batch upsert, covers, artist images, lyrics, finalize |
+| `scan/` | Walk, fingerprint, batch upsert, covers, artist images, lyrics, finalize (phases only) |
 | `transcode/` | Dependency check, profiles, probe, encode worker |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
@@ -48,7 +52,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 ## Ownership rules
 
 - **HTTP surface** lives under `routes/`. Aggregate router is `routes/api.py`; page/SPA fallback is `routes/pages.py`.
-- **Index writes** go through scan + repositories — routes should not invent parallel SQL paths.
+- **Index writes** go through `jobs/` (orchestration) + `scan/` phases + repositories — routes and CLI must not invent parallel SQL paths or call enrichment phases directly.
 - **ORM models** live in `db/models.py`; query helpers in `db/repositories/`.
 - **Stream encode policy** (profiles, aresample/dither rules) lives under `transcode/`. Do not reimplement encode argv in routes.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
