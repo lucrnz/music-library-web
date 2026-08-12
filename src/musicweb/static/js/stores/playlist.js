@@ -15,7 +15,7 @@ import {
   clearCache,
 } from "../api.js";
 import { coerceTrack, isTrack, mapTracks } from "../models/track.js";
-import { getTrackRecord } from "../downloads/records.js";
+import { catalogIndex } from "../downloads/catalog.js";
 import { shouldPreferLocalOnline } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
 import { getActiveStreamCodec, settings } from "./settings.js";
@@ -317,38 +317,36 @@ export async function addToQueue(entries) {
 
   // Skip prepare when playback policy will prefer a local download.
   const active = getActiveStreamCodec();
-  const toPrepare = await tracksNeedingPrepare(playable, active);
+  const toPrepare = tracksNeedingPrepare(playable, active);
   if (toPrepare.length) requestPrepare(toPrepare, active);
 }
 
 /**
  * Tracks that still need a server stream prepare under current playback policy.
- * Skips ids that will prefer a local download when online.
+ * Skips ids that will prefer a local download when online, using in-memory
+ * catalog projection (missing entry ⇒ still prepare; no IDB).
  * @param {Track[]} tracks
  * @param {string} activeCodec
- * @returns {Promise<Track[]>}
+ * @returns {Track[]}
  */
-export async function tracksNeedingPrepare(tracks, activeCodec) {
+export function tracksNeedingPrepare(tracks, activeCodec) {
   if (!downloads.enabled) {
     return (tracks || []).filter((t) => t?.id);
   }
   const out = [];
   const policy = settings.playbackPolicy;
-  const catalog = settings.options;
+  const codecCatalog = settings.options;
+  const byTrack = catalogIndex.byTrack;
   for (const t of tracks || []) {
     if (!t?.id) continue;
-    try {
-      const rec = await getTrackRecord(t.id);
-      if (
-        rec &&
-        rec.status !== "broken" &&
-        rec.codec &&
-        shouldPreferLocalOnline(rec.codec, activeCodec, policy, catalog)
-      ) {
-        continue;
-      }
-    } catch {
-      /* catalog unavailable — still prepare */
+    const proj = byTrack[t.id];
+    if (
+      proj &&
+      proj.status !== "broken" &&
+      proj.codec &&
+      shouldPreferLocalOnline(proj.codec, activeCodec, policy, codecCatalog)
+    ) {
+      continue;
     }
     out.push(t);
   }
@@ -358,12 +356,11 @@ export async function tracksNeedingPrepare(tracks, activeCodec) {
 /**
  * @param {Track|null|undefined} track
  * @param {string} activeCodec
- * @returns {Promise<boolean>}
+ * @returns {boolean}
  */
-export async function trackNeedsStreamPrepare(track, activeCodec) {
+export function trackNeedsStreamPrepare(track, activeCodec) {
   if (!track?.id) return false;
-  const need = await tracksNeedingPrepare([track], activeCodec);
-  return need.length > 0;
+  return tracksNeedingPrepare([track], activeCodec).length > 0;
 }
 
 /**

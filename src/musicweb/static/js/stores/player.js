@@ -91,7 +91,7 @@ function clearPlaySourceState() {
 }
 
 /**
- * Map resolvePlaySource result onto player face state.
+ * Apply resolvePlaySource result onto player face state (same vocabulary).
  * @param {import('../downloads/resolve.js').PlaySource | { type: string, codec?: string|null, reason?: string|null }} source
  * @param {string | null | undefined} activeCodec
  */
@@ -104,7 +104,7 @@ function applyResolvedSource(source, activeCodec) {
     );
     return;
   }
-  if (source.type === "local") {
+  if (source.type === "downloaded") {
     setPlaySourceState("downloaded", source.codec || null, null);
     return;
   }
@@ -298,8 +298,23 @@ function maybePrepareNext() {
  */
 async function issueNearEndPrepare(nextTrack) {
   const activeCodec = getActiveStreamCodec();
-  if (!(await trackNeedsStreamPrepare(nextTrack, activeCodec))) return;
+  if (!trackNeedsStreamPrepare(nextTrack, activeCodec)) return;
   requestPrepare([nextTrack], activeCodec, { urgent: true });
+}
+
+/**
+ * Set audio src and attempt play. Does not own fallback policy.
+ * @param {string} url
+ * @returns {Promise<{ ok: true } | { ok: false, err: unknown }>}
+ */
+async function attemptPlay(url) {
+  audio.src = url;
+  try {
+    await audio.play();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, err };
+  }
 }
 
 export async function playIndex(index) {
@@ -337,50 +352,44 @@ export async function playIndex(index) {
     return;
   }
 
-  if (source.type === "local") {
+  if (source.type === "downloaded") {
     localPlayUrl = source.url;
   }
 
-  audio.src = source.url;
-  try {
-    await audio.play();
-  } catch (err) {
-    if (player.playSource === "downloaded") {
-      console.warn("Local playback failed, falling back to stream", err);
-      if (track?.id) markDownloadBroken(track.id).catch(() => {});
-      revokeLocalPlayUrl();
+  let result = await attemptPlay(source.url);
+  if (!result.ok && source.type === "downloaded") {
+    console.warn("Local playback failed, falling back to stream", result.err);
+    if (track?.id) markDownloadBroken(track.id).catch(() => {});
+    revokeLocalPlayUrl();
 
-      if (isHardOffline()) {
-        failPlayback(
-          source.codec || null,
-          "broken",
-          `${track?.title || "Track"}: ${PLAY_BLOCK_MESSAGES.broken}`
-        );
-        syncTransportFlags();
-        return;
-      }
-      const streamCodec = getActiveStreamCodec();
-      const remote = streamUrl(track, streamCodec);
-      if (remote) {
-        setPlaySourceState("streaming", streamCodec || null, null);
-        audio.src = remote;
-        try {
-          await audio.play();
-        } catch (err2) {
-          console.error("Playback failed", err2);
-          failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
-        }
-      } else {
+    if (isHardOffline()) {
+      failPlayback(
+        source.codec || null,
+        "broken",
+        `${track?.title || "Track"}: ${PLAY_BLOCK_MESSAGES.broken}`
+      );
+      syncTransportFlags();
+      return;
+    }
+    const streamCodec = getActiveStreamCodec();
+    const remote = streamUrl(track, streamCodec);
+    if (remote) {
+      setPlaySourceState("streaming", streamCodec || null, null);
+      result = await attemptPlay(remote);
+      if (!result.ok) {
+        console.error("Playback failed", result.err);
         failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
       }
     } else {
-      console.error("Playback failed", err);
-      failPlayback(
-        player.playProfileId || activeCodec || null,
-        "play_failed",
-        PLAY_BLOCK_MESSAGES.play_failed
-      );
+      failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
     }
+  } else if (!result.ok) {
+    console.error("Playback failed", result.err);
+    failPlayback(
+      player.playProfileId || activeCodec || null,
+      "play_failed",
+      PLAY_BLOCK_MESSAGES.play_failed
+    );
   }
   syncTransportFlags();
 }

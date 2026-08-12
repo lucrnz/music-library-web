@@ -4,14 +4,12 @@
  */
 
 /**
- * Delivery source for the current player load (not library path).
+ * Delivery source for the current player load and resolvePlaySource results
+ * (not library path). `none` is player-idle only; resolve never returns it.
  * @typedef {'none' | 'streaming' | 'downloaded' | 'unavailable'} PlaySourceState
  *
  * Machine reason when playback cannot start or failed.
  * @typedef {'missing' | 'broken' | 'no_id' | 'offline_no_local' | 'play_failed'} PlayBlockReason
- *
- * Resolve result type from resolvePlaySource (subset of PlaySourceState paths).
- * @typedef {'local' | 'remote' | 'unavailable'} ResolvePlayType
  */
 
 /**
