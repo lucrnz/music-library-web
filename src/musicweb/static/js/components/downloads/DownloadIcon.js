@@ -2,9 +2,11 @@
  * Compact download control for track rows.
  */
 import { computed, defineComponent } from "vue";
-import { trackDownloadState } from "../../downloads/index.js";
+import {
+  catalogIndex,
+  trackDownloadState,
+} from "../../downloads/catalog.js";
 import { downloads } from "../../downloads/state.js";
-import { catalogIndex } from "../../downloads/status.js";
 import { downloadTrack } from "../../downloads/ui.js";
 import { settings } from "../../stores/settings.js";
 import { showToast } from "../../stores/ui.js";

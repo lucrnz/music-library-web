@@ -325,9 +325,7 @@ export function setDownloadCodec(v) {
   if (v === settings.download) return false;
   settings.download = v;
   persistAll();
-  import("../downloads/index.js")
-    .then((m) => m.onDownloadCodecChanged?.())
-    .catch(() => {});
+  // trackDownloadState joins reactively on settings.download — no downloads hook.
   return true;
 }
 

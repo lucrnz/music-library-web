@@ -6,7 +6,7 @@ import {
   listAlbumRecords,
   listArtistRecords,
   listTrackRecords,
-} from "./records.js";
+} from "./catalog.js";
 
 export async function buildDownloadsHierarchy() {
   const [tracks, albums, artists] = await Promise.all([

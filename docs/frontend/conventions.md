@@ -17,7 +17,14 @@
 - **SPA fallback:** FastAPI serves the same shell for client routes so refresh works on `/folders`, `/artists/…`, etc.
 - **Stores** hold player, playlist/queue, settings, and UI chrome. Components should prefer store APIs over ad-hoc globals.
 - **Library UI** lives under `components/library/`; player under `components/player/`; settings modal under `components/settings/`.
-- **Downloads** (`static/js/downloads/`) implement client-side offline catalog (OPFS, workers). Import actions from `downloads/index.js` and reactive state from `downloads/state.js`. Keep offline concerns out of server index code.
+- **Downloads** (`static/js/downloads/`) implement client-side offline catalog (OPFS, workers). Keep offline concerns out of server index code.
+  - Lifecycle / queue actions: `downloads/index.js` (init, enable/disable, enqueue, pause/resume, cancel/retry/clearFinished, remove, manager, orphan, near-quota).
+  - User download with confirm: `downloads/ui.js` (`downloadTrack(s)` only).
+  - Reactive fields: `downloads/state.js` (`downloads`).
+  - Catalog / projection / art / codec helpers: `downloads/catalog.js`.
+  - Play/cover resolution: `downloads/resolve.js`.
+  - Hierarchy / pure storage formatters: `downloads/hierarchy.js`, `downloads/storageInfo.js`.
+  - Queue guts / policy / worker: import only from downloads internals (or thin index wrappers for manager ops) — do not re-grow an `index.js` barrel.
 
 ## Vendor assets
 

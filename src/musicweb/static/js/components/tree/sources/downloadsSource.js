@@ -2,10 +2,10 @@
  * Downloads offline tree: always artist → album → tracks.
  */
 import {
-  buildDownloadsHierarchy,
   getLocalArtistImageUrl,
   getLocalCoverUrl,
-} from "../../../downloads/index.js";
+} from "../../../downloads/catalog.js";
+import { buildDownloadsHierarchy } from "../../../downloads/hierarchy.js";
 import { resolveDownloadsFocusPath } from "../treeNavigation.js";
 
 /**

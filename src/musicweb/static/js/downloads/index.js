@@ -1,13 +1,13 @@
 /**
- * Public downloads API for app code.
+ * Downloads lifecycle + user-facing queue/catalog actions.
  *
- * Pattern:
- *   - Actions / lifecycle: import from `downloads/index.js`
- *   - User-initiated download (near-quota confirm): `downloads/ui.js`
- *   - Reactive fields: import `{ downloads }` from `downloads/state.js`
- *   - Per-track UI status: `trackDownloadState(id)` (queue ∩ catalog join)
- *
- * Modules: enable → queue.js → worker.js → records/art. OPFS in opfs.js.
+ * Import map (see docs/frontend/conventions.md):
+ *   - Actions / lifecycle: this module
+ *   - User download confirm: `downloads/ui.js`
+ *   - Reactive fields: `downloads/state.js`
+ *   - Catalog / status: `downloads/catalog.js`
+ *   - Play/cover resolve: `downloads/resolve.js`
+ *   - Hierarchy / formatters: `hierarchy.js` / `storageInfo.js`
  */
 
 import { fetchTracksMeta } from "../api.js";
@@ -19,29 +19,6 @@ import {
 } from "../connectivity.js";
 import { settings } from "../stores/settings.js";
 import { acquireModalLock, releaseModalLock } from "../stores/modalLock.js";
-import { getLocalArtistImageUrl, getLocalCoverUrl } from "./art.js";
-import { openDownloadsDb } from "./db.js";
-import { buildDownloadsHierarchy } from "./hierarchy.js";
-import { requireOpfs } from "./opfs.js";
-import {
-  cancelQueueItem,
-  clearAllQueue,
-  clearFinishedQueue,
-  enqueueMany,
-  enqueueTrack,
-  getAllLiveProgress,
-  getPauseBanner,
-  getQueueControlState,
-  listQueue,
-  onProgressChange,
-  onQueueChange,
-  pauseAllDownloads as queuePauseAll,
-  resumeAllDownloads as queueResumeAll,
-  QueueState,
-  resumeQueue,
-  retryQueueItem,
-  setDownloadsEnabled,
-} from "./queue.js";
 import {
   deleteAlbumDownloads,
   deleteArtistDownloads,
@@ -49,15 +26,35 @@ import {
   listTrackRecords,
   markTrackBroken,
   markTrackOrphan,
+  setCatalogProjectionMap,
   sumDownloadedBytes,
   wipeAllDownloads,
-} from "./records.js";
-import { resolveCoverUrl, resolvePlaySource } from "./resolve.js";
-import { downloads } from "./state.js";
+} from "./catalog.js";
+import { openDownloadsDb } from "./db.js";
+import { requireOpfs } from "./opfs.js";
 import {
-  setCatalogProjectionMap,
-  trackDownloadState,
-} from "./status.js";
+  cancelQueueItem as queueCancelItem,
+  clearAllQueue,
+  clearFinishedQueue as queueClearFinished,
+  enqueueMany as queueEnqueueMany,
+  enqueueTrack as queueEnqueueTrack,
+  getAllLiveProgress,
+  listQueue,
+  onProgressChange,
+  onQueueChange,
+  QueueState,
+  retryQueueItem as queueRetryQueueItem,
+} from "./queue.js";
+import {
+  getPauseBanner,
+  getQueueControlState,
+  getUserPaused,
+  pauseAllDownloads as queuePauseAll,
+  resumeAllDownloads as queueResumeAll,
+  resumeQueue,
+  setDownloadsEnabled,
+} from "./queuePolicy.js";
+import { downloads } from "./state.js";
 import {
   formatBytes,
   formatDownloadsStorageLine,
@@ -67,19 +64,6 @@ import {
   requestPersistentStorage,
 } from "./storageInfo.js";
 import { stopAllWorkers } from "./worker.js";
-
-export { downloads } from "./state.js";
-export { buildDownloadsHierarchy } from "./hierarchy.js";
-export { getLocalArtistImageUrl, getLocalCoverUrl } from "./art.js";
-export { resolveCoverUrl, resolvePlaySource } from "./resolve.js";
-export {
-  cancelQueueItem,
-  retryQueueItem,
-  clearFinishedQueue,
-} from "./queue.js";
-export { formatBytes, formatIdleDownloadsSummary } from "./storageInfo.js";
-export { trackDownloadState } from "./status.js";
-export { noteServerReachable, noteServerUnreachable } from "../stores/connectivity.js";
 
 const DOWNLOADS_STORAGE_KEY = "musicweb.downloadsEnabled";
 
@@ -267,7 +251,6 @@ export async function refreshQueue(opts = {}) {
   }
   computeQueueSummary(downloads.queue);
   syncControlFlags();
-  // Health + pump run from queue mutation bus (emitQueueChange), not here.
   if (opts.includeStorage) {
     await refreshStorageInfo();
   }
@@ -294,7 +277,6 @@ export async function initDownloads() {
   const on = loadEnabledFlag();
   downloads.enabled = on;
   if (!on) {
-    // Read leftover catalog size without starting queue/workers.
     try {
       await refreshStorageInfo();
     } catch {
@@ -392,7 +374,6 @@ export function closeDownloadsManager() {
 
 /**
  * Delete all kept download files while downloads remain disabled.
- * Does not enable the feature or open the manager.
  * @throws {Error} if downloads are still enabled
  */
 export async function clearStoredDownloads() {
@@ -406,10 +387,10 @@ export async function clearStoredDownloads() {
  * Enqueue a single track (no UI confirm). Prefer `downloads/ui.js` for user actions.
  * @param {import("../models/track.js").Track} track
  */
-export async function downloadTrack(track) {
+export async function enqueueTrack(track) {
   if (!downloads.enabled) throw new Error("Downloads are disabled");
   if (isHardOffline()) throw new Error("Can't download while offline");
-  await enqueueTrack(track, settings.download);
+  await queueEnqueueTrack(track, settings.download, getUserPaused());
   await refreshQueue();
 }
 
@@ -417,13 +398,27 @@ export async function downloadTrack(track) {
  * Enqueue many tracks (no UI confirm). Prefer `downloads/ui.js` for user actions.
  * @param {import("../models/track.js").Track[]} tracks
  */
-export async function downloadTracks(tracks) {
+export async function enqueueTracks(tracks) {
   if (!downloads.enabled) throw new Error("Downloads are disabled");
   if (isHardOffline()) throw new Error("Can't download while offline");
   const list = tracks.filter((t) => t?.id && !t.isMissing);
   if (!list.length) return;
-  await enqueueMany(list, settings.download);
+  await queueEnqueueMany(list, settings.download, getUserPaused());
   await refreshQueue();
+}
+
+/** Thin queue manager wrappers — UI imports from index, not queue guts. */
+export async function cancelQueueItem(id) {
+  await queueCancelItem(id);
+}
+
+export async function retryQueueItem(id) {
+  await queueRetryQueueItem(id, getUserPaused());
+  await refreshQueue();
+}
+
+export async function clearFinishedQueue() {
+  await queueClearFinished();
 }
 
 export async function removeDownloadedTrack(trackId) {
@@ -480,18 +475,10 @@ export async function checkOrphans() {
   }
 }
 
-/**
- * Preferred download codec changed — UI re-joins via settings.download;
- * no status map rebuild.
- */
-export function onDownloadCodecChanged() {
-  /* reactive settings.download is enough for trackDownloadState */
-}
-
 /** Cellular / Wi‑Fi constraint flip — re-evaluate only-download-on-Wi‑Fi pause. */
 export function onNetworkConstraintChanged() {
   syncControlFlags();
-  import("./queue.js")
+  import("./queuePolicy.js")
     .then((q) => q.reapplyNetworkPolicy?.())
     .catch(() => {});
 }

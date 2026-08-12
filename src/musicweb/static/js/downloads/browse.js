@@ -4,7 +4,7 @@
  */
 
 import { fromCatalogRecord } from "../models/track.js";
-import { getLocalArtistImageUrl, getLocalCoverUrl } from "./art.js";
+import { getLocalArtistImageUrl, getLocalCoverUrl } from "./catalog.js";
 import { buildDownloadsHierarchy } from "./hierarchy.js";
 
 /**

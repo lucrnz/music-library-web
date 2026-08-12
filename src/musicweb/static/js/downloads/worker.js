@@ -9,7 +9,7 @@ import {
   isNetworkClassError,
   reportFailure,
 } from "../connectivity.js";
-import { codecExt, codecMediaType } from "./codec.js";
+import { codecExt, codecMediaType } from "./catalog.js";
 import { deleteOne, getOne, putOne } from "./db.js";
 import {
   DownloadWriteAbortError,
@@ -20,31 +20,28 @@ import {
   removePartial,
   writeResponseToFile,
 } from "./opfs.js";
-import { commitTrackDownload } from "./records.js";
-import { emitQueueChange } from "./queueEvents.js";
+import { commitTrackDownload } from "./catalog.js";
+import {
+  activeIds,
+  clearLiveProgress,
+  controllers,
+  discardPartialForItem,
+  emitQueueChange,
+  flushProgressToIdb,
+  listQueue,
+  markActive,
+  markFailed,
+  markPaused,
+  markPending,
+  QueueState,
+  resolveAbortKind,
+  updateLiveProgress,
+} from "./queue.js";
 import {
   canPump,
   initPolicy,
   onJobNetworkFailure,
 } from "./queuePolicy.js";
-import {
-  clearLiveProgress,
-  flushProgressToIdb,
-  updateLiveProgress,
-} from "./queueProgress.js";
-import { activeIds, controllers } from "./queueRuntime.js";
-import {
-  discardPartialForItem,
-  listQueue,
-} from "./queueStore.js";
-import {
-  QueueState,
-  markActive,
-  markFailed,
-  markPaused,
-  markPending,
-  resolveAbortKind,
-} from "./queueTransitions.js";
 
 const MAX_CONCURRENT = 2;
 

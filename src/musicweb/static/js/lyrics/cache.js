@@ -7,7 +7,7 @@
  */
 
 import { fetchLyrics } from "../api.js";
-import { getTrackRecord } from "../downloads/records.js";
+import { getTrackRecord } from "../downloads/catalog.js";
 import {
   getLyricsRecord,
   putLyricsRecord,

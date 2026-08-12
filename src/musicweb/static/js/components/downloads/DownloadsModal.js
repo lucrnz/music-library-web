@@ -13,7 +13,6 @@ import {
   clearFinishedQueue,
   closeDownloadsManager,
   downloadsStorageLine,
-  formatBytes,
   pauseAllDownloads,
   removeDownloadedAlbum,
   removeDownloadedArtist,
@@ -22,6 +21,7 @@ import {
   retryQueueItem,
 } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
+import { formatBytes } from "../../downloads/storageInfo.js";
 import { confirmDialog } from "../../stores/dialog.js";
 import { settings } from "../../stores/settings.js";
 import Icon from "../icons/Icon.js";

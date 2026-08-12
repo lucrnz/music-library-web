@@ -3,8 +3,8 @@
  */
 import { confirmDialog } from "../stores/dialog.js";
 import {
-  downloadTrack as enqueueDownloadTrack,
-  downloadTracks as enqueueDownloadTracks,
+  enqueueTrack,
+  enqueueTracks,
   getNearQuotaWarning,
 } from "./index.js";
 
@@ -27,7 +27,7 @@ async function confirmNearQuotaIfNeeded(trackCount) {
  */
 export async function downloadTrack(track) {
   if (!(await confirmNearQuotaIfNeeded(1))) return;
-  await enqueueDownloadTrack(track);
+  await enqueueTrack(track);
 }
 
 /**
@@ -37,5 +37,5 @@ export async function downloadTracks(tracks) {
   const list = (tracks || []).filter((t) => t?.id && !t.isMissing);
   if (!list.length) return;
   if (!(await confirmNearQuotaIfNeeded(list.length))) return;
-  await enqueueDownloadTracks(list);
+  await enqueueTracks(list);
 }

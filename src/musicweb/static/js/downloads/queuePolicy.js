@@ -13,7 +13,7 @@ import {
 } from "../connectivity.js";
 import { isConstrainedConnection } from "../networkConstraints.js";
 import { settings } from "../stores/settings.js";
-import { codecExt } from "./codec.js";
+import { codecExt } from "./catalog.js";
 import { getOne, putOne } from "./db.js";
 import {
   audioDirParts,
@@ -22,20 +22,17 @@ import {
 } from "./opfs.js";
 import {
   emitQueueChange,
-  setQueueMutationSideEffects,
-} from "./queueEvents.js";
-import {
   flushProgressToIdb,
-  seedLiveProgress,
-  updateLiveProgress,
-} from "./queueProgress.js";
-import {
   freezeWork,
   listQueue,
+  markPaused,
   queueHasWork,
+  QueueState,
+  seedLiveProgress,
+  setQueueMutationSideEffects,
   unpauseItemsToPending,
-} from "./queueStore.js";
-import { QueueState, markPaused } from "./queueTransitions.js";
+  updateLiveProgress,
+} from "./queue.js";
 
 const META_USER_PAUSED = "userPaused";
 
