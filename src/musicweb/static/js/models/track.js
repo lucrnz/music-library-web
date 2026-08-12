@@ -122,6 +122,27 @@ export function fromCatalogRecord(rec) {
 }
 
 /**
+ * Project offline catalog track records to client Tracks.
+ * Skips rows that fail fromCatalogRecord; preserves input order.
+ *
+ * @param {CatalogTrackRecord[]|object[]|null|undefined} records
+ * @returns {Track[]}
+ */
+export function tracksFromCatalogRecords(records) {
+  if (!records?.length) return [];
+  /** @type {Track[]} */
+  const out = [];
+  for (const rec of records) {
+    try {
+      out.push(fromCatalogRecord(rec));
+    } catch {
+      /* skip unmappable row */
+    }
+  }
+  return out;
+}
+
+/**
  * True when value is already a full client Track (not a bare id ref).
  * Bare `{ id }` / collect file rows fail this and must go through meta fetch.
  *
