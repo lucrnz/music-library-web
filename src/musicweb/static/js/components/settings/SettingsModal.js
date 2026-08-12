@@ -271,8 +271,7 @@ export default defineComponent({
             aria-label="Close settings"
             @click="closeSettings"
           >
-            <Icon class="modal-close-sheet" name="chevron-down" />
-            <Icon class="modal-close-card" name="close" />
+            <Icon name="close" />
           </button>
         </div>
 

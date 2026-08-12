@@ -39,7 +39,7 @@ export default defineComponent({
     coverFull: { type: String, default: "" },
     playIcon: { type: String, default: "play" },
     repeatIcon: { type: String, default: "repeat" },
-    closeIcon: { type: String, default: "chevron-down" },
+    closeIcon: { type: String, default: "close" },
     /** Mobile dialog semantics when expanded on small viewports. */
     npModal: { type: Boolean, default: false },
     seekValue: { type: Number, default: 0 },

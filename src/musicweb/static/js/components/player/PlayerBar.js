@@ -41,9 +41,6 @@ export default defineComponent({
     /** Element to restore focus to after collapse (nice-to-have). */
     let focusRestoreEl = null;
 
-    const closeIcon = computed(() =>
-      desktopViewport.value ? "close" : "chevron-down"
-    );
     const npModal = computed(
       () => player.expanded && !desktopViewport.value
     );
@@ -146,7 +143,6 @@ export default defineComponent({
       seekValue,
       playIcon,
       repeatIcon,
-      closeIcon,
       npModal,
       expand,
       onCoverOrMetaOpen,
@@ -209,7 +205,6 @@ export default defineComponent({
         :cover-full="coverFull"
         :play-icon="playIcon"
         :repeat-icon="repeatIcon"
-        :close-icon="closeIcon"
         :np-modal="npModal"
         :seek-value="seekValue"
         :track-id="trackId"

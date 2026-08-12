@@ -294,7 +294,7 @@ export default defineComponent({
             title="Close"
             aria-label="Close downloads"
             @click="closeDownloadsManager"
-          ><Icon name="chevron-down" /></button>
+          ><Icon name="close" /></button>
         </div>
 
         <div class="modal-section">
