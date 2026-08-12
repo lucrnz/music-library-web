@@ -1,5 +1,13 @@
 # Core product guidelines
 
+## Source of truth
+
+- Product and audio intent: this page
+- Server encode policy implementation: `src/musicweb/transcode/`, `docs/systems/transcoding.md`
+- Client playback / quality: `docs/systems/playback.md`
+- Offline downloads: `docs/systems/downloads.md`
+- Connectivity: `docs/systems/connectivity.md`
+
 ## Product shape
 
 Musicweb is a **personal LAN library player**: browse and stream your own lossless collection from phones and desktops on the local network. It is not a multi-user service, not a public streaming platform, and not a tag editor for the on-disk library.
@@ -9,9 +17,9 @@ Musicweb is a **personal LAN library player**: browse and stream your own lossle
 - **Mobile-first.** Phones get bottom tabs, mini-player, and an expandable now-playing sheet. Desktop (≥ ~900px) gets side-by-side library/playlist panes and a persistent player bar.
 - **Browse modes:** Folders (filesystem), Artists → Albums → Tracks, Albums grid, Search. Routes should remain bookmarkable.
 - **Queue vs playlists:** Session queue lives in the browser (survives reload). Saved playlists live in SQLite and are shared across devices on the same server.
-- **Honest capability:** Codec profile pickers should list only formats the **current browser can actually decode** (runtime media probes), not optimistic `canPlayType` / UA guesses alone.
-- **Quality preferences (client):** Streaming quality can differ for Wi‑Fi vs mobile data when the browser reports `connection.type` (hidden on typical desktop). Download quality is independent. Playback may prefer a local download when it is at least as good as the active stream profile (user-selectable policy). Network cost hints never replace an explicit user setting.
-- **Offline downloads (client):** Optional download-to-device features use browser storage (OPFS); they must not corrupt the server index. Optional “only download on Wi‑Fi” pauses the queue on cellular when connection type is detectable.
+- **Honest capability:** Codec profile pickers should list only formats the **current browser can actually decode** (runtime media probes), not optimistic `canPlayType` / UA guesses alone. See `docs/systems/playback.md`.
+- **Quality preferences (client):** Streaming quality can differ for Wi‑Fi vs mobile data when the browser reports `connection.type` (hidden on typical desktop). Download quality is independent. Playback may prefer a local download when it is at least as good as the active stream profile (user-selectable policy). Network cost hints never replace an explicit user setting. See `docs/systems/playback.md`.
+- **Offline downloads (client):** Optional download-to-device features use browser storage (OPFS); they must not corrupt the server index. Optional “only download on Wi‑Fi” pauses the queue on cellular when connection type is detectable. See `docs/systems/downloads.md` and `docs/systems/connectivity.md`.
 
 ## Audio quality principles
 

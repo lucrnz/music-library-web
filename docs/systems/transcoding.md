@@ -36,6 +36,8 @@ Exact argv fragments and profile tags live in `profiles.py`.
 
 ## Client interaction
 
+Client quality prefs, play-source resolution, and prepare timing are owned by `docs/systems/playback.md`. Server encode policy stays on this page.
+
 - Stream by stable track id (preferred) with a codec/profile tag.
 - Settings UI should only offer profiles the browser can decode (client probes).
 - Client may pick different profile tags for Wi‑Fi vs cellular streaming and for offline downloads; `/api/codecs` exposes bitrate/depth/rate so the client can rank quality. Network detection is browser-side only.

@@ -17,14 +17,9 @@
 - **SPA fallback:** FastAPI serves the same shell for client routes so refresh works on `/folders`, `/artists/…`, etc.
 - **Stores** hold player, playlist/queue, settings, and UI chrome. Components should prefer store APIs over ad-hoc globals.
 - **Library UI** lives under `components/library/`; player under `components/player/`; settings modal under `components/settings/`.
-- **Downloads** (`static/js/downloads/`) implement client-side offline catalog (OPFS, workers). Keep offline concerns out of server index code.
-  - Lifecycle / queue actions: `downloads/index.js` (init, enable/disable, enqueue, pause/resume, cancel/retry/clearFinished, remove, manager, orphan, near-quota).
-  - User download with confirm: `downloads/ui.js` (`downloadTrack(s)` only).
-  - Reactive fields: `downloads/state.js` (`downloads`).
-  - Catalog / projection / art / codec helpers: `downloads/catalog.js`.
-  - Play/cover resolution: `downloads/resolve.js`.
-  - Hierarchy / pure storage formatters: `downloads/hierarchy.js`, `downloads/storageInfo.js`.
-  - Queue guts / policy / worker: import only from downloads internals (or thin index wrappers for manager ops) — do not re-grow an `index.js` barrel.
+- **Downloads** (`static/js/downloads/`) own client-side offline catalog (OPFS + IndexedDB). Keep offline concerns out of server index code. Design, storage split, queue policy, and import-surface rules: `docs/systems/downloads.md`.
+- **Playback / quality** (play source, stream vs download policy, prepare): `docs/systems/playback.md`.
+- **Connectivity** (online / offline / server_down, network cost hints): `docs/systems/connectivity.md`.
 
 ## Vendor assets
 
@@ -36,10 +31,10 @@ To upgrade Vue/Router: change version + URL in `vendor_deps.py` and restart with
 
 - Mobile: bottom tab bar + mini-player / expanded now-playing.
 - Desktop: two-pane library + playlist with persistent player bar (breakpoint owned by CSS).
-- Codec list in settings reflects **probed** browser decode support (`codecSupport.js` / related probes), not a static marketing list alone.
+- Codec list in settings reflects **probed** browser decode support (`codecSupport.js` / related probes), not a static marketing list alone — see `docs/systems/playback.md`.
 - **No native browser dialogs.** Use `confirmDialog` / `promptDialog` from `stores/dialog.js` (themed via `AppDialog`) for blocking confirm/prompt flows, and `showToast` from `stores/ui.js` for transient errors and soft info. Do not call `alert`, `confirm`, or `prompt`.
 - **Modal scroll lock:** `stores/modalLock.js` acquire/release tokens only — settings, downloads manager, and dialog must not toggle `body.modal-open` directly.
-- **Interactive downloads:** user-facing `downloadTrack(s)` live in `downloads/ui.js` (near-quota confirm). Pure enqueue / lifecycle stay in `downloads/index.js` (no dialog imports).
+- **Interactive downloads:** user-facing `downloadTrack(s)` live in `downloads/ui.js` (near-quota confirm). Pure enqueue / lifecycle stay in `downloads/index.js` (no dialog imports). Details: `docs/systems/downloads.md`.
 
 ## Guardrails
 

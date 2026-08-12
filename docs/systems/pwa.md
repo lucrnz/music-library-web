@@ -37,7 +37,7 @@ A new service worker activates without an in-app “reload” banner. Cache vers
 
 ### Complements Downloads, does not replace it
 
-Connectivity UX is quiet: transition toasts via the shell binder (`connectivityUi.js` at boot), plus a guidance banner only when Downloads are disabled. Offline playback stays on the Downloads tab (OPFS). The SW’s job is: **the app can open** when the host or tunnel is down.
+Connectivity UX is quiet: transition toasts via the shell binder (`connectivityUi.js` at boot), plus a guidance banner only when Downloads are disabled. Offline **audio** is the Downloads system (OPFS + IndexedDB) — see `docs/systems/downloads.md`. Reachability and network-cost signals: `docs/systems/connectivity.md`. The SW’s job is: **the app can open** when the host or tunnel is down.
 
 ## Request handling (intent)
 
