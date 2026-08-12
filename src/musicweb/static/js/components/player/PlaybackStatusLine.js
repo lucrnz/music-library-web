@@ -326,19 +326,23 @@ export default defineComponent({
           aria-labelledby="np-playback-details-title"
         >
           <div class="modal-backdrop" @click="closeDetails"></div>
-          <div class="modal-sheet dialog-sheet np-playback-details-sheet">
-            <div class="dialog-title" id="np-playback-details-title">
-              Playback details
-            </div>
-            <PlaybackDetailsBody :rows="detailsRows" />
-            <div class="dialog-actions">
+          <div class="modal-sheet np-playback-details-sheet">
+            <div class="modal-head">
+              <div class="modal-title" id="np-playback-details-title">
+                Playback details
+              </div>
               <button
                 ref="detailsCloseBtn"
                 type="button"
-                class="pill primary"
+                class="icon-btn"
+                title="Close"
+                aria-label="Close playback details"
                 @click="closeDetails"
-              >Close</button>
+              >
+                <Icon name="close" />
+              </button>
             </div>
+            <PlaybackDetailsBody :rows="detailsRows" />
           </div>
         </div>
       </Teleport>

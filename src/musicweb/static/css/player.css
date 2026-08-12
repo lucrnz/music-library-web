@@ -401,7 +401,7 @@
   color: var(--text-dim);
 }
 
-/* Mobile Playback details info modal (AppDialog pattern) */
+/* Mobile Playback details info modal (header dismiss, centered card) */
 .np-playback-details-modal {
   z-index: 110;
   align-items: center;
@@ -413,22 +413,17 @@
   margin: 0 16px;
   border-radius: 16px;
   border: 1px solid var(--border);
-  padding: 20px 20px calc(16px + env(safe-area-inset-bottom));
+  padding: 0 0 calc(12px + env(safe-area-inset-bottom));
   overflow-y: auto;
 }
 
-.np-playback-details-sheet .dialog-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0 0 12px;
-  line-height: 1.3;
+.np-playback-details-sheet .modal-head {
+  flex-shrink: 0;
 }
 
-.np-playback-details-sheet .dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
+.np-playback-details-sheet .playback-details-list,
+.np-playback-details-sheet .playback-details-empty {
+  padding: 4px 20px 8px;
 }
 
 .player-extras {
