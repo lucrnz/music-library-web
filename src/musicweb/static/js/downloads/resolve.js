@@ -3,14 +3,18 @@
  */
 
 import { streamUrl } from "../api.js";
+import {
+  PLAY_BLOCK_MESSAGES,
+  playBlockMessage,
+} from "../playBlock.js";
 import { localAtLeastAsGood } from "../qualityRank.js";
 import { PLACEHOLDER_COVER } from "../util.js";
 import { getLocalCoverUrl } from "./art.js";
 import { getLocalAudioUrlForRecord, getTrackRecord } from "./records.js";
 
 /**
- * @typedef {'local'|'remote'|'unavailable'} PlaySourceType
- * @typedef {'missing'|'broken'|'no_id'|'offline_no_local'} PlayBlockReason
+ * @typedef {import('../playBlock.js').PlayBlockReason} PlayBlockReason
+ * @typedef {import('../playBlock.js').ResolvePlayType} PlaySourceType
  * @typedef {'prefer_better'|'prefer_offline'|'prefer_stream'} PlaybackPolicy
  *
  * @typedef {object} PlaySource
@@ -18,16 +22,8 @@ import { getLocalAudioUrlForRecord, getTrackRecord } from "./records.js";
  * @property {string|null} url
  * @property {PlayBlockReason|null} reason
  * @property {string|null} message
- * @property {string|null} [codec] codec used for local source
+ * @property {string|null} [codec] delivery profile tag (local record or stream)
  */
-
-const MESSAGES = {
-  missing: "Not downloaded for offline play. Download it while online.",
-  broken: "Local file is unreadable. Re-download when online.",
-  no_id: "Track has no id.",
-  offline_no_local:
-    "You're offline and this track isn't downloaded.",
-};
 
 /**
  * @param {object|null} rec
@@ -80,7 +76,8 @@ async function openLocalSource(rec) {
     type: "unavailable",
     url: null,
     reason: "broken",
-    message: MESSAGES.broken,
+    message: PLAY_BLOCK_MESSAGES.broken,
+    codec: rec?.codec || null,
   };
 }
 
@@ -103,7 +100,7 @@ export async function resolvePlaySource(track, ctx) {
       type: "unavailable",
       url: null,
       reason: "no_id",
-      message: MESSAGES.no_id,
+      message: PLAY_BLOCK_MESSAGES.no_id,
     };
   }
 
@@ -131,7 +128,9 @@ export async function resolvePlaySource(track, ctx) {
       type: "unavailable",
       url: null,
       reason,
-      message: MESSAGES[reason],
+      message: playBlockMessage(reason),
+      // Intended profile: local record when present, else active stream tag.
+      codec: (rec && rec.codec) || active || null,
     };
   }
 
@@ -150,10 +149,17 @@ export async function resolvePlaySource(track, ctx) {
       type: "unavailable",
       url: null,
       reason: "no_id",
-      message: MESSAGES.no_id,
+      message: PLAY_BLOCK_MESSAGES.no_id,
+      codec: active || null,
     };
   }
-  return { type: "remote", url: remote, reason: null, message: null };
+  return {
+    type: "remote",
+    url: remote,
+    reason: null,
+    message: null,
+    codec: active || null,
+  };
 }
 
 /**

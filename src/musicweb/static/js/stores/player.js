@@ -7,6 +7,7 @@ import { canReachServer, isHardOffline } from "../connectivity.js";
 import { markDownloadBroken } from "../downloads/index.js";
 import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
+import { PLAY_BLOCK_MESSAGES } from "../playBlock.js";
 import { PLACEHOLDER_COVER } from "../util.js";
 import { pl, commit, trackNeedsStreamPrepare } from "./playlist.js";
 import { getActiveStreamCodec, settings } from "./settings.js";
@@ -37,6 +38,11 @@ let lastCoverTrackId = null;
  */
 let nearEndPrepareSent = false;
 
+/**
+ * @typedef {import('../playBlock.js').PlaySourceState} PlaySourceState
+ * @typedef {import('../playBlock.js').PlayBlockReason} PlayBlockReason
+ */
+
 export const player = reactive({
   seeking: false,
   /** Full now-playing open (mobile sheet / desktop right panel) */
@@ -47,7 +53,18 @@ export const player = reactive({
   currentTime: 0,
   duration: 0,
   paused: true,
-  fromDownload: false,
+  /**
+   * Delivery source for the current load (not library path).
+   * @type {PlaySourceState}
+   */
+  playSource: "none",
+  /** Delivery profile tag actually used or intended (null when none). */
+  playProfileId: null,
+  /**
+   * Machine reason when playSource is unavailable.
+   * @type {PlayBlockReason | null}
+   */
+  playBlockReason: null,
   /** User-visible play block message (null when clear) */
   playNotice: null,
   /** Resolved cover URLs for PlayerBar (local OPFS or remote / placeholder). */
@@ -56,6 +73,58 @@ export const player = reactive({
   /** Expanded now-playing: lyrics overlay open */
   lyricsOpen: false,
 });
+
+/**
+ * Atomic writer for the play-source triple (never leave a field stale).
+ * @param {PlaySourceState} playSource
+ * @param {string | null} playProfileId
+ * @param {PlayBlockReason | null} playBlockReason
+ */
+function setPlaySourceState(playSource, playProfileId, playBlockReason) {
+  player.playSource = playSource;
+  player.playProfileId = playProfileId || null;
+  player.playBlockReason = playBlockReason || null;
+}
+
+function clearPlaySourceState() {
+  setPlaySourceState("none", null, null);
+}
+
+/**
+ * Map resolvePlaySource result onto player face state.
+ * @param {import('../downloads/resolve.js').PlaySource | { type: string, codec?: string|null, reason?: string|null }} source
+ * @param {string | null | undefined} activeCodec
+ */
+function applyResolvedSource(source, activeCodec) {
+  if (source.type === "unavailable") {
+    setPlaySourceState(
+      "unavailable",
+      source.codec || activeCodec || null,
+      /** @type {PlayBlockReason} */ (source.reason || "missing")
+    );
+    return;
+  }
+  if (source.type === "local") {
+    setPlaySourceState("downloaded", source.codec || null, null);
+    return;
+  }
+  setPlaySourceState(
+    "streaming",
+    source.codec || activeCodec || null,
+    null
+  );
+}
+
+/**
+ * Mark the current load unavailable and set the user-visible notice.
+ * @param {string | null | undefined} profileId
+ * @param {PlayBlockReason} reason
+ * @param {string | null | undefined} notice
+ */
+function failPlayback(profileId, reason, notice) {
+  setPlaySourceState("unavailable", profileId || null, reason);
+  setPlayNotice(notice);
+}
 
 const msSupported = "mediaSession" in navigator;
 
@@ -170,7 +239,7 @@ export function stopPlayback() {
   audio.removeAttribute("src");
   audio.load();
   revokeLocalPlayUrl();
-  player.fromDownload = false;
+  clearPlaySourceState();
   setPlayNotice(null);
   lastCoverTrackId = null;
   nearEndPrepareSent = false;
@@ -247,7 +316,7 @@ export async function playIndex(index) {
   updateMediaSession();
 
   revokeLocalPlayUrl();
-  player.fromDownload = false;
+  clearPlaySourceState();
   setPlayNotice(null);
 
   const activeCodec = getActiveStreamCodec();
@@ -259,6 +328,8 @@ export async function playIndex(index) {
     offline: isHardOffline(),
   });
 
+  applyResolvedSource(source, activeCodec);
+
   if (source.type === "unavailable") {
     const title = track?.title || "Track";
     setPlayNotice(source.message ? `${title}: ${source.message}` : source.message);
@@ -268,39 +339,47 @@ export async function playIndex(index) {
 
   if (source.type === "local") {
     localPlayUrl = source.url;
-    player.fromDownload = true;
   }
 
   audio.src = source.url;
   try {
     await audio.play();
   } catch (err) {
-    if (player.fromDownload) {
+    if (player.playSource === "downloaded") {
       console.warn("Local playback failed, falling back to stream", err);
       if (track?.id) markDownloadBroken(track.id).catch(() => {});
       revokeLocalPlayUrl();
-      player.fromDownload = false;
 
       if (isHardOffline()) {
-        setPlayNotice(
-          `${track?.title || "Track"}: Local file is unreadable. Re-download when online.`
+        failPlayback(
+          source.codec || null,
+          "broken",
+          `${track?.title || "Track"}: ${PLAY_BLOCK_MESSAGES.broken}`
         );
         syncTransportFlags();
         return;
       }
-      const remote = streamUrl(track, getActiveStreamCodec());
+      const streamCodec = getActiveStreamCodec();
+      const remote = streamUrl(track, streamCodec);
       if (remote) {
+        setPlaySourceState("streaming", streamCodec || null, null);
         audio.src = remote;
         try {
           await audio.play();
         } catch (err2) {
           console.error("Playback failed", err2);
-          setPlayNotice("Playback failed");
+          failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
         }
+      } else {
+        failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
       }
     } else {
       console.error("Playback failed", err);
-      setPlayNotice("Playback failed");
+      failPlayback(
+        player.playProfileId || activeCodec || null,
+        "play_failed",
+        PLAY_BLOCK_MESSAGES.play_failed
+      );
     }
   }
   syncTransportFlags();
