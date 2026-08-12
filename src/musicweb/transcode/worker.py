@@ -229,34 +229,60 @@ class Transcoder:
         )
         return cmd
 
-    def prepare(
+    def _enqueue_encode(
         self,
         source: Path,
         relative_path: str,
         *,
         profile_tag: str = DEFAULT_PROFILE_TAG,
         source_tech: SourceAudioTech | None = None,
-    ) -> str:
+        urgent: bool = False,
+    ) -> tuple[str, _Job | None]:
         """
-        Queue a background (prewarm) encode; never blocks on ffmpeg.
+        Queue encode work (or promote an existing job). Never waits on ffmpeg.
 
-        Returns "ready" (cached), "already" (queued or running),
-        "queued" (newly enqueued), or "skipped" (pending-prewarm cap hit).
+        Returns ``(status, job)``:
+        - ``"ready"``: cache hit; job is None
+        - ``"already"``: job was already queued or running (promoted if urgent)
+        - ``"queued"``: newly enqueued
+        - ``"skipped"``: non-urgent only; pending-prewarm cap hit; job is None
+
+        Caller must not hold ``_queue_cond``.
         """
         if self._closed or self._temp_dir is None:
             raise RuntimeError("Transcoder is shut down")
         profile = get_profile(profile_tag)
         key = self._cache_key(relative_path, profile.tag)
         if self._cached(self._out_path(key, profile)):
-            return "ready"
+            return "ready", None
 
         with self._queue_cond:
             if self._closed:
                 raise RuntimeError("Transcoder is shut down")
-            if key in self._jobs:
-                return "already"
+
+            job = self._jobs.get(key)
+            if job is not None:
+                if urgent:
+                    self._promote_to_urgent(job, source_tech)
+                return "already", job
+
+            if urgent:
+                job = _Job(
+                    key=key,
+                    source=source,
+                    relative_path=relative_path,
+                    profile=profile,
+                    urgent=True,
+                    source_tech=source_tech,
+                )
+                self._jobs[key] = job
+                self._urgent.appendleft(job)
+                self._preempt_other_prewarm(job)
+                self._queue_cond.notify_all()
+                return "queued", job
+
             if len(self._prewarm) >= self.MAX_PENDING_PREWARM:
-                return "skipped"
+                return "skipped", None
             job = _Job(
                 key=key,
                 source=source,
@@ -268,7 +294,58 @@ class Transcoder:
             self._jobs[key] = job
             self._prewarm.append(job)
             self._queue_cond.notify()
-            return "queued"
+            return "queued", job
+
+    def _promote_to_urgent(
+        self, job: _Job, source_tech: SourceAudioTech | None
+    ) -> None:
+        """Mark *job* urgent; move from prewarm queue if pending. Holds lock."""
+        job.urgent = True
+        if source_tech is not None and job.source_tech is None:
+            job.source_tech = source_tech
+        try:
+            self._prewarm.remove(job)
+        except ValueError:
+            pass  # already running or already urgent
+        else:
+            self._urgent.appendleft(job)
+        self._preempt_other_prewarm(job)
+        self._queue_cond.notify_all()
+
+    def _preempt_other_prewarm(self, job: _Job) -> None:
+        """Cancel a running non-urgent encode of a different key. Holds lock."""
+        current = self._current
+        if current is not None and current is not job and not current.urgent:
+            self._request_cancel(current)
+
+    def prepare(
+        self,
+        source: Path,
+        relative_path: str,
+        *,
+        profile_tag: str = DEFAULT_PROFILE_TAG,
+        source_tech: SourceAudioTech | None = None,
+        urgent: bool = False,
+    ) -> str:
+        """
+        Queue a background encode; never blocks on ffmpeg.
+
+        Non-urgent jobs go on the prewarm FIFO (subject to pending cap).
+        Urgent jobs go on the urgent tier (newest first), can promote an
+        existing prewarm job, and may preempt a running prewarm of another
+        key — same priority model as play, without waiting for completion.
+
+        Returns "ready" (cached), "already" (queued or running),
+        "queued" (newly enqueued), or "skipped" (pending-prewarm cap hit).
+        """
+        status, _job = self._enqueue_encode(
+            source,
+            relative_path,
+            profile_tag=profile_tag,
+            source_tech=source_tech,
+            urgent=urgent,
+        )
+        return status
 
     def drop_pending_prewarm(self) -> int:
         """Drop all pending prewarm jobs (e.g. codec changed). Returns count."""
@@ -336,41 +413,20 @@ class Transcoder:
             raise FileNotFoundError(f"Source not found: {source}")
 
         profile = get_profile(profile_tag)
-        key = self._cache_key(relative_path, profile.tag)
-        out_path = self._out_path(key, profile)
-        if self._cached(out_path):
+        out_path = self._out_path(
+            self._cache_key(relative_path, profile.tag), profile
+        )
+        status, job = self._enqueue_encode(
+            source,
+            relative_path,
+            profile_tag=profile_tag,
+            source_tech=source_tech,
+            urgent=True,
+        )
+        if status == "ready":
             return out_path
-
-        with self._queue_cond:
-            if self._closed:
-                raise RuntimeError("Transcoder is shut down")
-            job = self._jobs.get(key)
-            if job is None:
-                job = _Job(
-                    key=key,
-                    source=source,
-                    relative_path=relative_path,
-                    profile=profile,
-                    urgent=True,
-                    source_tech=source_tech,
-                )
-                self._jobs[key] = job
-                self._urgent.appendleft(job)
-            else:
-                job.urgent = True
-                if source_tech is not None and job.source_tech is None:
-                    job.source_tech = source_tech
-                try:
-                    self._prewarm.remove(job)
-                except ValueError:
-                    pass  # already running or already urgent
-                else:
-                    self._urgent.appendleft(job)
-
-            current = self._current
-            if current is not None and current is not job and not current.urgent:
-                self._request_cancel(current)
-            self._queue_cond.notify_all()
+        if job is None:
+            raise RuntimeError(f"Urgent enqueue failed for {source.name}")
 
         job.done.wait()
         if job.error is not None:

@@ -104,6 +104,7 @@ class PrepareRequest(BaseModel):
     ids: list[str] = Field(default_factory=list, max_length=1000)
     codec: str = DEFAULT_PROFILE_TAG
     replace: bool = False
+    urgent: bool = False
 
 
 @router.post("/transcode/prepare")
@@ -140,6 +141,7 @@ def transcode_prepare(
             t.rel_path,
             profile_tag=payload.codec,
             source_tech=tech_from_track(t),
+            urgent=payload.urgent,
         )
         counts[result] += 1
     return counts
