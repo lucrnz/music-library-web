@@ -26,6 +26,37 @@ const STORAGE_KEY = "musicweb.playlist.v1";
  * @typedef {import("../models/track.js").Track} Track
  */
 
+/**
+ * Pure next-queue index from playlist cursor state. No side effects.
+ * Returns -1 when there is no next track, or when the next id is unknown
+ * (shuffle wrap that would require a fresh random order).
+ *
+ * @param {{
+ *   tracks: Track[],
+ *   index: number,
+ *   shuffle: boolean,
+ *   shuffleOrder: number[],
+ *   shufflePos: number,
+ *   repeat: 'off'|'one'|'all',
+ * }} state
+ * @returns {number}
+ */
+function computeNextIndex(state) {
+  const { tracks, index, shuffle, shuffleOrder, shufflePos, repeat } = state;
+  if (!tracks.length) return -1;
+  if (repeat === "one") return index;
+  if (shuffle) {
+    if (!shuffleOrder.length) return -1;
+    const nextPos = shufflePos + 1;
+    if (nextPos >= shuffleOrder.length) return -1;
+    return shuffleOrder[nextPos];
+  }
+  const next = index + 1;
+  if (next < tracks.length) return next;
+  if (repeat === "all") return 0;
+  return -1;
+}
+
 export const pl = reactive({
   /** @type {Track[]} */
   tracks: [],
@@ -101,30 +132,45 @@ export const pl = reactive({
       this.index >= 0 ? this.shuffleOrder.indexOf(this.index) : -1;
   },
 
+  /**
+   * Advance to the next queue index (mutates shuffle cursor when needed).
+   * Uses the same rules as {@link peekNextIndex}, then applies side effects.
+   * @returns {number}
+   */
   nextIndex() {
     if (!this.tracks.length) return -1;
     if (this.repeat === "one") return this.index;
     if (this.shuffle) {
+      // Empty order: rebuild on advance (peek cannot invent a random order).
       if (!this.shuffleOrder.length) {
         this.rebuildShuffle();
         this.shufflePos = 0;
         return this.shuffleOrder[0];
       }
-      this.shufflePos += 1;
-      if (this.shufflePos >= this.shuffleOrder.length) {
+      const peeked = computeNextIndex(this);
+      if (peeked < 0) {
+        // Past end of shuffle order: reshape only when advancing under repeat-all.
         if (this.repeat === "all") {
           this.rebuildShuffle();
           this.shufflePos = 0;
-        } else {
-          return -1;
+          return this.shuffleOrder[0];
         }
+        return -1;
       }
-      return this.shuffleOrder[this.shufflePos];
+      this.shufflePos += 1;
+      return peeked;
     }
-    const next = this.index + 1;
-    if (next < this.tracks.length) return next;
-    if (this.repeat === "all") return 0;
-    return -1;
+    return computeNextIndex(this);
+  },
+
+  /**
+   * Next queue index without advancing shuffle / rebuilding order.
+   * When the next track is unknown (shuffle wrap that would reshuffle),
+   * returns -1 so callers (e.g. near-end prepare) can skip.
+   * @returns {number}
+   */
+  peekNextIndex() {
+    return computeNextIndex(this);
   },
 
   /**
@@ -271,22 +317,25 @@ export async function addToQueue(entries) {
 
   // Skip prepare when playback policy will prefer a local download.
   const active = getActiveStreamCodec();
-  const toPrepare = downloads.enabled
-    ? await tracksNeedingPrepare(playable, active)
-    : playable;
+  const toPrepare = await tracksNeedingPrepare(playable, active);
   if (toPrepare.length) requestPrepare(toPrepare, active);
 }
 
 /**
+ * Tracks that still need a server stream prepare under current playback policy.
+ * Skips ids that will prefer a local download when online.
  * @param {Track[]} tracks
  * @param {string} activeCodec
  * @returns {Promise<Track[]>}
  */
-async function tracksNeedingPrepare(tracks, activeCodec) {
+export async function tracksNeedingPrepare(tracks, activeCodec) {
+  if (!downloads.enabled) {
+    return (tracks || []).filter((t) => t?.id);
+  }
   const out = [];
   const policy = settings.playbackPolicy;
   const catalog = settings.options;
-  for (const t of tracks) {
+  for (const t of tracks || []) {
     if (!t?.id) continue;
     try {
       const rec = await getTrackRecord(t.id);
@@ -304,6 +353,17 @@ async function tracksNeedingPrepare(tracks, activeCodec) {
     out.push(t);
   }
   return out;
+}
+
+/**
+ * @param {Track|null|undefined} track
+ * @param {string} activeCodec
+ * @returns {Promise<boolean>}
+ */
+export async function trackNeedsStreamPrepare(track, activeCodec) {
+  if (!track?.id) return false;
+  const need = await tracksNeedingPrepare([track], activeCodec);
+  return need.length > 0;
 }
 
 /**

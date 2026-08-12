@@ -235,22 +235,35 @@ export const preparedKeys = new Set();
 /**
  * Prewarm by track ids (or track objects with .id).
  * @param {string[] | {id?: string}[]} tracksOrIds
+ * @param {string} codec
+ * @param {{ replace?: boolean, urgent?: boolean }} [opts]
+ *   urgent: near-end / play-priority prepare. Always POSTs (even if already
+ *   in preparedKeys) so a pending prewarm job can be promoted server-side.
  */
-export function requestPrepare(tracksOrIds, codec, { replace = false } = {}) {
+export function requestPrepare(
+  tracksOrIds,
+  codec,
+  { replace = false, urgent = false } = {}
+) {
   const ids = [];
   for (const item of tracksOrIds || []) {
     if (typeof item === "string") ids.push(item);
     else if (item?.id) ids.push(item.id);
   }
-  const fresh = ids.filter((id) => !preparedKeys.has(`${id}|${codec}`));
-  if (!fresh.length && !replace) return;
-  const use = replace ? ids : fresh;
+  let use;
+  if (urgent) {
+    use = ids;
+  } else {
+    const fresh = ids.filter((id) => !preparedKeys.has(`${id}|${codec}`));
+    if (!fresh.length && !replace) return;
+    use = replace ? ids : fresh;
+  }
   if (!use.length) return;
   use.forEach((id) => preparedKeys.add(`${id}|${codec}`));
   fetch("/api/transcode/prepare", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids: use, codec, replace }),
+    body: JSON.stringify({ ids: use, codec, replace, urgent: !!urgent }),
   }).catch(() => {});
 }
 

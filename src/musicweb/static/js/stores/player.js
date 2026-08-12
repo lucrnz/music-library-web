@@ -2,17 +2,19 @@
  * Playback control + Media Session. Uses a shared HTMLAudioElement.
  */
 import { reactive } from "vue";
-import { coverUrl, streamUrl } from "../api.js";
+import { coverUrl, requestPrepare, streamUrl } from "../api.js";
 import { canReachServer, isHardOffline } from "../connectivity.js";
 import { markDownloadBroken } from "../downloads/index.js";
 import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
 import { PLACEHOLDER_COVER } from "../util.js";
-import { pl, commit } from "./playlist.js";
+import { pl, commit, trackNeedsStreamPrepare } from "./playlist.js";
 import { getActiveStreamCodec, settings } from "./settings.js";
 
 const VOLUME_STORAGE_KEY = "musicweb.volume";
 const EXPANDED_STORAGE_KEY = "musicweb.nowPlayingExpanded.v1";
+/** Seconds before end to urgent-prepare the next queue track (once per load). */
+const PREPARE_LEAD_SECONDS = 15;
 
 /** Shared audio element (attached to document.body at boot). */
 export const audio = new Audio();
@@ -27,6 +29,13 @@ let coverResolveGen = 0;
 
 /** Track id we last resolved covers for (skip redundant resolve on play/pause). */
 let lastCoverTrackId = null;
+
+/**
+ * Near-end prepare already fired (or permanently no next) for this playIndex
+ * load. Not reset on seek/scrub. Offline does not latch — reconnect can still
+ * prepare once while still in the lead window.
+ */
+let nearEndPrepareSent = false;
 
 export const player = reactive({
   seeking: false,
@@ -164,6 +173,7 @@ export function stopPlayback() {
   player.fromDownload = false;
   setPlayNotice(null);
   lastCoverTrackId = null;
+  nearEndPrepareSent = false;
   clearCovers();
   pl.index = -1;
   player.currentTime = 0;
@@ -171,6 +181,56 @@ export function stopPlayback() {
   commit();
   syncTransportFlags();
   updateMediaSession();
+}
+
+/**
+ * Sync reactive position from the shared audio element, then maybe
+ * urgent-prepare the next queue track (once per playIndex load).
+ */
+function onAudioPositionChanged() {
+  player.currentTime = audio.currentTime || 0;
+  if (Number.isFinite(audio.duration)) player.duration = audio.duration;
+  updatePositionState();
+  maybePrepareNext();
+}
+
+/**
+ * If playback is within PREPARE_LEAD_SECONDS of the end, urgent-prepare the
+ * next queue track at most once for this playIndex session.
+ */
+function maybePrepareNext() {
+  if (nearEndPrepareSent) return;
+  const dur = audio.duration;
+  if (!Number.isFinite(dur) || dur <= 0) return;
+  const remaining = dur - (audio.currentTime || 0);
+  if (remaining > PREPARE_LEAD_SECONDS) return;
+
+  const nextIdx = pl.peekNextIndex();
+  if (nextIdx < 0 || nextIdx === pl.index) {
+    // No distinct next track (end of queue / repeat one / unknown shuffle wrap).
+    nearEndPrepareSent = true;
+    return;
+  }
+  const nextTrack = pl.tracks[nextIdx];
+  if (!nextTrack?.id) {
+    nearEndPrepareSent = true;
+    return;
+  }
+  // Transient: do not latch — reconnect while still in the window can prepare.
+  if (isHardOffline() || !canReachServer()) return;
+
+  // Latch before async work so concurrent timeupdate/seek cannot double-send.
+  nearEndPrepareSent = true;
+  void issueNearEndPrepare(nextTrack);
+}
+
+/**
+ * @param {import("../models/track.js").Track} nextTrack
+ */
+async function issueNearEndPrepare(nextTrack) {
+  const activeCodec = getActiveStreamCodec();
+  if (!(await trackNeedsStreamPrepare(nextTrack, activeCodec))) return;
+  requestPrepare([nextTrack], activeCodec, { urgent: true });
 }
 
 export async function playIndex(index) {
@@ -181,6 +241,7 @@ export async function playIndex(index) {
   }
   const track = pl.current;
   commit();
+  nearEndPrepareSent = false;
   // Resolve covers for the new track (local-first; no remote paint until checked).
   lastCoverTrackId = null;
   updateMediaSession();
@@ -292,8 +353,7 @@ export function seekToFraction(frac) {
   const dur = audio.duration;
   if (!Number.isFinite(dur)) return;
   audio.currentTime = frac * dur;
-  player.currentTime = audio.currentTime;
-  updatePositionState();
+  onAudioPositionChanged();
 }
 
 export function setVolume(v) {
@@ -376,18 +436,15 @@ export function initAudioListeners() {
   });
   audio.addEventListener("timeupdate", () => {
     if (player.seeking) return;
-    player.currentTime = audio.currentTime || 0;
-    if (Number.isFinite(audio.duration)) player.duration = audio.duration;
-    updatePositionState();
+    onAudioPositionChanged();
   });
   audio.addEventListener("loadedmetadata", () => {
-    if (Number.isFinite(audio.duration)) player.duration = audio.duration;
-    updatePositionState();
     const t = pl.current;
-    if (t && !t.duration) {
+    if (t && Number.isFinite(audio.duration) && !t.duration) {
       t.duration = audio.duration;
       commit();
     }
+    onAudioPositionChanged();
   });
 
   if (msSupported) {
@@ -401,6 +458,7 @@ export function initAudioListeners() {
     navigator.mediaSession.setActionHandler("seekto", (details) => {
       if (details.seekTime != null && Number.isFinite(audio.duration)) {
         audio.currentTime = details.seekTime;
+        onAudioPositionChanged();
       }
     });
   }
