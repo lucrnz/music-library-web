@@ -36,3 +36,4 @@ Conceptual areas:
 - Prefer repository helpers for queries used by routes.
 - Do not point durable user data at process-temp paths.
 - WAL SQLite is expected for concurrent read during scans; avoid long write transactions on the request path.
+- Engine uses **NullPool** (one connection per session). Do not switch to `StaticPool` for the file DB: the scanner thread and HTTP handlers would share a connection, and one session's rollback can drop another session's uncommitted artist/album inserts (FK failures mid-scan).

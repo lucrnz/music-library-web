@@ -10,7 +10,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool
 
 from musicweb.db.fts import FTS_DDL
 from musicweb.db.models import ScanState
@@ -32,7 +32,13 @@ class Database:
 
 
 def make_engine(data_dir: Path) -> Engine:
-    """Create a SQLite engine under ``data_dir / library.db`` with WAL pragmas."""
+    """Create a SQLite engine under ``data_dir / library.db`` with WAL pragmas.
+
+    Uses NullPool (not StaticPool): the scanner runs on a background thread while
+    HTTP handlers open their own sessions. A single shared connection lets one
+    session's commit/rollback poison another session's uncommitted graph inserts
+    (artist flush succeeds, album insert then fails FK).
+    """
     data_dir.mkdir(parents=True, exist_ok=True)
     (data_dir / "covers" / "albums").mkdir(parents=True, exist_ok=True)
     (data_dir / "covers" / "artists").mkdir(parents=True, exist_ok=True)
@@ -42,7 +48,7 @@ def make_engine(data_dir: Path) -> Engine:
         url,
         echo=False,
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+        poolclass=NullPool,
     )
 
     @event.listens_for(engine, "connect")
