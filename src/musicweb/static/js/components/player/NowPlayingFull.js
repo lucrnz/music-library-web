@@ -1,9 +1,9 @@
 /**
  * Expanded / full player chrome: sheet grab, cover, seek, transport, extras.
  * Parent owns expand/collapse and mini bar.
+ * Delivery status lives in PlaybackStatusLine.
  */
-import { computed, defineComponent, nextTick, ref, watch } from "vue";
-import { formatTime, setRangeFill } from "../../util.js";
+import { defineComponent, nextTick, ref, watch } from "vue";
 import { pl } from "../../stores/playlist.js";
 import {
   player,
@@ -16,8 +16,10 @@ import {
   setVolume,
 } from "../../stores/player.js";
 import { openSettings } from "../../stores/settings.js";
+import { formatTime, setRangeFill } from "../../util.js";
 import Icon from "../icons/Icon.js";
 import LyricsOverlay from "./LyricsOverlay.js";
+import PlaybackStatusLine from "./PlaybackStatusLine.js";
 
 const DESKTOP_BREAKPOINT = "(min-width: 900px)";
 
@@ -30,7 +32,7 @@ function isDesktop() {
 
 export default defineComponent({
   name: "NowPlayingFull",
-  components: { Icon, LyricsOverlay },
+  components: { Icon, LyricsOverlay, PlaybackStatusLine },
   props: {
     title: { type: String, default: "—" },
     subtitle: { type: String, default: "" },
@@ -285,6 +287,8 @@ export default defineComponent({
           @click="cycleRepeat"
         ><Icon :name="repeatIcon" /></button>
       </div>
+
+      <PlaybackStatusLine v-if="player.expanded" />
 
       <div class="player-extras">
         <label class="vol-label" title="Volume">
