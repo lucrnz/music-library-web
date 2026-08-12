@@ -1,6 +1,14 @@
 # Commands
 
-Commands are documented because they are essential onboarding surface area. Verify entrypoints in `pyproject.toml` and config keys in `.env.example` / `src/musicweb/config.py`.
+Commands are documented because they are essential onboarding surface area.
+
+## Source of truth
+
+- Console entrypoints and dependencies: `pyproject.toml`
+- Env names and defaults: `.env.example`, `src/musicweb/config.py`
+- Alembic CLI config: `alembic.ini` (runtime migrate also in `src/musicweb/db/engine.py`)
+
+Verify scripts and flags against those files when something looks wrong; this page is a convenience copy.
 
 ## Install
 

@@ -2,6 +2,15 @@
 
 FastAPI server that indexes a lossless music tree into SQLite and serves a Vue 3 ESM SPA plus on-demand transcoded streams.
 
+## Source of truth
+
+- Application package layout: `src/musicweb/`
+- Console entry and dependencies: `pyproject.toml`
+- Documentation map: `docs/README.md`
+- Agent operating rules: `AGENTS.md`
+
+This page describes **ownership boundaries** — where code lives and what each area owns. Exact APIs and schemas stay in source.
+
 ## Root
 
 - `pyproject.toml`: package metadata, dependencies, `musicweb` console script.
@@ -32,6 +41,8 @@ FastAPI server that indexes a lossless music tree into SQLite and serves a Vue 3
 | `images/` | WebP render/store helpers |
 | `routes/` | HTTP API routers (health, scan, discovery, folders, media, playlists) + SPA pages |
 | `static/` | CSS, JS SPA, images; `vendor/` is gitignored (fetched at runtime) |
+| `static/js/downloads/` | Client offline catalog (OPFS + IndexedDB); see `docs/systems/downloads.md` |
+| `static/js/connectivity.js` (+ store / UI binders) | Reachability and health signals; see `docs/systems/connectivity.md` |
 | `templates/` | Jinja shell (`index.html`) with import map |
 
 ## Ownership rules
@@ -42,6 +53,7 @@ FastAPI server that indexes a lossless music tree into SQLite and serves a Vue 3
 - **Stream encode policy** (profiles, aresample/dither rules) lives under `transcode/`. Do not reimplement encode argv in routes.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is no-bundler ESM under `static/js/`. Stores hold client state; components render; `api.js` talks to the server.
+- **Offline downloads** stay under `static/js/downloads/` and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.
 
 ## Documentation folders
@@ -52,4 +64,5 @@ FastAPI server that indexes a lossless music tree into SQLite and serves a Vue 3
 - `docs/development/`: commands, environment, structure.
 - `docs/frontend/`: SPA conventions.
 - `docs/product/`: product and audio guidelines.
-- `docs/systems/`: cross-cutting scan and transcode design.
+- `docs/systems/`: cross-cutting design (scan, transcode, PWA, downloads, playback, connectivity).
+- `docs/plans/`: historical multi-stage implementation plans (not living design).

@@ -33,6 +33,9 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 - `docs/systems/library-scan.md`: indexing, fingerprints, covers, artist images, lyrics.
 - `docs/systems/transcoding.md`: stream profiles, encode policy, cache lifetime.
 - `docs/systems/pwa.md`: installable shell, service worker scope, public origin.
+- `docs/systems/downloads.md`: client offline catalog (OPFS), queue, import surface.
+- `docs/systems/playback.md`: play source, quality prefs, prepare.
+- `docs/systems/connectivity.md`: online / offline / server_down and network cost hints.
 
 ## Data and UI
 
@@ -43,6 +46,10 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 ## Strategy
 
 - `docs/documentation-strategy.md`: how documentation is written and kept useful.
+
+## Historical plans
+
+`docs/plans/` holds multi-stage implementation plans (directories named `*-pending` or `*-done`). They are **not** living design docs. Durable decisions belong under `docs/systems/`, `docs/frontend/`, `docs/architecture/`, and related pages. Prefer those over reading old stage files when changing the product.
 
 ## Upkeep
 

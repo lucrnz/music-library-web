@@ -2,6 +2,13 @@
 
 Architecture-specific docs map. For the full documentation map, see `docs/README.md`.
 
+## Source of truth
+
+- App composition / lifespan: `src/musicweb/main.py`
+- HTTP surface: `src/musicweb/routes/`
+- SPA entry: `src/musicweb/static/js/main.js`
+- Full documentation map: `docs/README.md`
+
 ## Overview
 
 Musicweb is a single-process LAN server:
@@ -10,10 +17,13 @@ Musicweb is a single-process LAN server:
 2. **SQLite index** — artists, albums, tracks, playlists, FTS5 search; durable under the data directory.
 3. **HTTP API + SPA** — FastAPI JSON API and a Vue 3 ESM client (no bundler).
 4. **On-demand transcoder** — ffmpeg worker produces Opus/FLAC stream profiles into a process-temp cache.
+5. **Client offline path** — optional OPFS downloads, connectivity, and play-source resolution in the browser.
 
 ```text
 Browser (Vue ESM SPA)
     │  REST + media GETs
+    ├── Offline: OPFS + IndexedDB downloads (optional)
+    └── Connectivity + quality prefs (client)
     ▼
 FastAPI (routes → services)
     ├── Library (safe path I/O)
@@ -31,6 +41,10 @@ FastAPI (routes → services)
 - `docs/architecture/technical-decisions.md`: guiding technical decisions.
 - `docs/systems/library-scan.md`: indexing pipeline and identity.
 - `docs/systems/transcoding.md`: profiles, encode policy, cache.
+- `docs/systems/pwa.md`: installable shell and service worker scope.
+- `docs/systems/downloads.md`: client offline catalog (OPFS).
+- `docs/systems/playback.md`: play source, quality prefs, prepare.
+- `docs/systems/connectivity.md`: reachability and network cost hints.
 - `docs/database/overview.md`: what the index represents.
 - `docs/frontend/conventions.md`: client architecture.
 - `docs/product/core-guidelines.md`: UX and audio quality product rules.
@@ -43,7 +57,7 @@ FastAPI (routes → services)
 | `scan/` | Walk, fingerprint, upsert, enrichment passes | Serving HTTP |
 | `db/` | Models, sessions, FTS, migrations, repositories | Filesystem media I/O |
 | `transcode/` | Profiles, probe, worker, dependency checks | Persistent media storage |
-| `static/js/` | UI state, playback, offline download cache (OPFS) | Server-side index writes |
+| `static/js/` | UI state, playback, connectivity, offline downloads (OPFS) | Server-side index writes |
 
 Composition root is `main.create_app`: settings, database, library, stores, scanner, process cache, and transcoder are attached to `app.state` for route deps.
 
