@@ -7,19 +7,16 @@ import socket
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from musicweb.artist_image import ArtistImageStore
 from musicweb.cache import CACHE_STREAMS, ProcessCache
 from musicweb.config import Settings, load_settings
-from musicweb.cover import CoverStore
-from musicweb.db.engine import init_database
-from musicweb.library import Library, PathEscapeError
+from musicweb.jobs import LibraryJobRunner
+from musicweb.library import PathEscapeError
 from musicweb.routes import api, pages, pwa
-from musicweb.scan.scanner import LibraryScanner
+from musicweb.runtime.bootstrap import bootstrap_services
 from musicweb.transcode import Transcoder, check_dependencies
 from musicweb.vendor_deps import ensure_vendor_assets
 
@@ -42,7 +39,8 @@ async def lifespan(app: FastAPI):
     settings: Settings = app.state.settings
     process_cache: ProcessCache = app.state.process_cache
     transcoder: Transcoder = app.state.transcoder
-    scanner: LibraryScanner = app.state.scanner
+    jobs: LibraryJobRunner = app.state.jobs
+    control = getattr(app.state, "control_server", None)
 
     settings.validate_library()
     settings.ensure_data_dir()
@@ -52,8 +50,11 @@ async def lifespan(app: FastAPI):
     process_cache.start()
     transcoder.start(process_cache.path(CACHE_STREAMS))
 
+    if control is not None:
+        control.start()
+
     # Non-blocking incremental index on startup
-    scanner.start("quick")
+    jobs.start("scan", mode="quick")
 
     lan = _guess_lan_ip()
     print()
@@ -81,7 +82,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("Shutting down")
-        scanner.shutdown()
+        if control is not None:
+            control.stop()
+        jobs.shutdown()
         transcoder.shutdown()
         process_cache.shutdown()
         print("Shutdown complete. Goodbye.")
@@ -108,24 +111,20 @@ def _make_exception_handler(status_code: int):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
-    settings.ensure_data_dir()
-    database = init_database(settings.musicweb_data_dir)
-    library = Library(settings.music_library_path)
-    cover_store = CoverStore(settings.musicweb_data_dir)
-    artist_image_store = ArtistImageStore(settings.musicweb_data_dir)
-    scanner = LibraryScanner(
-        database, library, cover_store, artist_image_store, settings
-    )
+    rt = bootstrap_services(settings, migrate=True)
 
     app = FastAPI(title="Music Library", lifespan=lifespan)
-    app.state.settings = settings
-    app.state.library = library
-    app.state.database = database
-    app.state.cover_store = cover_store
-    app.state.artist_image_store = artist_image_store
-    app.state.scanner = scanner
+    app.state.settings = rt.settings
+    app.state.library = rt.library
+    app.state.database = rt.database
+    app.state.cover_store = rt.cover_store
+    app.state.artist_image_store = rt.artist_image_store
+    app.state.jobs = rt.jobs
+    # Back-compat alias for code still using .scanner
+    app.state.scanner = rt.jobs
     app.state.process_cache = ProcessCache()
     app.state.transcoder = Transcoder()
+    app.state.control_server = None  # set by serve after import to avoid cycle
 
     for exc_type, status_code in _EXCEPTION_STATUS:
         app.add_exception_handler(exc_type, _make_exception_handler(status_code))
@@ -142,24 +141,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-# ASGI app for `uvicorn musicweb.main:app` (single construction per process).
-app = create_app()
-
-
-def main() -> None:
-    """CLI entry point used by `uv run musicweb` / `python -m musicweb`."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    settings: Settings = app.state.settings
-    uvicorn.run(
-        app,
-        host=settings.listen,
-        port=settings.port,
-        log_level="info",
-    )
-
-
-if __name__ == "__main__":
-    main()
+# ASGI app for `uvicorn musicweb.main:app` (lazy: CLI serve builds its own app).
+def __getattr__(name: str):
+    if name == "app":
+        built = create_app()
+        globals()["app"] = built
+        return built
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
