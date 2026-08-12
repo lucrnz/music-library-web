@@ -5,7 +5,6 @@ import {
   computed,
   defineComponent,
   ref,
-  watch,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { connectivityBanner } from "../../connectivity.js";
@@ -14,15 +13,16 @@ import { downloads } from "../../downloads/state.js";
 import { connectivity } from "../../stores/connectivity.js";
 import { addToQueue } from "../../stores/playlist.js";
 import { ui } from "../../stores/ui.js";
+import {
+  browseGridHost,
+  browseIsGrid,
+  downloadsShowLayoutToggle,
+  downloadsShowTree,
+} from "../library/browseChrome.js";
 import EntityListHost from "../library/EntityListHost.js";
 import LibraryChrome from "../library/LibraryChrome.js";
+import { useBrowseLayout } from "../library/useBrowseLayout.js";
 import LibraryTreePane from "../tree/LibraryTreePane.js";
-import { getTreeSession } from "../tree/treeSession.js";
-import {
-  handleLayoutTransition,
-  handleTreeRoute,
-  libraryMode,
-} from "../tree/treeNavigation.js";
 
 export default defineComponent({
   name: "DownloadsLibraryView",
@@ -48,17 +48,16 @@ export default defineComponent({
     /** Parent artist for album-detail Back (hierarchical, not history). */
     const parentArtistId = ref(/** @type {string|null} */ (null));
     let renderSeq = 0;
-    let prevLayout = ui.libraryLayout;
-    /** @type {string|null} */
-    let prevTreeMode = null;
 
     const routeName = computed(() => route.name);
     const artistId = computed(() => route.params?.artistId);
     const albumId = computed(() => route.params?.albumId);
 
-    const showTree = computed(
-      () =>
-        ui.libraryLayout === "tree" && route.meta?.mode === "downloads"
+    const showTree = computed(() =>
+      downloadsShowTree({
+        layout: ui.libraryLayout,
+        routeMode: route.meta?.mode,
+      })
     );
 
     const showAddAll = computed(() => {
@@ -66,13 +65,17 @@ export default defineComponent({
       return Boolean(tracks.value.length);
     });
 
-    /** Hide toggle on album track pages (list/grid); tree always offers menu at roots. */
-    const showLayoutToggle = computed(() => {
-      if (showTree.value) return true;
-      return String(routeName.value || "") !== "downloads-album";
-    });
-    const isGrid = computed(
-      () => showLayoutToggle.value && ui.libraryLayout === "grid"
+    const showLayoutToggle = computed(() =>
+      downloadsShowLayoutToggle({
+        showTree: showTree.value,
+        routeName: String(routeName.value || ""),
+      })
+    );
+    const isGrid = computed(() =>
+      browseIsGrid({
+        showLayoutToggle: showLayoutToggle.value,
+        layout: ui.libraryLayout,
+      })
     );
 
     /** Map downloads page data into EntityListHost body kinds. */
@@ -89,23 +92,16 @@ export default defineComponent({
       return { kind: "empty", message: emptyMsg.value || "" };
     });
 
-    const gridHost = computed(() => {
-      if (!isGrid.value) return false;
-      const k = body.value.kind;
-      return k === "artists" || k === "albumGrid";
-    });
+    const gridHost = computed(() =>
+      browseGridHost({
+        isGrid: isGrid.value,
+        bodyKind: body.value.kind,
+        pane: "downloads",
+      })
+    );
 
     function isCurrent(seq) {
       return seq === renderSeq;
-    }
-
-    function replaceRoute(loc) {
-      if (!loc) return;
-      router.replace({
-        name: loc.name,
-        params: loc.params || {},
-        query: loc.query || {},
-      });
     }
 
     async function load() {
@@ -154,6 +150,26 @@ export default defineComponent({
         if (isCurrent(seq)) loading.value = false;
       }
     }
+
+    const { watchNavigation } = useBrowseLayout({
+      router,
+      route,
+      isActivePane: () => route.meta?.mode === "downloads",
+      isTreeActive: () =>
+        ui.libraryLayout === "tree" && route.meta?.mode === "downloads",
+      onNavigate: () => load(),
+      coldStartOnSetup: true,
+    });
+
+    watchNavigation(
+      () => [
+        route.fullPath,
+        downloads.enabled,
+        downloads.trackCount,
+        ui.libraryLayout,
+      ],
+      { immediate: true }
+    );
 
     /** Hierarchical parent only — never history.back() (can unload the page). */
     function goBack() {
@@ -206,78 +222,6 @@ export default defineComponent({
     function trackCover(track) {
       const id = track.albumId;
       return (id && localArt.value[`al:${id}`]) || "";
-    }
-
-    watch(
-      () => ui.libraryLayout,
-      (next, prev) => {
-        if (next === prev) return;
-        if (route.meta?.mode !== "downloads") {
-          prevLayout = next;
-          return;
-        }
-        const result = handleLayoutTransition({
-          prevLayout: prev,
-          nextLayout: next,
-          route,
-          isColdStart: false,
-        });
-        prevLayout = next;
-        if (result.restoreSnapshot) {
-          const s = result.restoreSnapshot;
-          replaceRoute({
-            name: s.name,
-            params: s.params,
-            query: s.query,
-          });
-          return;
-        }
-        if (result.replaceTo) replaceRoute(result.replaceTo);
-        if (next === "tree") prevTreeMode = libraryMode(route);
-      }
-    );
-
-    watch(
-      () => [
-        route.fullPath,
-        downloads.enabled,
-        downloads.trackCount,
-        ui.libraryLayout,
-      ],
-      () => {
-        if (
-          ui.libraryLayout === "tree" &&
-          route.meta?.mode === "downloads"
-        ) {
-          const r = handleTreeRoute({
-            route,
-            prevMode: prevTreeMode,
-          });
-          if (r.collapseScope) {
-            getTreeSession(r.collapseScope).collapseAll();
-          }
-          if (r.replaceTo) {
-            prevTreeMode = libraryMode(route);
-            replaceRoute(r.replaceTo);
-            return;
-          }
-          prevTreeMode = libraryMode(route);
-        }
-        load();
-      },
-      { immediate: true }
-    );
-
-    // Cold start already in tree on a downloads deep link.
-    if (ui.libraryLayout === "tree" && route.meta?.mode === "downloads") {
-      const result = handleLayoutTransition({
-        prevLayout: "tree",
-        nextLayout: "tree",
-        route,
-        isColdStart: true,
-      });
-      if (result.replaceTo) replaceRoute(result.replaceTo);
-      prevTreeMode = libraryMode(route);
     }
 
     const offlineBanner = computed(() =>

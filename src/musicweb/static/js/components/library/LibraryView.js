@@ -6,7 +6,6 @@ import {
   defineComponent,
   onMounted,
   ref,
-  watch,
 } from "vue";
 import { useRouter } from "vue-router";
 import {
@@ -27,13 +26,11 @@ import {
 import Icon from "../icons/Icon.js";
 import LibraryTreePane from "../tree/LibraryTreePane.js";
 import {
-  getTreeSession,
-} from "../tree/treeSession.js";
-import {
-  handleLayoutTransition,
-  handleTreeRoute,
-  libraryMode,
-} from "../tree/treeNavigation.js";
+  browseGridHost,
+  browseIsGrid,
+  libraryShowLayoutToggle,
+  libraryShowTree,
+} from "./browseChrome.js";
 import EntityListHost from "./EntityListHost.js";
 import LibraryChrome from "./LibraryChrome.js";
 import {
@@ -43,6 +40,7 @@ import {
   downloadCurrentAlbum as downloadAlbumAction,
 } from "./libraryActions.js";
 import { loadLibraryPage } from "./loaders.js";
+import { useBrowseLayout } from "./useBrowseLayout.js";
 import { useLibraryLocation } from "./useLibraryLocation.js";
 
 /** @type {import("./loaders.js").LibraryBody} */
@@ -82,22 +80,14 @@ export default defineComponent({
     const hasLoadedOnce = ref(false);
     let searchTimer = null;
     let renderSeq = 0;
-    let prevLayout = ui.libraryLayout;
-    /** @type {string|null} */
-    let prevTreeMode = null;
 
-    const isTreeLayout = computed(() => ui.libraryLayout === "tree");
-
-    /** Tree for folders / artists / albums when layout is tree (not search). */
-    const showTree = computed(() => {
-      if (!isTreeLayout.value) return false;
-      if (isSearch.value || mode.value === "search") return false;
-      return (
-        mode.value === "folders" ||
-        mode.value === "artists" ||
-        mode.value === "albums"
-      );
-    });
+    const showTree = computed(() =>
+      libraryShowTree({
+        layout: ui.libraryLayout,
+        isSearch: isSearch.value,
+        mode: mode.value,
+      })
+    );
 
     const selectedCount = computed(() => ui.libSelected.size);
     const showAddAll = computed(() => {
@@ -114,7 +104,7 @@ export default defineComponent({
       () =>
         mode.value === "folders" &&
         selectedCount.value > 0 &&
-        (showTree.value || !isTreeLayout.value)
+        (showTree.value || ui.libraryLayout !== "tree")
     );
     const showDownloadAlbum = computed(() => {
       if (showTree.value) return false;
@@ -126,29 +116,28 @@ export default defineComponent({
       );
     });
 
-    /**
-     * Layout menu: folders / artists / albums browse — not search or track lists.
-     * When tree layout is active, always show at mode roots (and while coercing).
-     */
-    const showLayoutToggle = computed(() => {
-      if (isSearch.value || mode.value === "search") return false;
-      if (showTree.value) return true;
-      if (albumId.value || body.value.kind === "tracks") return false;
-      if (body.value.kind === "search") return false;
-      return (
-        mode.value === "folders" ||
-        mode.value === "artists" ||
-        mode.value === "albums"
-      );
-    });
-    const isGrid = computed(
-      () => showLayoutToggle.value && ui.libraryLayout === "grid"
+    const showLayoutToggle = computed(() =>
+      libraryShowLayoutToggle({
+        isSearch: isSearch.value,
+        mode: mode.value,
+        showTree: showTree.value,
+        albumId: albumId.value,
+        bodyKind: body.value.kind,
+      })
     );
-    const gridHost = computed(() => {
-      if (!isGrid.value) return false;
-      const k = body.value.kind;
-      return k === "folders" || k === "artists" || k === "albumGrid";
-    });
+    const isGrid = computed(() =>
+      browseIsGrid({
+        showLayoutToggle: showLayoutToggle.value,
+        layout: ui.libraryLayout,
+      })
+    );
+    const gridHost = computed(() =>
+      browseGridHost({
+        isGrid: isGrid.value,
+        bodyKind: body.value.kind,
+        pane: "library",
+      })
+    );
 
     function isCurrent(seq) {
       return seq === renderSeq;
@@ -171,18 +160,6 @@ export default defineComponent({
       showBack.value = false;
       backArtistId.value = null;
       body.value = INITIAL_BODY;
-    }
-
-    /**
-     * @param {{ name: string, params?: object, query?: object } | null} loc
-     */
-    function replaceRoute(loc) {
-      if (!loc) return;
-      router.replace({
-        name: loc.name,
-        params: loc.params || {},
-        query: loc.query || {},
-      });
     }
 
     async function load() {
@@ -228,6 +205,35 @@ export default defineComponent({
         noteServerReachable();
       }
     }
+
+    const { coldStartTree, watchNavigation } = useBrowseLayout({
+      router,
+      route,
+      isActivePane: () => route.meta.pane === "library",
+      isTreeActive: () =>
+        ui.libraryLayout === "tree" && mode.value !== "search",
+      onNavigate: () => {
+        if (route.meta.pane !== "library") {
+          if (!hasLoadedOnce.value) load();
+          return;
+        }
+        load();
+      },
+      onBeforeLoad: () => {
+        if (mode.value === "search") {
+          searchQuery.value = route.query.q ? String(route.query.q) : "";
+        }
+      },
+    });
+
+    watchNavigation(
+      () => [route.fullPath, route.query.q, ui.lastLibrary, ui.libraryLayout]
+    );
+
+    onMounted(() => {
+      coldStartTree();
+      load();
+    });
 
     /** Hierarchical parent only — never history.back() (can unload the page). */
     function goBack() {
@@ -326,83 +332,6 @@ export default defineComponent({
       const q = searchQuery.value.trim();
       router.replace({ name: "search", query: q ? { q } : {} });
     }
-
-    // Cold start: layout already tree (no leave-restore snapshot).
-    onMounted(() => {
-      if (ui.libraryLayout === "tree") {
-        const result = handleLayoutTransition({
-          prevLayout: "tree",
-          nextLayout: "tree",
-          route,
-          isColdStart: true,
-        });
-        if (result.replaceTo) replaceRoute(result.replaceTo);
-        prevTreeMode = libraryMode(route);
-      }
-      prevLayout = ui.libraryLayout;
-      load();
-    });
-
-    watch(
-      () => ui.libraryLayout,
-      (next, prev) => {
-        if (next === prev) return;
-        const result = handleLayoutTransition({
-          prevLayout: prev,
-          nextLayout: next,
-          route,
-          isColdStart: false,
-        });
-        prevLayout = next;
-        if (result.restoreSnapshot) {
-          const s = result.restoreSnapshot;
-          replaceRoute({
-            name: s.name,
-            params: s.params,
-            query: s.query,
-          });
-          prevTreeMode = null;
-          return;
-        }
-        if (next === "tree") {
-          if (result.replaceTo) replaceRoute(result.replaceTo);
-          prevTreeMode = libraryMode(route);
-        } else {
-          prevTreeMode = null;
-        }
-      }
-    );
-
-    watch(
-      () => [route.fullPath, route.query.q, ui.lastLibrary, ui.libraryLayout],
-      () => {
-        if (route.meta.pane !== "library") {
-          if (!hasLoadedOnce.value) load();
-          return;
-        }
-
-        if (ui.libraryLayout === "tree" && mode.value !== "search") {
-          const r = handleTreeRoute({
-            route,
-            prevMode: prevTreeMode,
-          });
-          if (r.collapseScope) {
-            getTreeSession(r.collapseScope).collapseAll();
-          }
-          if (r.replaceTo) {
-            prevTreeMode = libraryMode(route);
-            replaceRoute(r.replaceTo);
-            return;
-          }
-          prevTreeMode = libraryMode(route);
-        }
-
-        if (mode.value === "search") {
-          searchQuery.value = route.query.q ? String(route.query.q) : "";
-        }
-        load();
-      }
-    );
 
     const offlineBanner = computed(() =>
       connectivityBanner(connectivity.state, downloads.enabled)
