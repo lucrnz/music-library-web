@@ -12,9 +12,11 @@ import {
 import { downloads } from "../../downloads/state.js";
 import {
   clearLibSelection,
+  showToast,
   toggleLibSelection,
   ui,
 } from "../../stores/ui.js";
+import { addToQueue } from "../../stores/playlist.js";
 import Icon from "../icons/Icon.js";
 import FileRow from "../library/rows/FileRow.js";
 import TrackRow from "../library/rows/TrackRow.js";
@@ -24,7 +26,10 @@ import {
   addAllForFolder,
   downloadAlbumById,
 } from "../library/libraryActions.js";
-import { fromCatalogRecord } from "../../models/track.js";
+import {
+  fromCatalogRecord,
+  tracksFromCatalogRecords,
+} from "../../models/track.js";
 import { playOrQueueTrack } from "../library/rows.js";
 import { listAlbumRoots, loadAlbumChildren } from "./sources/albumsSource.js";
 import {
@@ -182,31 +187,38 @@ export default defineComponent({
       }
     }
 
-    async function onAddArtist(node) {
-      try {
-        await addAllForArtist(node.data?.id);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    async function onAddAlbum(node) {
-      try {
-        await addAllForAlbum(node.data?.id);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
     async function onDownloadAlbum(node) {
       await downloadAlbumById(node.data?.id);
     }
 
-    async function onAddFolder(node) {
-      try {
+    /** @type {Record<string, (node: object) => Promise<void>>} */
+    const groupAddByKind = {
+      artist: async (node) => {
+        await addAllForArtist(node.data?.id);
+      },
+      album: async (node) => {
+        await addAllForAlbum(node.data?.id);
+      },
+      dir: async (node) => {
         await addAllForFolder(node.data?.path || "");
+      },
+      "dl-album": async (node) => {
+        await addToQueue(tracksFromCatalogRecords(node.data?.tracks || []));
+      },
+    };
+
+    function showGroupAdd(node) {
+      return Boolean(groupAddByKind[node.kind]);
+    }
+
+    async function onGroupAdd(node) {
+      const run = groupAddByKind[node.kind];
+      if (!run) return;
+      try {
+        await run(node);
       } catch (err) {
         console.error(err);
+        showToast(err?.message || "Failed to add to playlist");
       }
     }
 
@@ -221,14 +233,6 @@ export default defineComponent({
     function onSelectDir(node, e) {
       e?.stopPropagation?.();
       toggleLibSelection(node.data.path, "dir");
-    }
-
-    function showGroupAdd(node) {
-      return (
-        node.kind === "artist" ||
-        node.kind === "album" ||
-        node.kind === "dir"
-      );
     }
 
     function showAlbumDownload(node) {
@@ -273,10 +277,8 @@ export default defineComponent({
       showTrackDownload,
       loadChildren,
       onActivateLeaf,
-      onAddArtist,
-      onAddAlbum,
       onDownloadAlbum,
-      onAddFolder,
+      onGroupAdd,
       isSelected,
       onSelectFile,
       onSelectDir,
@@ -313,7 +315,7 @@ export default defineComponent({
           class="icon-btn"
           title="Add all to playlist"
           aria-label="Add all to playlist"
-          @click="node.kind === 'artist' ? onAddArtist(node) : node.kind === 'album' ? onAddAlbum(node) : onAddFolder(node)"
+          @click="onGroupAdd(node)"
         ><Icon name="plus" /></button>
         <button
           v-if="showAlbumDownload(node)"
