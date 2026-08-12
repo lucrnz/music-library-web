@@ -16,12 +16,20 @@ import { addToQueue } from "../../stores/playlist.js";
 import { ui } from "../../stores/ui.js";
 import EntityListHost from "../library/EntityListHost.js";
 import LibraryChrome from "../library/LibraryChrome.js";
+import LibraryTreePane from "../tree/LibraryTreePane.js";
+import { getTreeSession } from "../tree/treeSession.js";
+import {
+  handleLayoutTransition,
+  handleTreeRoute,
+  libraryMode,
+} from "../tree/treeNavigation.js";
 
 export default defineComponent({
   name: "DownloadsLibraryView",
   components: {
     LibraryChrome,
     EntityListHost,
+    LibraryTreePane,
   },
   setup() {
     const route = useRoute();
@@ -40,16 +48,29 @@ export default defineComponent({
     /** Parent artist for album-detail Back (hierarchical, not history). */
     const parentArtistId = ref(/** @type {string|null} */ (null));
     let renderSeq = 0;
+    let prevLayout = ui.libraryLayout;
+    /** @type {string|null} */
+    let prevTreeMode = null;
 
     const routeName = computed(() => route.name);
     const artistId = computed(() => route.params?.artistId);
     const albumId = computed(() => route.params?.albumId);
-    const showAddAll = computed(() => Boolean(tracks.value.length));
 
-    /** Hide toggle on album track pages; show for artists and albums browse. */
-    const showLayoutToggle = computed(
-      () => String(routeName.value || "") !== "downloads-album"
+    const showTree = computed(
+      () =>
+        ui.libraryLayout === "tree" && route.meta?.mode === "downloads"
     );
+
+    const showAddAll = computed(() => {
+      if (showTree.value) return false;
+      return Boolean(tracks.value.length);
+    });
+
+    /** Hide toggle on album track pages (list/grid); tree always offers menu at roots. */
+    const showLayoutToggle = computed(() => {
+      if (showTree.value) return true;
+      return String(routeName.value || "") !== "downloads-album";
+    });
     const isGrid = computed(
       () => showLayoutToggle.value && ui.libraryLayout === "grid"
     );
@@ -73,18 +94,32 @@ export default defineComponent({
       const k = body.value.kind;
       return k === "artists" || k === "albumGrid";
     });
-    const layoutToggleIcon = computed(() =>
-      ui.libraryLayout === "grid" ? "layout-list" : "layout-grid"
-    );
-    const layoutToggleLabel = computed(() =>
-      ui.libraryLayout === "grid" ? "Switch to list view" : "Switch to grid view"
-    );
 
     function isCurrent(seq) {
       return seq === renderSeq;
     }
 
+    function replaceRoute(loc) {
+      if (!loc) return;
+      router.replace({
+        name: loc.name,
+        params: loc.params || {},
+        query: loc.query || {},
+      });
+    }
+
     async function load() {
+      if (showTree.value) {
+        title.value = "Downloads";
+        showBack.value = false;
+        error.value = "";
+        loading.value = false;
+        artists.value = [];
+        albums.value = [];
+        tracks.value = [];
+        return;
+      }
+
       const seq = ++renderSeq;
       error.value = "";
       emptyMsg.value = "";
@@ -174,10 +209,76 @@ export default defineComponent({
     }
 
     watch(
-      () => [route.fullPath, downloads.enabled, downloads.trackCount],
-      () => load(),
+      () => ui.libraryLayout,
+      (next, prev) => {
+        if (next === prev) return;
+        if (route.meta?.mode !== "downloads") {
+          prevLayout = next;
+          return;
+        }
+        const result = handleLayoutTransition({
+          prevLayout: prev,
+          nextLayout: next,
+          route,
+          isColdStart: false,
+        });
+        prevLayout = next;
+        if (result.restoreSnapshot) {
+          const s = result.restoreSnapshot;
+          replaceRoute({
+            name: s.name,
+            params: s.params,
+            query: s.query,
+          });
+          return;
+        }
+        if (result.replaceTo) replaceRoute(result.replaceTo);
+        if (next === "tree") prevTreeMode = libraryMode(route);
+      }
+    );
+
+    watch(
+      () => [
+        route.fullPath,
+        downloads.enabled,
+        downloads.trackCount,
+        ui.libraryLayout,
+      ],
+      () => {
+        if (
+          ui.libraryLayout === "tree" &&
+          route.meta?.mode === "downloads"
+        ) {
+          const r = handleTreeRoute({
+            route,
+            prevMode: prevTreeMode,
+          });
+          if (r.collapseScope) {
+            getTreeSession(r.collapseScope).collapseAll();
+          }
+          if (r.replaceTo) {
+            prevTreeMode = libraryMode(route);
+            replaceRoute(r.replaceTo);
+            return;
+          }
+          prevTreeMode = libraryMode(route);
+        }
+        load();
+      },
       { immediate: true }
     );
+
+    // Cold start already in tree on a downloads deep link.
+    if (ui.libraryLayout === "tree" && route.meta?.mode === "downloads") {
+      const result = handleLayoutTransition({
+        prevLayout: "tree",
+        nextLayout: "tree",
+        route,
+        isColdStart: true,
+      });
+      if (result.replaceTo) replaceRoute(result.replaceTo);
+      prevTreeMode = libraryMode(route);
+    }
 
     const offlineBanner = computed(() =>
       connectivityBanner(connectivity.state, downloads.enabled)
@@ -191,10 +292,9 @@ export default defineComponent({
       body,
       showAddAll,
       showLayoutToggle,
+      showTree,
       isGrid,
       gridHost,
-      layoutToggleIcon,
-      layoutToggleLabel,
       goBack,
       openArtist,
       openAlbum,
@@ -209,11 +309,9 @@ export default defineComponent({
     <LibraryChrome
       aria-label="Downloads library"
       :title="title"
-      :show-back="showBack"
+      :show-back="showBack && !showTree"
       :offline-banner="offlineBanner"
       :show-layout-toggle="showLayoutToggle"
-      :layout-toggle-icon="layoutToggleIcon"
-      :layout-toggle-label="layoutToggleLabel"
       @back="goBack"
     >
       <template #actions>
@@ -225,7 +323,9 @@ export default defineComponent({
         >Add all</button>
       </template>
 
+      <LibraryTreePane v-if="showTree" mode="downloads" />
       <EntityListHost
+        v-else
         :body="body"
         :error="error"
         :loading="loading"

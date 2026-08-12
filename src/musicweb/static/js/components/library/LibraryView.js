@@ -1,5 +1,5 @@
 /**
- * Online library pane: location → loaders → chrome + entity list.
+ * Online library pane: location → loaders → chrome + entity list / tree.
  */
 import {
   computed,
@@ -25,10 +25,20 @@ import {
   ui,
 } from "../../stores/ui.js";
 import Icon from "../icons/Icon.js";
+import LibraryTreePane from "../tree/LibraryTreePane.js";
+import {
+  getTreeSession,
+} from "../tree/treeSession.js";
+import {
+  handleLayoutTransition,
+  handleTreeRoute,
+  libraryMode,
+} from "../tree/treeNavigation.js";
 import EntityListHost from "./EntityListHost.js";
 import LibraryChrome from "./LibraryChrome.js";
 import {
   addAll as addAllAction,
+  addAllForFolder,
   addSelected as addSelectedAction,
   downloadCurrentAlbum as downloadAlbumAction,
 } from "./libraryActions.js";
@@ -44,6 +54,7 @@ export default defineComponent({
     Icon,
     LibraryChrome,
     EntityListHost,
+    LibraryTreePane,
   },
   setup() {
     const router = useRouter();
@@ -71,9 +82,28 @@ export default defineComponent({
     const hasLoadedOnce = ref(false);
     let searchTimer = null;
     let renderSeq = 0;
+    let prevLayout = ui.libraryLayout;
+    /** @type {string|null} */
+    let prevTreeMode = null;
+
+    const isTreeLayout = computed(() => ui.libraryLayout === "tree");
+
+    /** Tree for folders / artists / albums when layout is tree (not search). */
+    const showTree = computed(() => {
+      if (!isTreeLayout.value) return false;
+      if (isSearch.value || mode.value === "search") return false;
+      return (
+        mode.value === "folders" ||
+        mode.value === "artists" ||
+        mode.value === "albums"
+      );
+    });
 
     const selectedCount = computed(() => ui.libSelected.size);
     const showAddAll = computed(() => {
+      if (showTree.value) {
+        return mode.value === "folders";
+      }
       if (mode.value === "search" && !artistId.value && !albumId.value) {
         return false;
       }
@@ -81,19 +111,28 @@ export default defineComponent({
       return Boolean(artistId.value || albumId.value);
     });
     const showAddSelected = computed(
-      () => mode.value === "folders" && selectedCount.value > 0
-    );
-    const showDownloadAlbum = computed(
       () =>
+        mode.value === "folders" &&
+        selectedCount.value > 0 &&
+        (showTree.value || !isTreeLayout.value)
+    );
+    const showDownloadAlbum = computed(() => {
+      if (showTree.value) return false;
+      return (
         downloads.enabled &&
         Boolean(albumId.value) &&
         body.value.kind === "tracks" &&
         body.value.tracks.length > 0
-    );
+      );
+    });
 
-    /** Layout toggle: folders / artists / albums browse — not search or track lists. */
+    /**
+     * Layout menu: folders / artists / albums browse — not search or track lists.
+     * When tree layout is active, always show at mode roots (and while coercing).
+     */
     const showLayoutToggle = computed(() => {
       if (isSearch.value || mode.value === "search") return false;
+      if (showTree.value) return true;
       if (albumId.value || body.value.kind === "tracks") return false;
       if (body.value.kind === "search") return false;
       return (
@@ -110,12 +149,6 @@ export default defineComponent({
       const k = body.value.kind;
       return k === "folders" || k === "artists" || k === "albumGrid";
     });
-    const layoutToggleIcon = computed(() =>
-      ui.libraryLayout === "grid" ? "layout-list" : "layout-grid"
-    );
-    const layoutToggleLabel = computed(() =>
-      ui.libraryLayout === "grid" ? "Switch to list view" : "Switch to grid view"
-    );
 
     function isCurrent(seq) {
       return seq === renderSeq;
@@ -131,7 +164,36 @@ export default defineComponent({
       body.value = page.body;
     }
 
+    function applyTreeChrome() {
+      const m = mode.value;
+      title.value =
+        m === "artists" ? "Artists" : m === "albums" ? "Albums" : "Folders";
+      showBack.value = false;
+      backArtistId.value = null;
+      body.value = INITIAL_BODY;
+    }
+
+    /**
+     * @param {{ name: string, params?: object, query?: object } | null} loc
+     */
+    function replaceRoute(loc) {
+      if (!loc) return;
+      router.replace({
+        name: loc.name,
+        params: loc.params || {},
+        query: loc.query || {},
+      });
+    }
+
     async function load() {
+      if (showTree.value) {
+        applyTreeChrome();
+        hasLoadedOnce.value = true;
+        loading.value = false;
+        error.value = "";
+        return;
+      }
+
       const seq = ++renderSeq;
       clearLibSelection();
       error.value = "";
@@ -222,6 +284,14 @@ export default defineComponent({
     }
 
     async function addAll() {
+      if (showTree.value && mode.value === "folders") {
+        try {
+          await addAllForFolder("");
+        } catch (err) {
+          console.error(err);
+        }
+        return;
+      }
       await addAllAction({
         mode: mode.value,
         routeName: routeName.value,
@@ -257,23 +327,82 @@ export default defineComponent({
       router.replace({ name: "search", query: q ? { q } : {} });
     }
 
+    // Cold start: layout already tree (no leave-restore snapshot).
+    onMounted(() => {
+      if (ui.libraryLayout === "tree") {
+        const result = handleLayoutTransition({
+          prevLayout: "tree",
+          nextLayout: "tree",
+          route,
+          isColdStart: true,
+        });
+        if (result.replaceTo) replaceRoute(result.replaceTo);
+        prevTreeMode = libraryMode(route);
+      }
+      prevLayout = ui.libraryLayout;
+      load();
+    });
+
     watch(
-      () => [route.fullPath, route.query.q, ui.lastLibrary],
-      () => {
-        if (route.meta.pane === "library") {
-          if (mode.value === "search") {
-            searchQuery.value = route.query.q ? String(route.query.q) : "";
-          }
-          load();
+      () => ui.libraryLayout,
+      (next, prev) => {
+        if (next === prev) return;
+        const result = handleLayoutTransition({
+          prevLayout: prev,
+          nextLayout: next,
+          route,
+          isColdStart: false,
+        });
+        prevLayout = next;
+        if (result.restoreSnapshot) {
+          const s = result.restoreSnapshot;
+          replaceRoute({
+            name: s.name,
+            params: s.params,
+            query: s.query,
+          });
+          prevTreeMode = null;
           return;
         }
-        if (!hasLoadedOnce.value) {
-          load();
+        if (next === "tree") {
+          if (result.replaceTo) replaceRoute(result.replaceTo);
+          prevTreeMode = libraryMode(route);
+        } else {
+          prevTreeMode = null;
         }
       }
     );
 
-    onMounted(load);
+    watch(
+      () => [route.fullPath, route.query.q, ui.lastLibrary, ui.libraryLayout],
+      () => {
+        if (route.meta.pane !== "library") {
+          if (!hasLoadedOnce.value) load();
+          return;
+        }
+
+        if (ui.libraryLayout === "tree" && mode.value !== "search") {
+          const r = handleTreeRoute({
+            route,
+            prevMode: prevTreeMode,
+          });
+          if (r.collapseScope) {
+            getTreeSession(r.collapseScope).collapseAll();
+          }
+          if (r.replaceTo) {
+            prevTreeMode = libraryMode(route);
+            replaceRoute(r.replaceTo);
+            return;
+          }
+          prevTreeMode = libraryMode(route);
+        }
+
+        if (mode.value === "search") {
+          searchQuery.value = route.query.q ? String(route.query.q) : "";
+        }
+        load();
+      }
+    );
 
     const offlineBanner = computed(() =>
       connectivityBanner(connectivity.state, downloads.enabled)
@@ -291,10 +420,10 @@ export default defineComponent({
       showAddSelected,
       showDownloadAlbum,
       showLayoutToggle,
+      showTree,
+      mode,
       isGrid,
       gridHost,
-      layoutToggleIcon,
-      layoutToggleLabel,
       goBack,
       openFolder,
       openArtist,
@@ -314,11 +443,9 @@ export default defineComponent({
     <LibraryChrome
       aria-label="Library"
       :title="title"
-      :show-back="showBack"
+      :show-back="showBack && !showTree"
       :offline-banner="offlineBanner"
       :show-layout-toggle="showLayoutToggle"
-      :layout-toggle-icon="layoutToggleIcon"
-      :layout-toggle-label="layoutToggleLabel"
       @back="goBack"
     >
       <template #actions>
@@ -358,7 +485,9 @@ export default defineComponent({
         </div>
       </template>
 
+      <LibraryTreePane v-if="showTree" :mode="mode" />
       <EntityListHost
+        v-else
         :body="body"
         :error="error"
         :is-grid="isGrid"
