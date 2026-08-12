@@ -40,6 +40,7 @@ Exact argv fragments and profile tags live in `profiles.py`.
 - Settings UI should only offer profiles the browser can decode (client probes).
 - Client may pick different profile tags for Wi‑Fi vs cellular streaming and for offline downloads; `/api/codecs` exposes bitrate/depth/rate so the client can rank quality. Network detection is browser-side only.
 - Optional prepare endpoint prewarms encodes without blocking the main UX path.
+- Client may send prepare with `urgent: true` (near end of the current track, once per playback load) so the next queue item is promoted to the urgent encode tier before natural advance.
 
 ## Guardrails
 
