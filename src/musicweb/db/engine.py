@@ -30,6 +30,9 @@ class Database:
     def session(self) -> Session:
         return self.session_factory()
 
+    def dispose(self) -> None:
+        self.engine.dispose()
+
 
 def make_engine(data_dir: Path) -> Engine:
     """Create a SQLite engine under ``data_dir / library.db`` with WAL pragmas.
@@ -95,10 +98,11 @@ def run_migrations(engine: Engine) -> None:
             connection.commit()
 
 
-def init_database(data_dir: Path) -> Database:
-    """Create engine, run migrations, and ensure scan_state row exists."""
+def init_database(data_dir: Path, *, migrate: bool = True) -> Database:
+    """Create engine, optionally migrate, and ensure scan_state row exists."""
     engine = make_engine(data_dir)
-    run_migrations(engine)
+    if migrate:
+        run_migrations(engine)
 
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     db = Database(engine, session_factory)
@@ -110,6 +114,7 @@ def init_database(data_dir: Path) -> Database:
                 ScanState(
                     id=1,
                     status="idle",
+                    kind="scan",
                     mode=None,
                     files_seen=0,
                     files_upserted=0,
@@ -117,7 +122,7 @@ def init_database(data_dir: Path) -> Database:
                 )
             )
             session.commit()
-        else:
+        elif migrate:
             if row.status in ("running", "canceling"):
                 row.status = "idle"
                 row.phase = None

@@ -162,14 +162,20 @@ class PlaylistTrack(Base):
 
 
 class ScanState(Base):
+    """Single-row library job status (scan or regen kinds)."""
+
     __tablename__ = "scan_state"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="idle")
+    # scan | regen-covers | regen-artist-images | regen-lyrics
+    kind: Mapped[str] = mapped_column(String, nullable=False, default="scan")
     mode: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    force: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     started_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     finished_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     phase: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # Scan-only counters; leave 0 for regen kinds.
     files_seen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     files_upserted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     files_missing: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
