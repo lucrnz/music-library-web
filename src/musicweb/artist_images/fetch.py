@@ -63,9 +63,11 @@ class ArtistImageFetcher:
         self._mb_ua = settings.musicbrainz_user_agent()
         self._providers = providers if providers is not None else default_remote_providers()
 
-    def needs_fetch(self, artist: Artist) -> bool:
-        if not ARTIST_IMAGE_FETCH:
+    def needs_fetch(self, artist: Artist, *, force: bool = False) -> bool:
+        if not ARTIST_IMAGE_FETCH and not force:
             return False
+        if force:
+            return True
         if artist.has_image and self._store.has_image(artist.id):
             return False
         if artist.has_image and not self._store.has_image(artist.id):
@@ -80,12 +82,19 @@ class ArtistImageFetcher:
         artist: Artist,
         *,
         cancel: Callable[[], bool] | None = None,
+        force: bool = False,
     ) -> FetchResult:
         """Resolve image for one artist; updates DB fields on the ORM object."""
         if cancel and cancel():
             return FetchResult(ok=False, status="error", detail="canceled")
 
-        if self._store.has_image(artist.id):
+        if force and self._store.has_image(artist.id):
+            self._store.delete(artist.id)
+            artist.has_image = False
+            artist.image_source = None
+            artist.image_status = None
+
+        if not force and self._store.has_image(artist.id):
             artist.has_image = True
             if artist.image_status != "ok":
                 artist.image_status = "ok"

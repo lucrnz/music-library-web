@@ -6,8 +6,8 @@ from fastapi import Request
 
 from musicweb.artist_image import ArtistImageStore
 from musicweb.cover import CoverStore
+from musicweb.jobs import LibraryJobRunner
 from musicweb.library import Library
-from musicweb.scan.scanner import LibraryScanner
 
 
 def library(request: Request) -> Library:
@@ -26,5 +26,10 @@ def artist_image_store(request: Request) -> ArtistImageStore:
     return request.app.state.artist_image_store
 
 
-def scanner(request: Request) -> LibraryScanner:
-    return request.app.state.scanner
+def jobs(request: Request) -> LibraryJobRunner:
+    return request.app.state.jobs
+
+
+def scanner(request: Request) -> LibraryJobRunner:
+    """Back-compat alias for :func:`jobs`."""
+    return jobs(request)

@@ -32,3 +32,6 @@ class ArtistImageStore:
     def ensure_from_bytes(self, artist_id: str, source: bytes) -> bool:
         """Write full+thumb WebP from raw image bytes. Returns True on success."""
         return self._store.write_from_bytes(artist_id, source)
+
+    def delete(self, artist_id: str) -> None:
+        self._store.delete(artist_id)

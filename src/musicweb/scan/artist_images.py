@@ -19,10 +19,12 @@ def fetch_artist_images(
     fetcher: ArtistImageFetcher,
     *,
     cancel: Callable[[], bool],
+    force: bool = False,
 ) -> None:
     """
-    Fetch missing artist portraits (local then remote cascade).
+    Fetch artist portraits (local then remote cascade).
 
+    *force* re-fetches all artists with albums (overwrite store, skip cooldown).
     Commit cadence and cancel checks match the pre-extract scanner loop.
     Logs greppable ``Library scan: artist_images · …`` lines.
     """
@@ -34,7 +36,7 @@ def fetch_artist_images(
                 .order_by(Artist.sort_name, Artist.name)
             ).all()
         )
-        todo = [a for a in artists if fetcher.needs_fetch(a)]
+        todo = [a for a in artists if fetcher.needs_fetch(a, force=force)]
 
     total = len(todo)
     if total == 0:
@@ -56,10 +58,12 @@ def fetch_artist_images(
             artist = session.get(Artist, artist_id)
             if artist is None:
                 continue
-            if not fetcher.needs_fetch(artist):
+            if not fetcher.needs_fetch(artist, force=force):
                 processed += 1
                 continue
-            result = fetcher.fetch_one(session, artist, cancel=cancel)
+            result = fetcher.fetch_one(
+                session, artist, cancel=cancel, force=force
+            )
             processed += 1
             if result.ok:
                 ok_count += 1

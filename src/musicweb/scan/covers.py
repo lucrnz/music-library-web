@@ -6,12 +6,40 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from musicweb.cover import CoverStore
-from musicweb.db.models import Album
+from musicweb.db.models import Album, Track
+from musicweb.library import Library
 
 logger = logging.getLogger(__name__)
+
+
+def album_cover_sources(session: Session, library: Library) -> dict[str, Path]:
+    """
+    Map album_id → sample present track path for cover extraction.
+
+    Used by regen-covers (no filesystem walk). One non-missing track per album.
+    """
+    rows = session.execute(
+        select(Track.album_id, Track.rel_path)
+        .where(
+            Track.is_missing.is_(False),
+            Track.album_id.is_not(None),
+            Track.rel_path.is_not(None),
+        )
+        .order_by(Track.album_id, Track.disc_no, Track.track_no, Track.id)
+    ).all()
+    out: dict[str, Path] = {}
+    for album_id, rel_path in rows:
+        if album_id is None or rel_path is None or album_id in out:
+            continue
+        try:
+            out[album_id] = library.resolve(rel_path)
+        except (OSError, ValueError):
+            continue
+    return out
 
 
 def extract_covers(
