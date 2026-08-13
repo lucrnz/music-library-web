@@ -111,8 +111,11 @@ function handleMessage(raw) {
     exclusiveAudio.lastError = null;
     reconnectAttempt = 0;
     applyStatus(msg);
-    // Refresh devices when we become controller
+    // Controller: re-arm preferred device (exclusive) + refresh device list.
     if (msg.role === ROLE_CONTROLLER) {
+      if (exclusiveAudio.selectedDeviceId) {
+        requestSetDevice(exclusiveAudio.selectedDeviceId);
+      }
       send(envelope(MSG_LIST_DEVICES));
     }
     emit({ type: "hello_ok", role: msg.role });
@@ -180,11 +183,11 @@ function handleMessage(raw) {
 }
 
 function applyStatus(msg) {
-  if (msg.selected_device_id != null) {
-    // Don't clobber local selection with null unless companion has none
-    if (msg.selected_device_id) {
-      exclusiveAudio.selectedDeviceId = msg.selected_device_id;
-    }
+  // selectedDeviceId is user preference (localStorage). Companion
+  // selected_device_id is the live hog target only — never overwrite
+  // preference with null after ensure-release.
+  if (msg.selected_device_id) {
+    exclusiveAudio.selectedDeviceId = msg.selected_device_id;
   }
   if (typeof msg.playing === "boolean") {
     exclusiveAudio.companionPlaying = msg.playing;
@@ -192,9 +195,14 @@ function applyStatus(msg) {
   if (typeof msg.paused === "boolean") {
     exclusiveAudio.companionPaused = msg.paused;
   }
-  // If we lost controller, surface that
+  // TTL demotion: socket stays open so disconnect does not fire — hard-stop via error.
   if (msg.role === ROLE_READONLY && msg.reason === "controller_ttl") {
     exclusiveAudio.lastError = "controller_ttl";
+    emit({
+      type: "error",
+      code: "controller_lost",
+      message: "Exclusive controller timed out",
+    });
   }
 }
 
