@@ -8,6 +8,9 @@ SoX "very high quality" equivalents (``rate -v -L``):
   - dither_method=shibata ≈ SoX ``dither -s`` **only when reducing bit depth**
     (source bits > profile bits). Never dither when increasing bit depth
     (e.g. 16→24). Perfect rate+depth match skips aresample entirely.
+
+Exclusive FLAC allowlist (``flac_{depth}_{rate}``) is the full 12-cell matrix.
+Browser-listed profiles stay the smaller marketing set for ``GET /api/codecs``.
 """
 
 from __future__ import annotations
@@ -17,6 +20,17 @@ from dataclasses import dataclass
 from musicweb.transcode.probe import SourceAudioTech
 
 DEFAULT_PROFILE_TAG = "opus_192_48000"
+
+# Exclusive FLAC allowlist rates × depths (grammar: flac_{depth}_{rate}).
+EXCLUSIVE_RATES_HZ: tuple[int, ...] = (
+    44100,
+    48000,
+    88200,
+    96000,
+    176400,
+    192000,
+)
+EXCLUSIVE_DEPTHS: tuple[int, ...] = (16, 24)
 
 # MIME strings for HTMLMediaElement.canPlayType() on the client.
 _CAN_PLAY_OPUS = 'audio/ogg; codecs="opus"'
@@ -44,6 +58,9 @@ class StreamProfile:
     label: str  # short UI label
     bit_depth: int  # 16 or 24 (PCM width fed to the encoder)
     can_play: str  # MIME probe string for browser capability checks
+    # True → listed on GET /api/codecs (browser streaming UI).
+    # False → resolvable via get_profile / stream / prepare only.
+    browser_listed: bool = True
 
     def sample_fmt(self) -> str:
         """PCM sample format for this profile's encoder + bit depth."""
@@ -70,7 +87,8 @@ class StreamProfile:
                 "on",
             ]
         if self.kind == "flac":
-            args = ["-c:a", "flac"]
+            # Stereo product intent: downmix multi-channel sources once here.
+            args = ["-ac", "2", "-c:a", "flac"]
             if self.bit_depth >= 24:
                 args.extend(["-bits_per_raw_sample", "24"])
             return args
@@ -130,9 +148,55 @@ def plan_aresample(
     return AresamplePlan(filter=_ARESAMPLE_HQ_NO_DITHER, dither=False)
 
 
-PROFILES: dict[str, StreamProfile] = {
-    p.tag: p
-    for p in [
+def flac_tag(bit_depth: int, sample_rate: int) -> str:
+    """Canonical exclusive/browser FLAC tag: ``flac_{depth}_{rate}``."""
+    return f"flac_{bit_depth}_{sample_rate}"
+
+
+def _flac_label(bit_depth: int, sample_rate: int) -> str:
+    rate_k = sample_rate / 1000.0
+    if rate_k == int(rate_k):
+        rate_s = f"{int(rate_k)}kHz"
+    else:
+        rate_s = f"{rate_k:g}kHz"
+    if bit_depth >= 24:
+        return f"FLAC 24-bit {rate_s}"
+    return f"FLAC {rate_s}"
+
+
+def _make_flac_profile(
+    bit_depth: int,
+    sample_rate: int,
+    *,
+    browser_listed: bool,
+) -> StreamProfile:
+    return StreamProfile(
+        tag=flac_tag(bit_depth, sample_rate),
+        sample_rate=sample_rate,
+        bitrate_kbps=0,
+        extension="flac",
+        media_type="audio/flac",
+        kind="flac",
+        label=_flac_label(bit_depth, sample_rate),
+        bit_depth=bit_depth,
+        can_play=_CAN_PLAY_FLAC,
+        browser_listed=browser_listed,
+    )
+
+
+# Browser marketing list for FLAC (historical three). All exclusive-matrix
+# cells are still resolvable via get_profile; only these appear on /api/codecs.
+_BROWSER_FLAC: frozenset[tuple[int, int]] = frozenset(
+    {
+        (16, 44100),
+        (16, 48000),
+        (24, 96000),
+    }
+)
+
+
+def _build_profiles() -> dict[str, StreamProfile]:
+    profiles: list[StreamProfile] = [
         StreamProfile(
             tag="opus_192_48000",
             sample_rate=48000,
@@ -143,6 +207,7 @@ PROFILES: dict[str, StreamProfile] = {
             label="Opus 192k 48kHz",
             bit_depth=16,
             can_play=_CAN_PLAY_OPUS,
+            browser_listed=True,
         ),
         StreamProfile(
             tag="opus_160_48000",
@@ -154,6 +219,7 @@ PROFILES: dict[str, StreamProfile] = {
             label="Opus 160k 48kHz",
             bit_depth=16,
             can_play=_CAN_PLAY_OPUS,
+            browser_listed=True,
         ),
         StreamProfile(
             tag="opus_128_48000",
@@ -165,42 +231,51 @@ PROFILES: dict[str, StreamProfile] = {
             label="Opus 128k 48kHz",
             bit_depth=16,
             can_play=_CAN_PLAY_OPUS,
-        ),
-        StreamProfile(
-            tag="flac_16_44100",
-            sample_rate=44100,
-            bitrate_kbps=0,
-            extension="flac",
-            media_type="audio/flac",
-            kind="flac",
-            label="FLAC 44.1kHz",
-            bit_depth=16,
-            can_play=_CAN_PLAY_FLAC,
-        ),
-        StreamProfile(
-            tag="flac_16_48000",
-            sample_rate=48000,
-            bitrate_kbps=0,
-            extension="flac",
-            media_type="audio/flac",
-            kind="flac",
-            label="FLAC 48kHz",
-            bit_depth=16,
-            can_play=_CAN_PLAY_FLAC,
-        ),
-        StreamProfile(
-            tag="flac_24_96000",
-            sample_rate=96000,
-            bitrate_kbps=0,
-            extension="flac",
-            media_type="audio/flac",
-            kind="flac",
-            label="FLAC 24-bit 96kHz",
-            bit_depth=24,
-            can_play=_CAN_PLAY_FLAC,
+            browser_listed=True,
         ),
     ]
-}
+    for rate in EXCLUSIVE_RATES_HZ:
+        for depth in EXCLUSIVE_DEPTHS:
+            profiles.append(
+                _make_flac_profile(
+                    depth,
+                    rate,
+                    browser_listed=(depth, rate) in _BROWSER_FLAC,
+                )
+            )
+    return {p.tag: p for p in profiles}
+
+
+PROFILES: dict[str, StreamProfile] = _build_profiles()
+
+
+def browser_profiles() -> list[StreamProfile]:
+    """Profiles listed on GET /api/codecs (browser streaming UI)."""
+    return [p for p in PROFILES.values() if p.browser_listed]
+
+
+def exclusive_flac_profiles() -> list[StreamProfile]:
+    """Full exclusive FLAC allowlist (12 tags), ordered rate then depth."""
+    out: list[StreamProfile] = []
+    for rate in EXCLUSIVE_RATES_HZ:
+        for depth in EXCLUSIVE_DEPTHS:
+            out.append(PROFILES[flac_tag(depth, rate)])
+    return out
+
+
+def exclusive_formats_payload() -> dict:
+    """JSON body for GET /api/exclusive-formats."""
+    return {
+        "formats": [
+            {
+                "tag": p.tag,
+                "sample_rate": p.sample_rate,
+                "bit_depth": p.bit_depth,
+                "label": p.label,
+            }
+            for p in exclusive_flac_profiles()
+        ]
+    }
 
 
 def get_profile(tag: str) -> StreamProfile:

@@ -19,10 +19,12 @@ from musicweb.library import Library
 from musicweb.routes.deps import artist_image_store, cover_store, library, transcoder
 from musicweb.transcode import (
     DEFAULT_PROFILE_TAG,
-    PROFILES,
+    browser_profiles,
+    exclusive_formats_payload,
     get_profile,
     tech_from_track,
 )
+from musicweb.transcode.null_tech_log import warn_null_track_tech
 
 router = APIRouter(prefix="/api", tags=["media"])
 
@@ -51,6 +53,7 @@ def _resolve_track_file(lib: Library, track: Track) -> Path:
 
 @router.get("/codecs")
 async def codecs() -> dict:
+    """Browser stream profiles only (exclusive FLAC tags are not listed)."""
     return {
         "codecs": [
             {
@@ -63,10 +66,16 @@ async def codecs() -> dict:
                 "bit_depth": p.bit_depth,
                 "sample_rate": p.sample_rate,
             }
-            for p in PROFILES.values()
+            for p in browser_profiles()
         ],
         "default": DEFAULT_PROFILE_TAG,
     }
+
+
+@router.get("/exclusive-formats")
+async def exclusive_formats() -> dict:
+    """Full exclusive FLAC allowlist for Mac companion formatPolicy."""
+    return exclusive_formats_payload()
 
 
 @router.get("/stream")
@@ -81,7 +90,11 @@ async def stream(
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found")
     resolved = _resolve_track_file(lib, track)
-    profile = get_profile(codec)
+    try:
+        profile = get_profile(codec)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    warn_null_track_tech(track)
     media_path = await run_in_threadpool(
         transcoder(request).ensure_stream,
         resolved,
@@ -115,7 +128,10 @@ def transcode_prepare(
 ) -> dict:
     lib = library(request)
     tc = transcoder(request)
-    get_profile(payload.codec)
+    try:
+        get_profile(payload.codec)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if payload.replace:
         tc.drop_pending_prewarm()
@@ -136,6 +152,7 @@ def transcode_prepare(
         if not resolved.is_file() or not lib.is_audio(resolved):
             counts["skipped"] += 1
             continue
+        warn_null_track_tech(t)
         result = tc.prepare(
             resolved,
             t.rel_path,

@@ -22,6 +22,8 @@
  * @property {number|null} duration  seconds
  * @property {number|null} durationMs
  * @property {boolean} isMissing
+ * @property {number|null} sampleRateHz
+ * @property {number|null} bitDepth
  */
 
 /**
@@ -89,7 +91,19 @@ export function fromApiTrack(raw) {
     duration: duration != null ? Number(duration) : null,
     durationMs: durationMs != null ? Number(durationMs) : null,
     isMissing: !!(raw.isMissing ?? raw.is_missing),
+    sampleRateHz: _nullableNumber(raw.sampleRateHz ?? raw.sample_rate_hz),
+    bitDepth: _nullableNumber(raw.bitDepth ?? raw.bit_depth),
   };
+}
+
+/**
+ * @param {unknown} v
+ * @returns {number|null}
+ */
+function _nullableNumber(v) {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**

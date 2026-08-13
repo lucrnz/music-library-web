@@ -22,6 +22,8 @@ def track_dict(track: Track) -> dict:
         "duration": (track.duration_ms / 1000.0) if track.duration_ms is not None else None,
         "duration_ms": track.duration_ms,
         "is_missing": track.is_missing,
+        "sample_rate_hz": track.sample_rate_hz,
+        "bit_depth": track.bit_depth,
     }
 
 
