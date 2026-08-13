@@ -14,7 +14,9 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 - Codec honesty (browser decode probes): `src/musicweb/static/js/codecSupport.js`, `codecProbes.js`
 - HTTP stream / prepare: `src/musicweb/static/js/api.js`, `src/musicweb/routes/media.py`
 - Stream profiles (server): `src/musicweb/transcode/profiles.py`
-- Related: `docs/systems/transcoding.md`, `docs/systems/downloads.md`, `docs/product/core-guidelines.md`
+- Related: `docs/systems/transcoding.md`, `docs/systems/downloads.md`, `docs/systems/exclusive-audio.md`, `docs/product/core-guidelines.md`
+
+When exclusive audio is **enabled** on an installed Mac PWA, browser quality prefs and download-vs-stream policy are hidden; prepare and play use per-track exclusive FLAC tags through the companion sink. See `docs/systems/exclusive-audio.md`.
 
 ## Delivery source
 

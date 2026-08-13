@@ -19,6 +19,7 @@
 - **Library UI** lives under `components/library/`; player under `components/player/`; settings modal under `components/settings/`.
 - **Downloads** (`static/js/downloads/`) own client-side offline catalog (OPFS + IndexedDB). Keep offline concerns out of server index code. Design, storage split, queue policy, and import-surface rules: `docs/systems/downloads.md`.
 - **Playback / quality** (play source, stream vs download policy, prepare): `docs/systems/playback.md`.
+- **Exclusive audio** (Mac PWA + companion sinks; optional): `docs/systems/exclusive-audio.md`. Player transport goes through sinks — do not re-export a shared `HTMLAudioElement` from `player.js`.
 - **Connectivity** (online / offline / server_down, network cost hints): `docs/systems/connectivity.md`.
 
 ## Vendor assets

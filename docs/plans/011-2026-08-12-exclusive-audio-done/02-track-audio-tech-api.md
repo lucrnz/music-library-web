@@ -1,7 +1,7 @@
 # Stage 02: Track audio tech on API and client Track
 
 ## Status
-pending
+done
 
 ## Description
 

@@ -36,6 +36,10 @@ Browser-compatible delivery is produced by ffmpeg, not browser demux of arbitrar
 
 Vue 3 and Vue Router ship as pinned browser ESM builds downloaded into `static/vendor/` on startup. Avoids Node toolchain drift for a small SPA and keeps `uv` as the only project package manager.
 
+### Exclusive audio via optional companion (not Electron)
+
+Browser engines cannot hog Core Audio. Exclusive playback is an **optional** Mac loopback companion (`musicweb exclusive-audio` + mpv), not an Electron rewrite. The SPA stays plain JS; the companion does not take the library data-dir lock. See `docs/systems/exclusive-audio.md`.
+
 ### Shell-only PWA with configurable public origin
 
 The app can be installed as a standalone PWA when clients open a **secure-context** origin (`https` or loopback `http`). A **generated** service worker (`GET /sw.js` from on-disk static inventory) caches the app shell only; offline audio stays in client Downloads (OPFS). Operators set `MUSICWEB_PUBLIC_ORIGIN` (parsed as `PublicOrigin`) so manifest/install identity matches their real entry URL — not hard-coded to one deployment recipe. Details: `docs/systems/pwa.md`, `docs/development/environment.md`.

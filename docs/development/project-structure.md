@@ -27,7 +27,8 @@ This page describes **ownership boundaries** — where code lives and what each 
 | Area | Responsibility |
 |------|----------------|
 | `main.py` | FastAPI app factory, lifespan, static mount, SPA shell wiring |
-| `cli/` | Typer entry (`serve`, `scan`, regen, `stats`, `doctor`); argv only |
+| `cli/` | Typer entry (`serve`, `scan`, regen, `stats`, `doctor`, `exclusive-audio`); argv only |
+| `exclusive/` | macOS exclusive-audio companion (loopback WS + mpv); no DB/lock |
 | `runtime/` | Data-dir flock, bootstrap, exclusive maintenance, `run_library_job` |
 | `jobs/` | Single-flight library job runner (scan + regen kinds, ScanState) |
 | `control/` | Private UDS JSON control plane (health + job RPC) for live CLI |
@@ -47,7 +48,8 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `routes/` | HTTP API routers (health, scan, discovery, folders, media, playlists) + SPA pages |
 | `static/` | CSS, JS SPA, images; `vendor/` is gitignored (fetched at runtime) |
 | `static/js/downloads/` | Client offline catalog (OPFS + IndexedDB); see `docs/systems/downloads.md` |
-| `static/js/connectivity.js` (+ store / UI binders) | Reachability and health signals; see `docs/systems/connectivity.md` |
+| `static/js/exclusive/` + `static/js/playback/sinks/` | Exclusive format policy, companion client, output sinks |
+| `static/js/connectivity.js` (+ store / UI binders) | Reachability and health signals; see `docs/systems/connectivity.md`
 | `templates/` | Jinja shell (`index.html`) with import map |
 
 ## Ownership rules

@@ -1,7 +1,7 @@
 # Stage 06: Companion client, devices, and controller lock
 
 ## Status
-pending
+done
 
 ## Description
 

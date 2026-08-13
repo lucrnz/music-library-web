@@ -1,7 +1,7 @@
 # Stage 03: Companion CLI, HOG_TOKEN, and pinned WebSocket protocol
 
 ## Status
-pending
+done
 
 ## Description
 

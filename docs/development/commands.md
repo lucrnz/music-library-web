@@ -77,6 +77,26 @@ Write jobs use the same multi-kind job runner as HTTP (`musicweb.jobs`). If the 
 
 Ctrl+C cancels a **local** foreground job cooperatively. Cross-process cancel is `scan cancel` against a live server.
 
+## Exclusive audio companion (macOS)
+
+Loopback companion for **hog / exclusive** Core Audio playback via **mpv**. This is **not** the library server: it does **not** take `musicweb.lock`, open the DB, or migrate.
+
+Requires:
+
+- `HOG_TOKEN` env (non-empty) — paste the same value into Mac PWA → Settings → Exclusive audio
+- `mpv` on `PATH` (or `--mpv /path/to/mpv`)
+- macOS for real exclusive/hog device behavior
+
+```sh
+export HOG_TOKEN="$(openssl rand -hex 16)"
+uv run musicweb exclusive-audio
+# optional: --port 18765 (default)  --mpv /opt/homebrew/bin/mpv
+```
+
+Listens on **127.0.0.1 only**, default port **18765**, WebSocket at `ws://127.0.0.1:18765/ws`. The installed Mac PWA connects with the token; first session is controller, further tabs are read-only.
+
+See `docs/systems/exclusive-audio.md`.
+
 ## Database migrations (optional CLI)
 
 Serve always migrates on start. Offline CLI migrates when the data-dir lock is free. While the server holds the lock, CLI read paths open the DB **without** migrating.

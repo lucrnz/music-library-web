@@ -1,7 +1,7 @@
 # Stage 05: Format policy and exclusive settings (PWA ∩ macOS)
 
 ## Status
-pending
+done
 
 ## Description
 

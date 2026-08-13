@@ -1,7 +1,7 @@
 # Stage 01: Exclusive profile tags and exclusive-formats API
 
 ## Status
-pending
+done
 
 ## Description
 

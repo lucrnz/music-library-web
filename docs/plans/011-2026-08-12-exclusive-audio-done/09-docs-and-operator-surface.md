@@ -1,7 +1,7 @@
 # Stage 09: Docs and operator surface
 
 ## Status
-pending
+done
 
 ## Description
 

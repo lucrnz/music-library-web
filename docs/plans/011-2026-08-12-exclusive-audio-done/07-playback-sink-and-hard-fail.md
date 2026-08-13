@@ -1,7 +1,7 @@
 # Stage 07: Playback sink abstraction and exclusive hard-fail
 
 ## Status
-pending
+done
 
 ## Description
 

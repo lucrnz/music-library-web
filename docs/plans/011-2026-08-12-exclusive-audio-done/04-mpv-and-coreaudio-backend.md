@@ -1,7 +1,7 @@
 # Stage 04: mpv playback and Core Audio probe/volume
 
 ## Status
-pending
+done
 
 ## Description
 

@@ -35,6 +35,7 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 - `docs/systems/pwa.md`: installable shell, service worker scope, public origin.
 - `docs/systems/downloads.md`: client offline catalog (OPFS), queue, import surface.
 - `docs/systems/playback.md`: play source, quality prefs, prepare.
+- `docs/systems/exclusive-audio.md`: macOS companion hog playback (mpv + loopback WS).
 - `docs/systems/connectivity.md`: online / offline / server_down and network cost hints.
 
 ## Data and UI
