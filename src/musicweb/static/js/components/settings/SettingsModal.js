@@ -331,7 +331,7 @@ export default defineComponent({
         <div v-else class="modal-section">
           <div class="modal-section-title">Quality</div>
           <p class="modal-hint">
-            Browser stream and download quality controls are hidden while exclusive audio is enabled.
+            While exclusive audio is on, streams use the best lossless quality your output device allows.
           </p>
         </div>
 
