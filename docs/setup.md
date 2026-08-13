@@ -48,5 +48,5 @@ Plain `http://192.168.x.x` is fine for tab streaming; it is **not** installable.
 |-------|-----|
 | Install, run, library CLI | [development/commands.md](./development/commands.md) |
 | Environment and config | [development/environment.md](./development/environment.md) |
-| macOS exclusive / hog playback (optional) | [systems/exclusive-audio.md](./systems/exclusive-audio.md) |
+| Get started: exclusive audio (macOS, optional) | [systems/exclusive-audio.md](./systems/exclusive-audio.md#get-started) |
 | Full documentation map | [README.md](./README.md) (this `docs/` tree) |

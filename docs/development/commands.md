@@ -96,7 +96,7 @@ uv run musicweb exclusive-audio
 
 Listens on **127.0.0.1 only**, default port **18765**, WebSocket at `ws://127.0.0.1:18765/ws`. The installed Mac PWA connects with the token; first session is controller, further tabs are read-only.
 
-See `docs/systems/exclusive-audio.md`.
+Operator get started (then design): `docs/systems/exclusive-audio.md`.
 
 ## Database migrations (optional CLI)
 

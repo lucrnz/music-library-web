@@ -1,6 +1,36 @@
 # Exclusive audio (macOS companion)
 
-Optional **hog / exclusive** playback on a Mac client while the music library server stays remote (NAS or other host). The browser never hog-locks Core Audio; a local **companion** process owns mpv and talks to the installed Mac PWA over loopback WebSocket.
+Optional **hog / exclusive** playback on a Mac client while the music library server stays remote (NAS or other host).
+
+## Get started
+
+> **End-user guide.** Agents and developers: skip this section and continue at [Source of truth](#source-of-truth) below.
+
+Use this when Musicweb is already running on your network and you want exclusive output on a **Mac**. macOS only for now.
+
+1. **Server reachable** — open Musicweb in a browser on the Mac and confirm the library loads.
+2. **Install the Mac PWA** — exclusive audio works from the **installed app**, not only a normal browser tab. You need a secure-context origin (`https://…` or `http://localhost` / `127.0.0.1`). See [Setup → PWA install and secure context](../setup.md#pwa-install-and-secure-context).
+3. **Install mpv** on the Mac so it is on your `PATH` (example: `brew install mpv`). You can pass `--mpv /path/to/mpv` if it is installed elsewhere.
+4. **Shared secret** — generate a token and use the **same** value for the companion and the app:
+
+   ```sh
+   openssl rand -hex 16
+   ```
+
+   Put it in the project `.env` (or the environment) as `HOG_TOKEN=…` on the Mac where you run the companion. You will paste the same string into the PWA in step 6.
+5. **Run the companion on the Mac** (this is **not** the library server; it does not take the data-dir lock):
+
+   ```sh
+   uv run musicweb exclusive-audio
+   # optional: --port 18765 (default)  --mpv /opt/homebrew/bin/mpv
+   ```
+
+   Leave this process running. It listens on `127.0.0.1` only (default port **18765**).
+6. **PWA Settings → Exclusive audio** — enable exclusive, paste the same `HOG_TOKEN`, set the port if you changed it.
+7. **Pick an output device** — first choice is manual; nothing is selected for you.
+8. **Play a track** — status should show **Ready ·** your device name, and audio should come from the Mac via the companion, not the browser element.
+
+CLI flags and env notes: [development/commands.md](../development/commands.md#exclusive-audio-companion-macos).
 
 ## Source of truth
 
@@ -131,25 +161,7 @@ Digital **mpv** volume is required and always available. Core Audio hardware vol
 - Do not prewarm browser Opus/FLAC marketing codecs for the queue while exclusive is on.
 - Advance on sink `ended` only (player owns repeat-one / next).
 
-## Operator setup
-
-1. On the Mac: install mpv; set a shared secret in project `.env` (or export it):
-
-   ```sh
-   # .env
-   HOG_TOKEN=<openssl rand -hex 16>
-   uv run musicweb exclusive-audio
-   ```
-
-   The companion loads `.env` the same way as the library server (cwd, then project root). Default port **18765** (`--port` to override). Does **not** take the library data-dir lock and is **not** the library server.
-
-2. Install the musicweb PWA on that Mac (secure context / `MUSICWEB_PUBLIC_ORIGIN` rules apply — see `docs/systems/pwa.md`). LAN `http://IP` without secure context cannot install.
-
-3. Settings → Exclusive audio: paste the same `HOG_TOKEN`, confirm port, enable, **manually select** an output device. Status uses the same plain-language face as the now-playing bar (`Ready · …` only when live is set).
-
-4. Play from the PWA; audio should leave the Mac via mpv exclusive, not the browser element.
-
-### Manual check: headphones free after controller loss
+## Manual check: headphones free after controller loss
 
 1. Armed exclusive (status **Ready · device**); play a track long enough that hog is clearly engaged.
 2. Quit/close the PWA (not only hide).
@@ -170,6 +182,8 @@ Digital **mpv** volume is required and always available. Core Audio hardware vol
 
 ## Related
 
+- `docs/setup.md` — operator on-ramp (server + PWA)
+- `docs/development/commands.md` — companion CLI
 - `docs/systems/playback.md` — browser delivery source and prepare
 - `docs/systems/transcoding.md` — encode policy
 - `docs/systems/pwa.md` — install / public origin
