@@ -74,14 +74,15 @@ Digital **mpv** volume is required and always available. Core Audio hardware vol
 
 ## Operator setup
 
-1. On the Mac: install mpv; set a shared secret:
+1. On the Mac: install mpv; set a shared secret in project `.env` (or export it):
 
    ```sh
-   export HOG_TOKEN="$(openssl rand -hex 16)"
+   # .env
+   HOG_TOKEN=<openssl rand -hex 16>
    uv run musicweb exclusive-audio
    ```
 
-   Default port **18765** (`--port` to override). Does **not** take the library data-dir lock and is **not** the library server.
+   The companion loads `.env` the same way as the library server (cwd, then project root). Default port **18765** (`--port` to override). Does **not** take the library data-dir lock and is **not** the library server.
 
 2. Install the musicweb PWA on that Mac (secure context / `MUSICWEB_PUBLIC_ORIGIN` rules apply — see `docs/systems/pwa.md`). LAN `http://IP` without secure context cannot install.
 

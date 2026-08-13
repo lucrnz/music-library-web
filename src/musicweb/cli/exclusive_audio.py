@@ -10,6 +10,7 @@ import sys
 import typer
 import uvicorn
 
+from musicweb.config import load_env_file
 from musicweb.exclusive.app import create_exclusive_app
 from musicweb.exclusive.protocol import DEFAULT_PORT, PROTOCOL_VERSION
 from musicweb.exclusive.session import ExclusiveHub
@@ -22,10 +23,15 @@ def run_exclusive_audio(
     port: int = DEFAULT_PORT,
     mpv: str | None = None,
 ) -> None:
+    # Same .env discovery as the library server (cwd, then project root).
+    # Does not take data-dir lock or open the DB.
+    load_env_file()
+
     token = (os.environ.get("HOG_TOKEN") or "").strip()
     if not token:
         print(
             "HOG_TOKEN is required (non-empty).\n"
+            "  Put HOG_TOKEN=… in project .env, or:\n"
             "  export HOG_TOKEN='$(openssl rand -hex 16)'\n"
             "  # paste the same value into Mac PWA → Settings → Exclusive audio",
             file=sys.stderr,

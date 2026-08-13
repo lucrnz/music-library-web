@@ -46,6 +46,22 @@ def _env_file() -> str | None:
     return None
 
 
+def load_env_file(*, override: bool = False) -> Path | None:
+    """Load the first found project ``.env`` into ``os.environ``.
+
+    Looks at cwd then project root (same candidates as Settings). Existing
+    process env wins unless *override* is True. Returns the path loaded, or
+    None when no file was found.
+    """
+    from dotenv import load_dotenv
+
+    path = _env_file()
+    if not path:
+        return None
+    load_dotenv(path, override=override)
+    return Path(path)
+
+
 @dataclass(frozen=True, slots=True)
 class PublicOrigin:
     """Parsed MUSICWEB_PUBLIC_ORIGIN for manifest, shell config, and boot banner."""

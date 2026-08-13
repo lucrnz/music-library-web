@@ -83,14 +83,15 @@ Loopback companion for **hog / exclusive** Core Audio playback via **mpv**. This
 
 Requires:
 
-- `HOG_TOKEN` env (non-empty) — paste the same value into Mac PWA → Settings → Exclusive audio
+- `HOG_TOKEN` (non-empty) — from project `.env` (loaded like the server) or the process environment; paste the same value into Mac PWA → Settings → Exclusive audio
 - `mpv` on `PATH` (or `--mpv /path/to/mpv`)
 - macOS for real exclusive/hog device behavior
 
 ```sh
-export HOG_TOKEN="$(openssl rand -hex 16)"
+# Prefer HOG_TOKEN in .env (see .env.example), then:
 uv run musicweb exclusive-audio
 # optional: --port 18765 (default)  --mpv /opt/homebrew/bin/mpv
+# or one-shot: HOG_TOKEN=… uv run musicweb exclusive-audio
 ```
 
 Listens on **127.0.0.1 only**, default port **18765**, WebSocket at `ws://127.0.0.1:18765/ws`. The installed Mac PWA connects with the token; first session is controller, further tabs are read-only.
