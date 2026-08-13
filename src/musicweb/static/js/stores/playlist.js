@@ -18,6 +18,10 @@ import { coerceTrack, isTrack, mapTracks } from "../models/track.js";
 import { catalogIndex } from "../downloads/catalog.js";
 import { shouldPreferLocalOnline } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
+import {
+  getExclusiveProfileTag,
+  isExclusiveEnabled,
+} from "./exclusiveAudio.js";
 import { getActiveStreamCodec, settings } from "./settings.js";
 
 const STORAGE_KEY = "musicweb.playlist.v1";
@@ -315,10 +319,41 @@ export async function addToQueue(entries) {
   pl.add(playable);
   commit();
 
+  // Exclusive: prepare by per-track exclusive tags (never browser codec).
+  if (isExclusiveEnabled()) {
+    requestExclusivePrepare(playable);
+    return;
+  }
   // Skip prepare when playback policy will prefer a local download.
   const active = getActiveStreamCodec();
   const toPrepare = tracksNeedingPrepare(playable, active);
   if (toPrepare.length) requestPrepare(toPrepare, active);
+}
+
+/**
+ * Group tracks by exclusive profile tag and prepare each group.
+ * Caps depth to next N when queue is long (worker pressure).
+ * @param {Track[]} tracks
+ * @param {{ urgent?: boolean, limit?: number }} [opts]
+ */
+export function requestExclusivePrepare(tracks, opts = {}) {
+  const limit = opts.limit ?? 24;
+  const list = (tracks || []).filter((t) => t?.id).slice(0, limit);
+  /** @type {Map<string, Track[]>} */
+  const byTag = new Map();
+  for (const t of list) {
+    const tag = getExclusiveProfileTag(t);
+    if (!tag) continue;
+    let bucket = byTag.get(tag);
+    if (!bucket) {
+      bucket = [];
+      byTag.set(tag, bucket);
+    }
+    bucket.push(t);
+  }
+  for (const [tag, group] of byTag) {
+    requestPrepare(group, tag, { urgent: !!opts.urgent });
+  }
 }
 
 /**
@@ -330,6 +365,10 @@ export async function addToQueue(entries) {
  * @returns {Track[]}
  */
 export function tracksNeedingPrepare(tracks, activeCodec) {
+  // Exclusive always needs server stream tags (never skip for downloads).
+  if (isExclusiveEnabled()) {
+    return (tracks || []).filter((t) => t?.id);
+  }
   if (!downloads.enabled) {
     return (tracks || []).filter((t) => t?.id);
   }

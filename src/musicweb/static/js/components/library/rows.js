@@ -4,12 +4,12 @@
 import { coverUrl } from "../../api.js";
 import { formatTrackLabel } from "../../util.js";
 import { pl, addToQueue } from "../../stores/playlist.js";
-import { audio, playIndex } from "../../stores/player.js";
+import { playIndex, player } from "../../stores/player.js";
 
 export { formatTrackLabel, coverUrl };
 
 export async function playOrQueueTrack(track) {
-  const startPlay = pl.length === 0 || audio.paused;
+  const startPlay = pl.length === 0 || player.paused;
   await addToQueue([track]);
   if (startPlay) playIndex(pl.length - 1);
 }

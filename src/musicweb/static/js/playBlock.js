@@ -9,7 +9,7 @@
  * @typedef {'none' | 'streaming' | 'downloaded' | 'unavailable'} PlaySourceState
  *
  * Machine reason when playback cannot start or failed.
- * @typedef {'missing' | 'broken' | 'no_id' | 'offline_no_local' | 'play_failed'} PlayBlockReason
+ * @typedef {'missing' | 'broken' | 'no_id' | 'offline_no_local' | 'play_failed' | 'exclusive_unarmed' | 'exclusive_failed' | 'exclusive_no_format'} PlayBlockReason
  */
 
 /**
@@ -22,6 +22,10 @@ export const PLAY_BLOCK_MESSAGES = {
   no_id: "Track has no id.",
   offline_no_local: "You're offline and this track isn't downloaded.",
   play_failed: "Playback failed",
+  exclusive_unarmed:
+    "Exclusive audio is on but not ready (companion, token, or device).",
+  exclusive_failed: "Exclusive playback stopped.",
+  exclusive_no_format: "No supported exclusive format for this device.",
 };
 
 /**

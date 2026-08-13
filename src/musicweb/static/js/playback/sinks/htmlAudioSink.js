@@ -1,0 +1,83 @@
+/**
+ * HTMLAudioElement sink — owns the element internally (not exported).
+ */
+
+/** @typedef {import('./types.js').PlaybackSink} PlaybackSink */
+/** @typedef {import('./types.js').SinkHandlers} SinkHandlers */
+
+/**
+ * @returns {PlaybackSink}
+ */
+export function createHtmlAudioSink() {
+  const audio = new Audio();
+  audio.preload = "metadata";
+  audio.setAttribute("playsinline", "");
+
+  /** @type {SinkHandlers} */
+  let handlers = {};
+  let attached = false;
+
+  function ensureAttached() {
+    if (attached) return;
+    attached = true;
+    if (typeof document !== "undefined" && !audio.isConnected) {
+      audio.hidden = true;
+      document.body.appendChild(audio);
+    }
+    audio.addEventListener("play", () => handlers.onPauseState?.(false));
+    audio.addEventListener("pause", () => handlers.onPauseState?.(true));
+    audio.addEventListener("ended", () => handlers.onEnded?.());
+    audio.addEventListener("timeupdate", () => {
+      handlers.onTime?.(audio.currentTime || 0, audio.duration);
+    });
+    audio.addEventListener("loadedmetadata", () => {
+      handlers.onTime?.(audio.currentTime || 0, audio.duration);
+      handlers.onDuration?.(audio.duration);
+    });
+    audio.addEventListener("error", () => {
+      handlers.onError?.("HTML audio playback failed");
+    });
+  }
+
+  return {
+    kind: "htmlAudio",
+    setHandlers(h) {
+      handlers = h || {};
+    },
+    async load(url) {
+      ensureAttached();
+      audio.src = url;
+      await audio.play();
+    },
+    pause() {
+      audio.pause();
+    },
+    resume() {
+      return audio.play();
+    },
+    stop() {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    },
+    seek(seconds) {
+      if (!Number.isFinite(seconds)) return;
+      audio.currentTime = seconds;
+    },
+    setVolume(v0to1) {
+      audio.volume = Math.min(1, Math.max(0, Number(v0to1) || 0));
+    },
+    get paused() {
+      return audio.paused;
+    },
+    get currentTime() {
+      return audio.currentTime || 0;
+    },
+    get duration() {
+      return Number.isFinite(audio.duration) ? audio.duration : 0;
+    },
+    get playbackRate() {
+      return audio.playbackRate || 1;
+    },
+  };
+}

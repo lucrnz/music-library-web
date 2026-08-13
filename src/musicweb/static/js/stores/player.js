@@ -1,5 +1,6 @@
 /**
- * Playback control + Media Session. Uses a shared HTMLAudioElement.
+ * Playback control + Media Session. Transport goes through the active sink
+ * (htmlAudio or exclusive companion) — HTMLAudioElement is not exported.
  */
 import { reactive } from "vue";
 import { coverUrl, requestPrepare, streamUrl } from "../api.js";
@@ -7,8 +8,17 @@ import { canReachServer, isHardOffline } from "../connectivity.js";
 import { markDownloadBroken } from "../downloads/index.js";
 import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
+import { createCompanionSink } from "../playback/sinks/companionSink.js";
+import { createHtmlAudioSink } from "../playback/sinks/htmlAudioSink.js";
 import { PLAY_BLOCK_MESSAGES } from "../playBlock.js";
+import { showToast } from "./ui.js";
 import { PLACEHOLDER_COVER } from "../util.js";
+import {
+  consumeMissingTechToast,
+  getExclusiveProfileTag,
+  isExclusiveArmed,
+  isExclusiveEnabled,
+} from "./exclusiveAudio.js";
 import { pl, commit, trackNeedsStreamPrepare } from "./playlist.js";
 import { getActiveStreamCodec, settings } from "./settings.js";
 
@@ -17,10 +27,11 @@ const EXPANDED_STORAGE_KEY = "musicweb.nowPlayingExpanded.v1";
 /** Seconds before end to urgent-prepare the next queue track (once per load). */
 const PREPARE_LEAD_SECONDS = 15;
 
-/** Shared audio element (attached to document.body at boot). */
-export const audio = new Audio();
-audio.preload = "metadata";
-audio.setAttribute("playsinline", "");
+const htmlSink = createHtmlAudioSink();
+const companionSink = createCompanionSink();
+
+/** @type {import('../playback/sinks/types.js').PlaybackSink} */
+let activeSink = htmlSink;
 
 /** @type {string | null} blob: URL we must revoke */
 let localPlayUrl = null;
@@ -108,6 +119,14 @@ function applyResolvedSource(source, activeCodec) {
     setPlaySourceState("downloaded", source.codec || null, null);
     return;
   }
+  if (source.type === "exclusive") {
+    setPlaySourceState(
+      "streaming",
+      source.codec || activeCodec || null,
+      null
+    );
+    return;
+  }
   setPlaySourceState(
     "streaming",
     source.codec || activeCodec || null,
@@ -145,11 +164,22 @@ function clearCovers() {
 }
 
 /**
+ * @param {'htmlAudio' | 'companion'} kind
+ */
+function selectSink(kind) {
+  const next = kind === "companion" ? companionSink : htmlSink;
+  if (next === activeSink) return;
+  try {
+    activeSink.stop();
+  } catch {
+    /* ignore */
+  }
+  activeSink = next;
+  activeSink.setVolume(player.volume);
+}
+
+/**
  * Resolve local/remote covers into player state + Media Session.
- *
- * Never paints remote /api/cover URLs until OPFS has been checked — otherwise
- * <img> tags kick off network fetches for already-downloaded album art.
- * Same-track calls (play/pause) are no-ops so we do not re-hit the network.
  */
 async function updateMediaSession() {
   const t = pl.current;
@@ -167,14 +197,11 @@ async function updateMediaSession() {
   }
 
   const gen = ++coverResolveGen;
-  // Drop previous track art while we resolve — never assign remote yet.
   clearCovers();
 
-  // Playlist holds full Track only — albumId comes from the producer.
   const albumId = t.albumId || null;
   if (gen !== coverResolveGen) return;
 
-  // Remote only when we can actually reach the library server.
   const allowRemote = !isHardOffline() && canReachServer();
   const opts = { offline: !allowRemote };
   const remoteThumb = allowRemote ? coverUrl(t, "thumb", false) : null;
@@ -211,13 +238,13 @@ function updatePositionState() {
   ) {
     return;
   }
-  const dur = audio.duration;
+  const dur = activeSink.duration;
   if (!Number.isFinite(dur) || dur <= 0) return;
   try {
     navigator.mediaSession.setPositionState({
       duration: dur,
-      playbackRate: audio.playbackRate || 1,
-      position: Math.min(audio.currentTime, dur),
+      playbackRate: activeSink.playbackRate || 1,
+      position: Math.min(activeSink.currentTime, dur),
     });
   } catch {
     /* ignore */
@@ -225,19 +252,92 @@ function updatePositionState() {
 }
 
 function syncTransportFlags() {
-  player.paused = audio.paused;
-  player.currentTime = audio.currentTime || 0;
-  player.duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+  player.paused = activeSink.paused;
+  player.currentTime = activeSink.currentTime || 0;
+  player.duration = Number.isFinite(activeSink.duration)
+    ? activeSink.duration
+    : 0;
   if (msSupported) {
     navigator.mediaSession.playbackState =
-      pl.index >= 0 ? (audio.paused ? "paused" : "playing") : "none";
+      pl.index >= 0 ? (activeSink.paused ? "paused" : "playing") : "none";
   }
 }
 
+function hardStopCompanion(message) {
+  try {
+    activeSink.stop();
+  } catch {
+    /* ignore */
+  }
+  failPlayback(
+    player.playProfileId,
+    "exclusive_failed",
+    message || PLAY_BLOCK_MESSAGES.exclusive_failed
+  );
+  showToast(message || PLAY_BLOCK_MESSAGES.exclusive_failed);
+  syncTransportFlags();
+}
+
+/**
+ * Sink ended → single advance owner (repeat-one / playNext).
+ */
+function onSinkEnded() {
+  if (pl.repeat === "one") {
+    activeSink.seek(0);
+    Promise.resolve(activeSink.resume()).catch(console.error);
+    return;
+  }
+  playNext();
+}
+
+function onSinkTime(t, d) {
+  if (player.seeking) return;
+  player.currentTime = t || 0;
+  if (Number.isFinite(d) && d > 0) player.duration = d;
+  updatePositionState();
+  maybePrepareNext();
+}
+
+function wireSinkHandlers() {
+  const handlers = {
+    onTime: onSinkTime,
+    onDuration: (d) => {
+      if (Number.isFinite(d) && d > 0) {
+        player.duration = d;
+        const t = pl.current;
+        if (t && !t.duration) {
+          t.duration = d;
+          commit();
+        }
+      }
+    },
+    onEnded: onSinkEnded,
+    onError: (message) => {
+      if (activeSink.kind === "companion" || isExclusiveEnabled()) {
+        hardStopCompanion(message);
+        return;
+      }
+      failPlayback(
+        player.playProfileId,
+        "play_failed",
+        message || PLAY_BLOCK_MESSAGES.play_failed
+      );
+      syncTransportFlags();
+    },
+    onPauseState: () => {
+      syncTransportFlags();
+    },
+  };
+  htmlSink.setHandlers(handlers);
+  companionSink.setHandlers(handlers);
+}
+
 export function stopPlayback() {
-  audio.pause();
-  audio.removeAttribute("src");
-  audio.load();
+  try {
+    activeSink.stop();
+  } catch {
+    /* ignore */
+  }
   revokeLocalPlayUrl();
   clearPlaySourceState();
   setPlayNotice(null);
@@ -252,31 +352,15 @@ export function stopPlayback() {
   updateMediaSession();
 }
 
-/**
- * Sync reactive position from the shared audio element, then maybe
- * urgent-prepare the next queue track (once per playIndex load).
- */
-function onAudioPositionChanged() {
-  player.currentTime = audio.currentTime || 0;
-  if (Number.isFinite(audio.duration)) player.duration = audio.duration;
-  updatePositionState();
-  maybePrepareNext();
-}
-
-/**
- * If playback is within PREPARE_LEAD_SECONDS of the end, urgent-prepare the
- * next queue track at most once for this playIndex session.
- */
 function maybePrepareNext() {
   if (nearEndPrepareSent) return;
-  const dur = audio.duration;
+  const dur = activeSink.duration;
   if (!Number.isFinite(dur) || dur <= 0) return;
-  const remaining = dur - (audio.currentTime || 0);
+  const remaining = dur - (activeSink.currentTime || 0);
   if (remaining > PREPARE_LEAD_SECONDS) return;
 
   const nextIdx = pl.peekNextIndex();
   if (nextIdx < 0 || nextIdx === pl.index) {
-    // No distinct next track (end of queue / repeat one / unknown shuffle wrap).
     nearEndPrepareSent = true;
     return;
   }
@@ -285,10 +369,8 @@ function maybePrepareNext() {
     nearEndPrepareSent = true;
     return;
   }
-  // Transient: do not latch — reconnect while still in the window can prepare.
   if (isHardOffline() || !canReachServer()) return;
 
-  // Latch before async work so concurrent timeupdate/seek cannot double-send.
   nearEndPrepareSent = true;
   void issueNearEndPrepare(nextTrack);
 }
@@ -297,23 +379,42 @@ function maybePrepareNext() {
  * @param {import("../models/track.js").Track} nextTrack
  */
 async function issueNearEndPrepare(nextTrack) {
+  if (isExclusiveEnabled()) {
+    const tag = getExclusiveProfileTag(nextTrack);
+    if (!tag) return;
+    requestPrepare([nextTrack], tag, { urgent: true });
+    return;
+  }
   const activeCodec = getActiveStreamCodec();
   if (!trackNeedsStreamPrepare(nextTrack, activeCodec)) return;
   requestPrepare([nextTrack], activeCodec, { urgent: true });
 }
 
 /**
- * Set audio src and attempt play. Does not own fallback policy.
  * @param {string} url
  * @returns {Promise<{ ok: true } | { ok: false, err: unknown }>}
  */
 async function attemptPlay(url) {
-  audio.src = url;
   try {
-    await audio.play();
+    await activeSink.load(url);
     return { ok: true };
   } catch (err) {
     return { ok: false, err };
+  }
+}
+
+/**
+ * Absolute stream URL for companion (must hit the browser's origin host).
+ * @param {import("../models/track.js").Track} track
+ * @param {string} tag
+ */
+function absoluteStreamUrl(track, tag) {
+  const path = streamUrl(track, tag);
+  if (!path) return null;
+  try {
+    return new URL(path, location.origin).href;
+  } catch {
+    return null;
   }
 }
 
@@ -326,7 +427,6 @@ export async function playIndex(index) {
   const track = pl.current;
   commit();
   nearEndPrepareSent = false;
-  // Resolve covers for the new track (local-first; no remote paint until checked).
   lastCoverTrackId = null;
   updateMediaSession();
 
@@ -334,6 +434,70 @@ export async function playIndex(index) {
   clearPlaySourceState();
   setPlayNotice(null);
 
+  // Exclusive path: hard-fail when enabled but not armed; no HTML/OPFS fallback.
+  if (isExclusiveEnabled()) {
+    if (!isExclusiveArmed()) {
+      selectSink("htmlAudio");
+      failPlayback(
+        null,
+        "exclusive_unarmed",
+        PLAY_BLOCK_MESSAGES.exclusive_unarmed
+      );
+      showToast(PLAY_BLOCK_MESSAGES.exclusive_unarmed);
+      syncTransportFlags();
+      return;
+    }
+
+    const tag = getExclusiveProfileTag(track);
+    if (!tag) {
+      selectSink("companion");
+      failPlayback(
+        null,
+        "exclusive_no_format",
+        PLAY_BLOCK_MESSAGES.exclusive_no_format
+      );
+      showToast(PLAY_BLOCK_MESSAGES.exclusive_no_format);
+      syncTransportFlags();
+      return;
+    }
+
+    if (
+      (track?.sampleRateHz == null || track?.bitDepth == null) &&
+      track?.id &&
+      consumeMissingTechToast(track.id)
+    ) {
+      showToast(
+        `${track.title || "Track"}: source format unknown — using device max`
+      );
+    }
+
+    const url = absoluteStreamUrl(track, tag);
+    if (!url) {
+      failPlayback(tag, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
+      syncTransportFlags();
+      return;
+    }
+
+    selectSink("companion");
+    setPlaySourceState("streaming", tag, null);
+    // Honest label: exclusive stream (still "streaming" playSource vocabulary)
+    player.playNotice = null;
+    const result = await attemptPlay(url);
+    if (!result.ok) {
+      console.error("Exclusive playback failed", result.err);
+      hardStopCompanion(
+        result.err instanceof Error
+          ? result.err.message
+          : PLAY_BLOCK_MESSAGES.exclusive_failed
+      );
+      return;
+    }
+    syncTransportFlags();
+    return;
+  }
+
+  // Normal browser path
+  selectSink("htmlAudio");
   const activeCodec = getActiveStreamCodec();
   const source = await resolvePlaySource(track, {
     enabled: downloads.enabled,
@@ -397,7 +561,11 @@ export async function playIndex(index) {
 export function playNext() {
   const idx = pl.nextIndex();
   if (idx < 0) {
-    audio.pause();
+    try {
+      activeSink.pause();
+    } catch {
+      /* ignore */
+    }
     syncTransportFlags();
     return;
   }
@@ -405,9 +573,9 @@ export function playNext() {
 }
 
 export function playPrev() {
-  const result = pl.prevIndex(audio.currentTime);
+  const result = pl.prevIndex(activeSink.currentTime);
   if (result && typeof result === "object" && result.restart) {
-    audio.currentTime = 0;
+    activeSink.seek(0);
     return;
   }
   if (typeof result === "number" && result >= 0) playIndex(result);
@@ -419,8 +587,11 @@ export function togglePlay() {
     playIndex(0);
     return;
   }
-  if (audio.paused) audio.play().catch(console.error);
-  else audio.pause();
+  if (activeSink.paused) {
+    Promise.resolve(activeSink.resume()).catch(console.error);
+  } else {
+    activeSink.pause();
+  }
   syncTransportFlags();
 }
 
@@ -438,16 +609,16 @@ export function cycleRepeat() {
 }
 
 export function seekToFraction(frac) {
-  const dur = audio.duration;
-  if (!Number.isFinite(dur)) return;
-  audio.currentTime = frac * dur;
-  onAudioPositionChanged();
+  const dur = activeSink.duration;
+  if (!Number.isFinite(dur) || dur <= 0) return;
+  activeSink.seek(frac * dur);
+  onSinkTime(activeSink.currentTime, dur);
 }
 
 export function setVolume(v) {
   const n = Math.min(1, Math.max(0, Number(v)));
   player.volume = n;
-  audio.volume = n;
+  activeSink.setVolume(n);
   try {
     localStorage.setItem(VOLUME_STORAGE_KEY, String(n));
   } catch {
@@ -465,7 +636,7 @@ export function applyVolume() {
   } catch {
     /* ignore */
   }
-  audio.volume = player.volume;
+  activeSink.setVolume(player.volume);
 }
 
 /** Open/close full now-playing and persist the preference. */
@@ -508,45 +679,27 @@ export function refreshPlayerCovers() {
 }
 
 export function initAudioListeners() {
-  if (!audio.isConnected) {
-    audio.hidden = true;
-    document.body.appendChild(audio);
-  }
-  audio.addEventListener("play", syncTransportFlags);
-  audio.addEventListener("pause", syncTransportFlags);
-  audio.addEventListener("ended", () => {
-    if (pl.repeat === "one") {
-      audio.currentTime = 0;
-      audio.play().catch(console.error);
-      return;
-    }
-    playNext();
-  });
-  audio.addEventListener("timeupdate", () => {
-    if (player.seeking) return;
-    onAudioPositionChanged();
-  });
-  audio.addEventListener("loadedmetadata", () => {
-    const t = pl.current;
-    if (t && Number.isFinite(audio.duration) && !t.duration) {
-      t.duration = audio.duration;
-      commit();
-    }
-    onAudioPositionChanged();
-  });
+  wireSinkHandlers();
+  // Ensure html sink element is in the document for first non-exclusive play.
+  selectSink("htmlAudio");
+  activeSink.setVolume(player.volume);
 
   if (msSupported) {
     navigator.mediaSession.setActionHandler("play", () => {
       if (pl.index < 0 && pl.length) playIndex(0);
-      else audio.play().catch(console.error);
+      else Promise.resolve(activeSink.resume()).catch(console.error);
     });
-    navigator.mediaSession.setActionHandler("pause", () => audio.pause());
+    navigator.mediaSession.setActionHandler("pause", () => activeSink.pause());
     navigator.mediaSession.setActionHandler("previoustrack", playPrev);
     navigator.mediaSession.setActionHandler("nexttrack", playNext);
     navigator.mediaSession.setActionHandler("seekto", (details) => {
-      if (details.seekTime != null && Number.isFinite(audio.duration)) {
-        audio.currentTime = details.seekTime;
-        onAudioPositionChanged();
+      if (
+        details.seekTime != null &&
+        Number.isFinite(activeSink.duration) &&
+        activeSink.duration > 0
+      ) {
+        activeSink.seek(details.seekTime);
+        onSinkTime(activeSink.currentTime, activeSink.duration);
       }
     });
   }

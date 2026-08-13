@@ -10,6 +10,10 @@ import {
   isConstrainedConnection,
   onConstraintChange,
 } from "../networkConstraints.js";
+import {
+  getExclusiveProfileTag,
+  isExclusiveEnabled,
+} from "./exclusiveAudio.js";
 import { acquireModalLock, releaseModalLock } from "./modalLock.js";
 
 const KEY_STREAM_WIFI = "musicweb.streamCodec";
@@ -236,6 +240,39 @@ export function refreshNetworkFlags() {
  * }} [opts]
  */
 function applyActiveStreamSideEffects(tracks, opts = {}) {
+  // Exclusive: prepare by exclusive tags only; skip browser codec prewarm.
+  if (isExclusiveEnabled()) {
+    lastPreparedActive = null;
+    preparedKeys.clear();
+    const list = tracks || (getTracksFn ? getTracksFn() : []) || [];
+    /** @type {Map<string, unknown[]>} */
+    const byTag = new Map();
+    for (const t of list) {
+      if (!t || typeof t !== "object" || !/** @type {{id?: string}} */ (t).id) {
+        continue;
+      }
+      const tag = getExclusiveProfileTag(
+        /** @type {import('../models/track.js').Track} */ (t)
+      );
+      if (!tag) continue;
+      let bucket = byTag.get(tag);
+      if (!bucket) {
+        bucket = [];
+        byTag.set(tag, bucket);
+      }
+      bucket.push(t);
+    }
+    for (const [tag, group] of byTag) {
+      requestPrepare(group, tag, { replace: true });
+    }
+    if (opts.notifyDownloads) {
+      import("../downloads/index.js")
+        .then((m) => m.onNetworkConstraintChanged?.())
+        .catch(() => {});
+    }
+    return;
+  }
+
   const active = getActiveStreamCodec();
   const changed = active !== lastPreparedActive;
   if (changed || opts.force) {
