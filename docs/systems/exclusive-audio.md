@@ -15,8 +15,9 @@ Optional **hog / exclusive** playback on a Mac client while the music library se
 
 1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache.
 2. **Mac PWA** (installed, standalone) enables exclusive mode, stores `HOG_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
-3. **Companion** (`musicweb exclusive-audio`) binds **127.0.0.1 only**, starts idle **mpv** with `--audio-exclusive=yes`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
-4. On play, the PWA builds an **absolute** stream URL (`new URL(streamPath, location.origin).href`) so mpv hits the **same host the browser uses**, not localhost on the Mac. It loads that URL into mpv with a **per-track exclusive FLAC tag**.
+3. **Companion** (`musicweb exclusive-audio`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
+4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until a controller selects a device.
+5. On play, the PWA builds an **absolute** stream URL (`new URL(streamPath, location.origin).href`) so mpv hits the **same host the browser uses**, not localhost on the Mac. It loads that URL into mpv with a **per-track exclusive FLAC tag**.
 
 ```
 [ remote musicweb ] --HTTP FLAC stream tags--> [ mpv on Mac ]
@@ -53,12 +54,24 @@ Optional **hog / exclusive** playback on a Mac client while the music library se
 
 When exclusive is **enabled** (not only when armed), normal stream quality, download quality, and playback-policy controls are hidden/disabled.
 
-## Lock and heartbeat
+## Lock, heartbeat, and exclusive release
 
 - First successful `hello` becomes **controller**; further sessions are **readonly**.
 - Client heartbeat ~5s; companion TTL ~15s without heartbeat releases the lock.
 - Socket close also releases that session’s claim.
 - Client always uses **`ws://127.0.0.1`** (not `localhost`) to avoid IPv6 mismatch.
+
+### Controller owns the hog
+
+- While a controller has selected a device, that session **owns** exclusive/hog on Core Audio via mpv.
+- **“Lock free”** only means the software controller claim is cleared. On controller loss the companion also **ensure-releases** hardware:
+  1. Stop transport
+  2. Set `audio-exclusive=no`, clear `audio-device`
+  3. Clear companion `selected_device_id` (only after successful release)
+- Controller loss paths: **WebSocket disconnect** of the controller, or **heartbeat TTL** demotion (`role` → readonly, `reason=controller_ttl`).
+- Never release on hello replace of the same session (reconnect reclaim without thrashing).
+- User preference for device stays in PWA localStorage; on next controller `hello_ok` the client re-sends `set_device` to re-arm exclusive.
+- TTL with socket still open: client emits `error` with `code=controller_lost` so the existing exclusive hard-stop UI runs (not the WebSocket `disconnect` event).
 
 ## Volume
 
@@ -89,6 +102,14 @@ Digital **mpv** volume is required and always available. Core Audio hardware vol
 3. Settings → Exclusive audio: paste the same `HOG_TOKEN`, confirm port, enable, select device.
 
 4. Play from the PWA; audio should leave the Mac via mpv exclusive, not the browser element.
+
+### Manual check: headphones free after controller loss
+
+1. Armed exclusive; play a track long enough that hog is clearly engaged.
+2. Quit/close the PWA (not only hide).
+3. Companion logs controller disconnect / lock free **and** exclusive device released; another app can use the headphones immediately.
+4. Reopen PWA: reconnects as controller, device re-applied without re-select, play works (exclusive re-armed via `set_device`).
+5. TTL path: starve JS heartbeats until TTL while PWA stays open — hard-stop toast (`controller_lost`), role readonly, headphones free for other apps.
 
 ## Out of scope (v1)
 
