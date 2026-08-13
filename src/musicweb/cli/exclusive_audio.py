@@ -76,12 +76,14 @@ def run_exclusive_audio(
     )
 
     # Loopback only — never bind 0.0.0.0.
+    # Legacy uvicorn ws="websockets" is deprecated; pin non-deprecated adapter
+    # (not a change to the companion JSON protocol).
     uvicorn.run(
         app,
         host="127.0.0.1",
         port=port,
         log_level="info",
-        ws="websockets",
+        ws="websockets-sansio",
     )
 
 
