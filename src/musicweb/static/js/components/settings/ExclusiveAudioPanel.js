@@ -2,9 +2,10 @@
  * Exclusive audio settings — Mac installed PWA only.
  */
 import { computed, defineComponent } from "vue";
+import { formatExclusiveFace } from "../../exclusive/statusFace.js";
 import {
   exclusiveAudio,
-  isExclusiveArmed,
+  exclusiveStatusSnapshot,
   setExclusiveEnabled,
   setExclusivePort,
   setFormatMode,
@@ -28,24 +29,21 @@ export default defineComponent({
   },
   emits: ["toggle"],
   setup(props, { emit }) {
-    const connectionLabel = computed(() => {
-      switch (exclusiveAudio.connection) {
-        case "connected":
-          return exclusiveAudio.role === "controller"
-            ? "Connected (controller)"
-            : exclusiveAudio.role === "readonly"
-              ? "Connected (read-only — controlled elsewhere)"
-              : "Connected";
-        case "connecting":
-          return "Connecting…";
-        case "rejected":
-          return `Rejected (${exclusiveAudio.lastError || "auth"})`;
-        default:
-          return "Disconnected";
+    const face = computed(() => {
+      void exclusiveAudio.enabled;
+      void exclusiveAudio.connection;
+      void exclusiveAudio.role;
+      void exclusiveAudio.lastError;
+      void exclusiveAudio.selectedDeviceId;
+      void exclusiveAudio.companionDeviceId;
+      void exclusiveAudio.devices;
+      void exclusiveAudio.capable;
+      const snap = exclusiveStatusSnapshot();
+      if (!snap.enabled) {
+        return { text: "Off", kind: "off" };
       }
+      return formatExclusiveFace(snap) || { text: "—", kind: "offline" };
     });
-
-    const armed = computed(() => isExclusiveArmed());
 
     const deviceOptions = computed(() =>
       exclusiveAudio.devices.map((d) => ({ id: d.id, label: d.name }))
@@ -85,8 +83,7 @@ export default defineComponent({
 
     return {
       exclusiveAudio,
-      connectionLabel,
-      armed,
+      face,
       FORMAT_OPTIONS,
       deviceOptions,
       deviceDisabled,
@@ -153,12 +150,12 @@ export default defineComponent({
       </div>
 
       <p class="modal-hint" style="margin-top:10px">
-        Status: {{ connectionLabel }}
-        <template v-if="exclusiveAudio.enabled">
-          · {{ armed ? "Armed — ready to play" : "Not armed (need connection + device as controller)" }}
-        </template>
+        Status: {{ face.text }}
       </p>
-      <p v-if="exclusiveAudio.lastError" class="modal-hint warn">
+      <p
+        v-if="exclusiveAudio.lastError && face.kind !== 'rejected' && face.kind !== 'ready'"
+        class="modal-hint warn"
+      >
         {{ exclusiveAudio.lastError }}
       </p>
 

@@ -16,6 +16,10 @@ import {
   formatPrimaryStatus,
   formatStatusAriaLabel,
 } from "../../playbackStatus.js";
+import {
+  exclusiveAudio,
+  exclusiveStatusSnapshot,
+} from "../../stores/exclusiveAudio.js";
 import { acquireModalLock, releaseModalLock } from "../../stores/modalLock.js";
 import { player } from "../../stores/player.js";
 import { settings } from "../../stores/settings.js";
@@ -67,16 +71,40 @@ export default defineComponent({
       playBlockReason: player.playBlockReason,
     }));
 
+    /** Read exclusive fields so face updates when companion state changes. */
+    const exclusiveSnap = computed(() => {
+      void exclusiveAudio.enabled;
+      void exclusiveAudio.connection;
+      void exclusiveAudio.role;
+      void exclusiveAudio.lastError;
+      void exclusiveAudio.selectedDeviceId;
+      void exclusiveAudio.companionDeviceId;
+      void exclusiveAudio.devices;
+      void exclusiveAudio.capable;
+      return exclusiveStatusSnapshot();
+    });
+
     const primaryStatus = computed(() =>
-      formatPrimaryStatus(statusSnapshot.value, settings.options)
+      formatPrimaryStatus(
+        statusSnapshot.value,
+        settings.options,
+        exclusiveSnap.value
+      )
     );
 
     const statusAriaLabel = computed(() =>
-      formatStatusAriaLabel(statusSnapshot.value, settings.options)
+      formatStatusAriaLabel(
+        statusSnapshot.value,
+        settings.options,
+        exclusiveSnap.value
+      )
     );
 
     const detailsRows = computed(() =>
-      buildPlaybackDetailsRows(statusSnapshot.value, settings.options)
+      buildPlaybackDetailsRows(statusSnapshot.value, settings.options, {
+        exclusiveSnap: exclusiveSnap.value,
+        exclusiveFormats: exclusiveAudio.formats,
+      })
     );
 
     function clearHoverCloseTimer() {
