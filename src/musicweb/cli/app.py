@@ -7,6 +7,7 @@ import logging
 import typer
 
 from musicweb.cli import doctor as doctor_cmd
+from musicweb.cli import exclusive_audio as exclusive_audio_cmd
 from musicweb.cli import regen as regen_cmd
 from musicweb.cli import scan as scan_cmd
 from musicweb.cli import serve as serve_cmd
@@ -34,6 +35,7 @@ app.command("regen-artist-images")(regen_cmd.regen_artist_images)
 app.command("regen-lyrics")(regen_cmd.regen_lyrics)
 app.command("stats")(stats_cmd.stats)
 app.command("doctor")(doctor_cmd.doctor)
+app.command("exclusive-audio")(exclusive_audio_cmd.exclusive_audio)
 
 
 def main() -> None:
