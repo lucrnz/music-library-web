@@ -8,7 +8,7 @@ Optional **hog / exclusive** playback on a Mac client while the music library se
 - Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `mpv_player.py`, `coreaudio.py`)
 - Profile tags + catalog: `src/musicweb/transcode/profiles.py`
 - HTTP: `GET /api/exclusive-formats`, existing `GET /api/stream` + `POST /api/transcode/prepare` with tags
-- Client: `src/musicweb/static/js/exclusive/`, `stores/exclusiveAudio.js`, `playback/sinks/`, `stores/player.js`
+- Client: `src/musicweb/static/js/exclusive/` (including `statusFace.js`, `companionClient.js`), `stores/exclusiveAudio.js`, `playback/sinks/`, `stores/player.js`, `playbackStatus.js`
 - Commands: `docs/development/commands.md`
 
 ## Architecture (prose)
@@ -16,8 +16,8 @@ Optional **hog / exclusive** playback on a Mac client while the music library se
 1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache.
 2. **Mac PWA** (installed, standalone) enables exclusive mode, stores `HOG_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
 3. **Companion** (`musicweb exclusive-audio`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
-4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until a controller selects a device.
-5. On play, the PWA builds an **absolute** stream URL (`new URL(streamPath, location.origin).href`) so mpv hits the **same host the browser uses**, not localhost on the Mac. It loads that URL into mpv with a **per-track exclusive FLAC tag**.
+4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until the companion **accepts** a live device.
+5. On play, the PWA **ensures** the preferred device is live, then builds an **absolute** stream URL (`new URL(streamPath, location.origin).href`) so mpv hits the **same host the browser uses**, not localhost on the Mac. It loads that URL into mpv with a **per-track exclusive FLAC tag**.
 
 ```
 [ remote musicweb ] --HTTP FLAC stream tags--> [ mpv on Mac ]
@@ -40,19 +40,65 @@ Optional **hog / exclusive** playback on a Mac client while the music library se
 - **`prefer_source`:** exact source rate/depth when allowlisted and device-supported; else nearest lower-or-equal; avoid pointless 16→24.
 - **`upsample_device`:** highest allowlisted rate×depth the device supports, every track.
 - Missing track tech → treat like device-max for that track; toast once per track id per session; server logs once per track id per process.
+- Device caps for policy: **preference if still in the device list**, else live companion device.
 
-## Arming and hard-fail
+## Preference vs live device
 
-**Armed** = exclusive **enabled** ∧ device selected ∧ companion **connected** ∧ this tab is **controller**.
+Two distinct client fields (do not conflate):
+
+| Field | Meaning | Persisted |
+|-------|---------|-----------|
+| `selectedDeviceId` | User **preference** (what to re-apply) | yes (`localStorage`) |
+| `companionDeviceId` | **Live** companion hog target (`selected_device_id` from status) | no |
+
+- First device pick is **manual only** — no auto-pick of a default output.
+- Preferred device **missing from the device list** → clear preference (and persist); if exclusive is playing, hard-stop and prompt to pick a device again.
+- Companion status **never** overwrites preference; it only updates live.
+
+## Arming, ensure-before-play, and hard-fail
+
+**Armed** = exclusive **enabled** ∧ companion **connected** ∧ this tab is **controller** ∧ **live** device set (and still present in the device list when the list is non-empty). Preference alone is **not** armed.
 
 | Situation | Behavior |
 |-----------|----------|
-| Enabled but not armed | Play **hard-fails** (no HTML audio, no OPFS) |
+| Enabled but not armed | Play **hard-fails** (no HTML audio, no OPFS) with a specific reason |
+| Preference set, controller, live missing/mismatch | Client **`syncPreferredDevice`** sends `set_device`; play path **`ensurePreferredDevice`** (~1.5s) waits for live match |
+| No preference / ensure timeout / device gone | `exclusive_needs_device` toast + open Settings |
+| Companion offline / connecting / auth rejected | `exclusive_not_ready` |
+| This tab read-only | `exclusive_readonly` |
 | Armed | Companion sink only; absolute stream URL + exclusive tag |
-| Mid-play companion death / error | Immediate hard stop + toast; **no** browser fallback |
+| Mid-play companion death / TTL / live release | Immediate hard stop + toast; **no** browser fallback |
 | Second tab | Read-only (“controlled elsewhere”); no steal in v1 |
 
+Ensure/wait logic lives on the **companion client**, not as a timeout loop inside `playIndex`.
+
 When exclusive is **enabled** (not only when armed), normal stream quality, download quality, and playback-policy controls are hidden/disabled.
+
+### Client sync entry points
+
+Single **`syncPreferredDevice`** when controller ∧ preference set ∧ (live missing or ≠ preference):
+
+- controller `hello_ok`
+- after devices list update (if preference still valid)
+- user chooses a device
+- ensure-before-play
+
+## Now-playing face and details
+
+While exclusive is **enabled**, the now-playing **primary face is always exclusive** (never “Streaming · codec”):
+
+| Kind | Copy |
+|------|------|
+| `needs_device` | Needs device |
+| `connecting` | Connecting… |
+| `offline` | Companion offline |
+| `rejected` | Auth rejected (or short safe error) |
+| `readonly` | Controlled elsewhere |
+| `ready` | Ready · {deviceName} |
+
+Implementation: pure `static/js/exclusive/statusFace.js` — Settings panel uses the same helper.
+
+**Playback details** (deep dive) hold Output Exclusive, Device, Profile tag, bit depth, sample rate from the **exclusive-formats** catalog (not browser `/api/codecs`).
 
 ## Lock, heartbeat, and exclusive release
 
@@ -63,14 +109,14 @@ When exclusive is **enabled** (not only when armed), normal stream quality, down
 
 ### Controller owns the hog
 
-- While a controller has selected a device, that session **owns** exclusive/hog on Core Audio via mpv.
+- While a controller has a **live** device, that session **owns** exclusive/hog on Core Audio via mpv.
 - **“Lock free”** only means the software controller claim is cleared. On controller loss the companion also **ensure-releases** hardware:
   1. Stop transport
   2. Set `audio-exclusive=no`, clear `audio-device`
-  3. Clear companion `selected_device_id` (only after successful release)
+  3. Clear companion `selected_device_id` (only after successful release) → client clears live
 - Controller loss paths: **WebSocket disconnect** of the controller, or **heartbeat TTL** demotion (`role` → readonly, `reason=controller_ttl`).
 - Never release on hello replace of the same session (reconnect reclaim without thrashing).
-- User preference for device stays in PWA localStorage; on next controller `hello_ok` the client re-sends `set_device` to re-arm exclusive.
+- User **preference** stays in PWA localStorage; on next controller `hello_ok` the client re-sends `set_device` via `syncPreferredDevice`.
 - TTL with socket still open: client emits `error` with `code=controller_lost` so the existing exclusive hard-stop UI runs (not the WebSocket `disconnect` event).
 
 ## Volume
@@ -99,16 +145,16 @@ Digital **mpv** volume is required and always available. Core Audio hardware vol
 
 2. Install the musicweb PWA on that Mac (secure context / `MUSICWEB_PUBLIC_ORIGIN` rules apply — see `docs/systems/pwa.md`). LAN `http://IP` without secure context cannot install.
 
-3. Settings → Exclusive audio: paste the same `HOG_TOKEN`, confirm port, enable, select device.
+3. Settings → Exclusive audio: paste the same `HOG_TOKEN`, confirm port, enable, **manually select** an output device. Status uses the same plain-language face as the now-playing bar (`Ready · …` only when live is set).
 
 4. Play from the PWA; audio should leave the Mac via mpv exclusive, not the browser element.
 
 ### Manual check: headphones free after controller loss
 
-1. Armed exclusive; play a track long enough that hog is clearly engaged.
+1. Armed exclusive (status **Ready · device**); play a track long enough that hog is clearly engaged.
 2. Quit/close the PWA (not only hide).
 3. Companion logs controller disconnect / lock free **and** exclusive device released; another app can use the headphones immediately.
-4. Reopen PWA: reconnects as controller, device re-applied without re-select, play works (exclusive re-armed via `set_device`).
+4. Reopen PWA: reconnects as controller, preference re-applied via `set_device`, play works after ensure (exclusive re-armed).
 5. TTL path: starve JS heartbeats until TTL while PWA stays open — hard-stop toast (`controller_lost`), role readonly, headphones free for other apps.
 
 ## Out of scope (v1)
@@ -120,6 +166,7 @@ Digital **mpv** volume is required and always available. Core Audio hardware vol
 - Electron / TypeScript / Vite / pnpm
 - Auth model change for exclusive tags
 - Listing exclusive-only tags on the normal browser codec marketing list
+- Auto-pick of a default output device
 
 ## Related
 
