@@ -20,6 +20,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 - `docs/`: project documentation.
 - `AGENTS.md`: short agent/human operating rules.
 - `src/musicweb/`: application package.
+- `tests/`: automated tests (pytest); smoke coverage starts with package importability.
 
 ## Package layout (`src/musicweb`)
 

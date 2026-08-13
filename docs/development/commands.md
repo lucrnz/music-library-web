@@ -21,6 +21,15 @@ uv sync
 
 Requires Python 3.11+ and [uv](https://github.com/astral-sh/uv). System dependency: `ffmpeg` on `PATH` built with **libsoxr**, **libopus**, and **flac**. The server refuses to start if those encoders/resampler are missing.
 
+## Test
+
+Pytest lives in the `dev` dependency group (not runtime deps). Group name and tool config: `pyproject.toml`.
+
+```sh
+uv sync --group dev
+uv run --group dev pytest
+```
+
 ## Run (HTTP server)
 
 ```sh
