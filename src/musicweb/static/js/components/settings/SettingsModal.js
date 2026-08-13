@@ -31,7 +31,12 @@ import {
 import { downloads } from "../../downloads/state.js";
 import { confirmDialog } from "../../stores/dialog.js";
 import { showToast } from "../../stores/ui.js";
+import {
+  exclusiveAudio,
+  shouldHideBrowserQualityControls,
+} from "../../stores/exclusiveAudio.js";
 import Icon from "../icons/Icon.js";
+import ExclusiveAudioPanel from "./ExclusiveAudioPanel.js";
 import LibraryScanPanel from "./LibraryScanPanel.js";
 import QualitySelect from "./QualitySelect.js";
 
@@ -39,7 +44,7 @@ const SAME_AS_WIFI = "__same_as_wifi__";
 
 export default defineComponent({
   name: "SettingsModal",
-  components: { Icon, QualitySelect, LibraryScanPanel },
+  components: { Icon, QualitySelect, LibraryScanPanel, ExclusiveAudioPanel },
   setup() {
     const downloadsBusy = ref(false);
     /** @type {import('vue').Ref<string|null>} */
@@ -54,6 +59,12 @@ export default defineComponent({
     const showNetworkQuality = computed(
       () => settings.canDetectConnectionType
     );
+
+    const hideBrowserQuality = computed(() =>
+      shouldHideBrowserQualityControls()
+    );
+
+    const showExclusivePanel = computed(() => exclusiveAudio.capable);
 
     const streamFieldLabel = computed(() =>
       showNetworkQuality.value ? "Streaming — Wi‑Fi" : "Streaming"
@@ -224,6 +235,8 @@ export default defineComponent({
       libraryReachable,
       scanPanelActive,
       showNetworkQuality,
+      hideBrowserQuality,
+      showExclusivePanel,
       streamFieldLabel,
       downloadsBusy,
       downloadsStorageLine,
@@ -275,7 +288,7 @@ export default defineComponent({
           </button>
         </div>
 
-        <div class="modal-section" ref="qualityRoot">
+        <div v-if="!hideBrowserQuality" class="modal-section" ref="qualityRoot">
           <div class="modal-section-title">Quality</div>
           <p class="modal-hint">
             Choose streaming quality
@@ -340,6 +353,14 @@ export default defineComponent({
             <p class="modal-hint" style="margin-top:8px;margin-bottom:0">{{ policyHint }}</p>
           </QualitySelect>
         </div>
+        <div v-else class="modal-section">
+          <div class="modal-section-title">Quality</div>
+          <p class="modal-hint">
+            Browser stream and download quality controls are hidden while exclusive audio is enabled.
+          </p>
+        </div>
+
+        <ExclusiveAudioPanel v-if="showExclusivePanel" />
 
         <div class="modal-section">
           <div class="modal-section-title">Downloads</div>

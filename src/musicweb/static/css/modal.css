@@ -240,6 +240,22 @@ body.modal-open {
   cursor: pointer;
 }
 
+/* Settings text fields (exclusive audio panel, etc.) */
+.text-input {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-height: 40px;
+}
+
+.text-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 1px;
+}
+
 .modal-hint.warn {
   color: var(--danger);
 }

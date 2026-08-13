@@ -15,6 +15,7 @@ import {
   bindNetworkConstraintEffects,
   loadCodecs,
 } from "./stores/settings.js";
+import { initExclusiveAudio } from "./stores/exclusiveAudio.js";
 import { pl } from "./stores/playlist.js";
 import { bindConnectivityToasts } from "./connectivityUi.js";
 import { initDownloads } from "./downloads/index.js";
@@ -26,6 +27,7 @@ applyVolume();
 applyExpanded();
 initAudioListeners();
 loadCodecs();
+initExclusiveAudio();
 bindNetworkConstraintEffects(() => pl.tracks);
 // Connectivity store before downloads (downloads only hooks policy/orphans).
 bindConnectivityStore();
