@@ -82,27 +82,27 @@
   transition: width 0.2s ease;
 }
 
-.quality-field {
+.settings-field {
   margin-top: 14px;
 }
 
-.quality-field:first-of-type {
+.settings-field:first-of-type {
   margin-top: 0;
 }
 
-.quality-field-label {
+.settings-field-label {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
   margin-bottom: 6px;
 }
 
-/* Streaming quality custom dropdown (native <select> cannot match theme) */
-.codec-dropdown {
+/* Themed settings dropdown (native <select> cannot match theme) */
+.settings-select {
   position: relative;
 }
 
-.codec-trigger {
+.settings-select-trigger {
   width: 100%;
   min-height: 48px;
   display: flex;
@@ -120,22 +120,29 @@
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
-.codec-trigger:hover {
+.settings-select-trigger:hover:not(:disabled) {
   border-color: rgba(255, 255, 255, 0.18);
   background: color-mix(in srgb, var(--surface-2) 70%, var(--elevated, #2a2a2a));
 }
 
-.codec-trigger:focus-visible {
+.settings-select-trigger:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.codec-dropdown.open .codec-trigger {
+.settings-select.open .settings-select-trigger {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
-.codec-trigger-label {
+.settings-select.disabled .settings-select-trigger,
+.settings-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.settings-select-trigger-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -143,7 +150,7 @@
   white-space: nowrap;
 }
 
-.codec-trigger .icon {
+.settings-select-trigger .icon {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
@@ -151,12 +158,12 @@
   transition: transform 0.15s ease, color 0.15s;
 }
 
-.codec-dropdown.open .codec-trigger .icon {
+.settings-select.open .settings-select-trigger .icon {
   transform: rotate(180deg);
   color: var(--accent);
 }
 
-.codec-menu {
+.settings-select-menu {
   position: absolute;
   z-index: 5;
   left: 0;
@@ -175,7 +182,7 @@
   overflow-y: auto;
 }
 
-.codec-option {
+.settings-select-option {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -188,27 +195,27 @@
   transition: background 0.12s, color 0.12s;
 }
 
-.codec-option:hover,
-.codec-option:focus-visible {
+.settings-select-option:hover,
+.settings-select-option:focus-visible {
   background: rgba(255, 255, 255, 0.08);
   outline: none;
 }
 
-.codec-option.selected {
+.settings-select-option.selected {
   color: var(--accent-bright, var(--accent));
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
-.codec-option.selected:hover {
+.settings-select-option.selected:hover {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-.codec-option-label {
+.settings-select-option-label {
   flex: 1;
   min-width: 0;
 }
 
-.codec-option .icon {
+.settings-select-option .icon {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
@@ -249,6 +256,15 @@ body.modal-open {
   border-radius: 8px;
   padding: 8px 10px;
   min-height: 40px;
+}
+
+.text-input-block {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.text-input-narrow {
+  width: 8rem;
 }
 
 .text-input:focus {

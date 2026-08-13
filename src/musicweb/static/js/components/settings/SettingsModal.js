@@ -38,18 +38,17 @@ import {
 import Icon from "../icons/Icon.js";
 import ExclusiveAudioPanel from "./ExclusiveAudioPanel.js";
 import LibraryScanPanel from "./LibraryScanPanel.js";
-import QualitySelect from "./QualitySelect.js";
+import SettingsSelect from "./SettingsSelect.js";
 
 const SAME_AS_WIFI = "__same_as_wifi__";
 
 export default defineComponent({
   name: "SettingsModal",
-  components: { Icon, QualitySelect, LibraryScanPanel, ExclusiveAudioPanel },
+  components: { Icon, SettingsSelect, LibraryScanPanel, ExclusiveAudioPanel },
   setup() {
     const downloadsBusy = ref(false);
     /** @type {import('vue').Ref<string|null>} */
     const openMenu = ref(null);
-    const qualityRoot = ref(null);
 
     const libraryReachable = computed(() => {
       void connectivity.state;
@@ -74,32 +73,19 @@ export default defineComponent({
       () => settings.open && libraryReachable.value
     );
 
-    function labelFor(id) {
-      const hit = settings.options.find((o) => o.id === id);
-      return hit?.label || id || "—";
-    }
+    const cellularOptions = computed(() => [
+      { id: SAME_AS_WIFI, label: "Same as Wi‑Fi" },
+      ...settings.options,
+    ]);
 
-    const wifiLabel = computed(() => labelFor(settings.streamWifi));
-    const cellularLabel = computed(() => {
-      if (settings.streamCellular == null) return "Same as Wi‑Fi";
-      return labelFor(settings.streamCellular);
-    });
-    const downloadLabel = computed(() => labelFor(settings.download));
-    const policyLabel = computed(() => {
-      const hit = PLAYBACK_POLICIES.find((p) => p.id === settings.playbackPolicy);
-      return hit?.label || settings.playbackPolicy;
-    });
+    const cellularSelectedId = computed(() =>
+      settings.streamCellular == null ? SAME_AS_WIFI : settings.streamCellular
+    );
+
     const policyHint = computed(() => {
       const hit = PLAYBACK_POLICIES.find((p) => p.id === settings.playbackPolicy);
       return hit?.hint || "";
     });
-
-    const cellularLeading = [
-      { id: SAME_AS_WIFI, label: "Same as Wi‑Fi" },
-    ];
-    const cellularSelectedId = computed(() =>
-      settings.streamCellular == null ? SAME_AS_WIFI : settings.streamCellular
-    );
 
     const playbackCtx = () => ({
       tracks: pl.tracks,
@@ -112,22 +98,18 @@ export default defineComponent({
     }
 
     function chooseWifi(id) {
-      openMenu.value = null;
       setStreamWifi(id, playbackCtx());
     }
 
     function chooseCellular(id) {
-      openMenu.value = null;
       setStreamCellular(id === SAME_AS_WIFI ? null : id, playbackCtx());
     }
 
     function chooseDownload(id) {
-      openMenu.value = null;
       setDownloadCodec(id);
     }
 
     function choosePolicy(id) {
-      openMenu.value = null;
       setPlaybackPolicy(id);
     }
 
@@ -137,8 +119,11 @@ export default defineComponent({
 
     function onDocPointer(e) {
       if (!openMenu.value) return;
-      const el = qualityRoot.value;
-      if (el && !el.contains(e.target)) openMenu.value = null;
+      const t = e.target;
+      if (t && typeof t.closest === "function" && t.closest(".settings-select")) {
+        return;
+      }
+      openMenu.value = null;
     }
 
     const downloadsStorageLine = computed(() => {
@@ -243,13 +228,8 @@ export default defineComponent({
       showIdleDownloads,
       idleDownloadsSummary,
       openMenu,
-      qualityRoot,
-      wifiLabel,
-      cellularLabel,
-      cellularLeading,
+      cellularOptions,
       cellularSelectedId,
-      downloadLabel,
-      policyLabel,
       policyHint,
       playbackPolicies: PLAYBACK_POLICIES,
       closeSettings,
@@ -288,7 +268,7 @@ export default defineComponent({
           </button>
         </div>
 
-        <div v-if="!hideBrowserQuality" class="modal-section" ref="qualityRoot">
+        <div v-if="!hideBrowserQuality" class="modal-section">
           <div class="modal-section-title">Quality</div>
           <p class="modal-hint">
             Choose streaming quality
@@ -296,40 +276,36 @@ export default defineComponent({
             <template v-if="downloads.enabled"> Downloads use their own quality setting.</template>
           </p>
 
-          <QualitySelect
+          <SettingsSelect
             menu-id="wifi"
             label-id="wifi-codec-label"
             :field-label="streamFieldLabel"
             :options="settings.options"
             :selected-id="settings.streamWifi"
-            :trigger-label="wifiLabel"
             :open-menu="openMenu"
             @toggle="toggleMenu"
             @choose="chooseWifi"
           />
 
-          <QualitySelect
+          <SettingsSelect
             v-if="showNetworkQuality"
             menu-id="cellular"
             label-id="cell-codec-label"
             field-label="Streaming — Mobile data"
-            :options="settings.options"
+            :options="cellularOptions"
             :selected-id="cellularSelectedId"
-            :trigger-label="cellularLabel"
             :open-menu="openMenu"
-            :leading-options="cellularLeading"
             @toggle="toggleMenu"
             @choose="chooseCellular"
           />
 
-          <QualitySelect
+          <SettingsSelect
             v-if="downloads.enabled"
             menu-id="download"
             label-id="dl-codec-label"
             field-label="Downloads quality"
             :options="settings.options"
             :selected-id="settings.download"
-            :trigger-label="downloadLabel"
             :open-menu="openMenu"
             @toggle="toggleMenu"
             @choose="chooseDownload"
@@ -337,21 +313,20 @@ export default defineComponent({
             <p class="modal-hint" style="margin-top:8px;margin-bottom:0">
               Existing downloads keep their quality. Only new downloads use this setting.
             </p>
-          </QualitySelect>
+          </SettingsSelect>
 
-          <QualitySelect
+          <SettingsSelect
             menu-id="policy"
             label-id="policy-label"
             field-label="When a download exists"
             :options="playbackPolicies"
             :selected-id="settings.playbackPolicy"
-            :trigger-label="policyLabel"
             :open-menu="openMenu"
             @toggle="toggleMenu"
             @choose="choosePolicy"
           >
             <p class="modal-hint" style="margin-top:8px;margin-bottom:0">{{ policyHint }}</p>
-          </QualitySelect>
+          </SettingsSelect>
         </div>
         <div v-else class="modal-section">
           <div class="modal-section-title">Quality</div>
@@ -360,7 +335,11 @@ export default defineComponent({
           </p>
         </div>
 
-        <ExclusiveAudioPanel v-if="showExclusivePanel" />
+        <ExclusiveAudioPanel
+          v-if="showExclusivePanel"
+          :open-menu="openMenu"
+          @toggle="toggleMenu"
+        />
 
         <div class="modal-section">
           <div class="modal-section-title">Downloads</div>
