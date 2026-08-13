@@ -42,7 +42,8 @@ export function createCompanionSink() {
         handlers.onEnded?.();
       } else if (evt.type === "error" || evt.type === "disconnect") {
         handlers.onError?.(
-          evt.message || "Exclusive companion disconnected"
+          evt.message || "Exclusive companion disconnected",
+          evt.code || null
         );
       }
     });

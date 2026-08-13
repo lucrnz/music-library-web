@@ -3,7 +3,7 @@
  * @property {(t: number, d: number) => void} [onTime]
  * @property {(d: number) => void} [onDuration]
  * @property {() => void} [onEnded]
- * @property {(message: string) => void} [onError]
+ * @property {(message: string, code?: string | null) => void} [onError]
  * @property {(paused: boolean) => void} [onPauseState]
  */
 

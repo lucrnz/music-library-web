@@ -10,17 +10,17 @@ import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
 import { createCompanionSink } from "../playback/sinks/companionSink.js";
 import { createHtmlAudioSink } from "../playback/sinks/htmlAudioSink.js";
+import { ensurePreferredDevice } from "../exclusive/companionClient.js";
 import { PLAY_BLOCK_MESSAGES } from "../playBlock.js";
 import { showToast } from "./ui.js";
 import { PLACEHOLDER_COVER } from "../util.js";
 import {
   consumeMissingTechToast,
   getExclusiveProfileTag,
-  isExclusiveArmed,
   isExclusiveEnabled,
 } from "./exclusiveAudio.js";
 import { pl, commit, trackNeedsStreamPrepare } from "./playlist.js";
-import { getActiveStreamCodec, settings } from "./settings.js";
+import { getActiveStreamCodec, openSettings, settings } from "./settings.js";
 
 const VOLUME_STORAGE_KEY = "musicweb.volume";
 const EXPANDED_STORAGE_KEY = "musicweb.nowPlayingExpanded.v1";
@@ -263,18 +263,27 @@ function syncTransportFlags() {
   }
 }
 
-function hardStopCompanion(message) {
+/**
+ * @param {string | null | undefined} message
+ * @param {import('../playBlock.js').PlayBlockReason} [reason]
+ * @param {{ openSettings?: boolean }} [opts]
+ */
+function hardStopCompanion(message, reason = "exclusive_failed", opts = {}) {
   try {
     activeSink.stop();
   } catch {
     /* ignore */
   }
-  failPlayback(
-    player.playProfileId,
-    "exclusive_failed",
-    message || PLAY_BLOCK_MESSAGES.exclusive_failed
-  );
-  showToast(message || PLAY_BLOCK_MESSAGES.exclusive_failed);
+  const r = reason || "exclusive_failed";
+  const notice =
+    message ||
+    PLAY_BLOCK_MESSAGES[r] ||
+    PLAY_BLOCK_MESSAGES.exclusive_failed;
+  failPlayback(player.playProfileId, r, notice);
+  showToast(notice);
+  if (opts.openSettings || r === "exclusive_needs_device") {
+    openSettings();
+  }
   syncTransportFlags();
 }
 
@@ -312,9 +321,25 @@ function wireSinkHandlers() {
       }
     },
     onEnded: onSinkEnded,
-    onError: (message) => {
+    onError: (message, code) => {
+      if (code === "exclusive_needs_device") {
+        // Device preference gone: hard-stop only if exclusive transport was active.
+        if (activeSink.kind === "companion" || player.playSource !== "none") {
+          hardStopCompanion(
+            message || PLAY_BLOCK_MESSAGES.exclusive_needs_device,
+            "exclusive_needs_device",
+            { openSettings: true }
+          );
+        } else {
+          showToast(
+            message || PLAY_BLOCK_MESSAGES.exclusive_needs_device
+          );
+          openSettings();
+        }
+        return;
+      }
       if (activeSink.kind === "companion" || isExclusiveEnabled()) {
-        hardStopCompanion(message);
+        hardStopCompanion(message, "exclusive_failed");
         return;
       }
       failPlayback(
@@ -434,16 +459,19 @@ export async function playIndex(index) {
   clearPlaySourceState();
   setPlayNotice(null);
 
-  // Exclusive path: hard-fail when enabled but not armed; no HTML/OPFS fallback.
+  // Exclusive path: ensure live device, then companion only — no HTML/OPFS fallback.
   if (isExclusiveEnabled()) {
-    if (!isExclusiveArmed()) {
+    const gate = await ensurePreferredDevice({ timeoutMs: 1500 });
+    if (!gate.ok) {
       selectSink("htmlAudio");
-      failPlayback(
-        null,
-        "exclusive_unarmed",
-        PLAY_BLOCK_MESSAGES.exclusive_unarmed
-      );
-      showToast(PLAY_BLOCK_MESSAGES.exclusive_unarmed);
+      const reason = gate.reason || "exclusive_not_ready";
+      const notice =
+        PLAY_BLOCK_MESSAGES[reason] || PLAY_BLOCK_MESSAGES.exclusive_not_ready;
+      failPlayback(null, reason, notice);
+      showToast(notice);
+      if (reason === "exclusive_needs_device") {
+        openSettings();
+      }
       syncTransportFlags();
       return;
     }
@@ -480,7 +508,6 @@ export async function playIndex(index) {
 
     selectSink("companion");
     setPlaySourceState("streaming", tag, null);
-    // Honest label: exclusive stream (still "streaming" playSource vocabulary)
     player.playNotice = null;
     const result = await attemptPlay(url);
     if (!result.ok) {
@@ -488,7 +515,8 @@ export async function playIndex(index) {
       hardStopCompanion(
         result.err instanceof Error
           ? result.err.message
-          : PLAY_BLOCK_MESSAGES.exclusive_failed
+          : PLAY_BLOCK_MESSAGES.exclusive_failed,
+        "exclusive_failed"
       );
       return;
     }

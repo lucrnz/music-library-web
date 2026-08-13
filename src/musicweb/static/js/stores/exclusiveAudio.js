@@ -1,6 +1,9 @@
 /**
  * Exclusive-audio settings + companion connection snapshots.
  * Visible only for installed Mac PWA; arming gates playback sink.
+ *
+ * selectedDeviceId = user preference (persisted).
+ * companionDeviceId = live companion hog target (not persisted).
  */
 import { reactive } from "vue";
 import { apiGet } from "../api.js";
@@ -23,8 +26,15 @@ export const exclusiveAudio = reactive({
   enabled: false,
   hogToken: "",
   port: DEFAULT_PORT,
+  /** User preference (localStorage KEY_DEVICE). */
   /** @type {string|null} */
   selectedDeviceId: null,
+  /**
+   * Live companion hog target from status selected_device_id.
+   * Not persisted.
+   * @type {string|null}
+   */
+  companionDeviceId: null,
   /** @type {FormatMode} */
   formatMode: "prefer_source",
   /**
@@ -106,15 +116,17 @@ export function isExclusiveEnabled() {
 }
 
 /**
- * Armed = can route play through companion.
+ * Armed = can route play through companion (live hub target only).
  */
 export function isExclusiveArmed() {
-  return (
-    isExclusiveEnabled() &&
-    !!exclusiveAudio.selectedDeviceId &&
-    exclusiveAudio.connection === "connected" &&
-    exclusiveAudio.role === ROLE_CONTROLLER
-  );
+  if (!isExclusiveEnabled()) return false;
+  if (exclusiveAudio.connection !== "connected") return false;
+  if (exclusiveAudio.role !== ROLE_CONTROLLER) return false;
+  const live = exclusiveAudio.companionDeviceId;
+  if (!live) return false;
+  const list = exclusiveAudio.devices;
+  if (list.length > 0 && !list.some((d) => d.id === live)) return false;
+  return true;
 }
 
 /**
@@ -125,13 +137,44 @@ export function shouldHideBrowserQualityControls() {
 }
 
 /**
+ * Device row used for formatPolicy caps: preference if still listed, else live.
+ * @returns {{ id: string, name: string, sample_rates: number[], bit_depths: number[] } | null}
+ */
+function deviceForCaps() {
+  const list = exclusiveAudio.devices || [];
+  const pref = exclusiveAudio.selectedDeviceId;
+  if (pref) {
+    const hit = list.find((d) => d.id === pref);
+    if (hit) return hit;
+  }
+  const live = exclusiveAudio.companionDeviceId;
+  if (live) {
+    return list.find((d) => d.id === live) || null;
+  }
+  return null;
+}
+
+/**
+ * Snapshot for statusFace / details (reactive-friendly plain object).
+ */
+export function exclusiveStatusSnapshot() {
+  return {
+    enabled: isExclusiveEnabled(),
+    connection: exclusiveAudio.connection,
+    role: exclusiveAudio.role,
+    lastError: exclusiveAudio.lastError,
+    preferenceId: exclusiveAudio.selectedDeviceId,
+    liveId: exclusiveAudio.companionDeviceId,
+    devices: exclusiveAudio.devices,
+  };
+}
+
+/**
  * @param {import('../models/track.js').Track | null | undefined} track
  * @returns {string|null}
  */
 export function getExclusiveProfileTag(track) {
-  const device = exclusiveAudio.devices.find(
-    (d) => d.id === exclusiveAudio.selectedDeviceId
-  );
+  const device = deviceForCaps();
   const caps = device
     ? {
         sample_rates: device.sample_rates || device.sampleRates || [],
@@ -167,7 +210,6 @@ export function consumeMissingTechToast(trackId) {
 export function setExclusiveEnabled(on) {
   exclusiveAudio.enabled = !!on;
   persist();
-  // Companion client reacts via store watchers.
   import("../exclusive/companionClient.js")
     .then((m) => m.syncCompanionConnection())
     .catch(() => {});
@@ -197,14 +239,34 @@ export function setFormatMode(mode) {
   persist();
 }
 
+/**
+ * Clear preference + live and persist (device gone / user clear).
+ */
+export function clearSelectedDevicePreference() {
+  exclusiveAudio.selectedDeviceId = null;
+  exclusiveAudio.companionDeviceId = null;
+  persist();
+}
+
+/**
+ * @param {string|null} id
+ */
 export function setSelectedDeviceId(id) {
   exclusiveAudio.selectedDeviceId = id || null;
-  persist();
-  if (id) {
-    import("../exclusive/companionClient.js")
-      .then((m) => m.requestSetDevice(id))
-      .catch(() => {});
+  if (!id) {
+    exclusiveAudio.companionDeviceId = null;
   }
+  persist();
+  import("../exclusive/companionClient.js")
+    .then((m) => m.syncPreferredDevice())
+    .catch(() => {});
+}
+
+/**
+ * @param {string|null} id
+ */
+export function setCompanionDeviceId(id) {
+  exclusiveAudio.companionDeviceId = id || null;
 }
 
 async function fetchExclusiveFormats() {
@@ -230,7 +292,6 @@ async function fetchExclusiveFormats() {
 export async function initExclusiveAudio() {
   exclusiveAudio.capable = canShowExclusiveUi();
   loadPersisted();
-  // Generate stable session id for controller lock identity
   if (!exclusiveAudio.sessionId) {
     try {
       exclusiveAudio.sessionId =

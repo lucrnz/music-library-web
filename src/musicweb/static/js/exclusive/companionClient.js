@@ -1,8 +1,13 @@
 /**
  * WebSocket client to loopback exclusive companion (ws://127.0.0.1:port).
  */
+import { PLAY_BLOCK_MESSAGES } from "../playBlock.js";
 import {
+  clearSelectedDevicePreference,
   exclusiveAudio,
+  isExclusiveArmed,
+  isExclusiveEnabled,
+  setCompanionDeviceId,
 } from "../stores/exclusiveAudio.js";
 import {
   HEARTBEAT_INTERVAL_MS,
@@ -75,6 +80,10 @@ function clearReconnect() {
   }
 }
 
+function clearLiveDevice() {
+  setCompanionDeviceId(null);
+}
+
 function send(msg) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return false;
   try {
@@ -95,6 +104,81 @@ function scheduleReconnect() {
   }, delay);
 }
 
+/**
+ * If controller + preference set and live missing/mismatch → set_device.
+ * Single place for re-arm; no auto-pick.
+ */
+export function syncPreferredDevice() {
+  if (exclusiveAudio.role !== ROLE_CONTROLLER) return false;
+  const pref = exclusiveAudio.selectedDeviceId;
+  if (!pref) return false;
+  if (
+    exclusiveAudio.devices.length > 0 &&
+    !exclusiveAudio.devices.some((d) => d.id === pref)
+  ) {
+    return false;
+  }
+  const live = exclusiveAudio.companionDeviceId;
+  if (live === pref) return true;
+  return requestSetDevice(pref);
+}
+
+/**
+ * Ensure preference is live on companion before exclusive play.
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<{ ok: true } | { ok: false, reason: import('../playBlock.js').PlayBlockReason }>}
+ */
+export async function ensurePreferredDevice({ timeoutMs = 1500 } = {}) {
+  if (!isExclusiveEnabled()) {
+    return { ok: false, reason: "exclusive_not_ready" };
+  }
+  if (!(exclusiveAudio.hogToken || "").trim()) {
+    return { ok: false, reason: "exclusive_not_ready" };
+  }
+  if (exclusiveAudio.connection === "rejected") {
+    return { ok: false, reason: "exclusive_not_ready" };
+  }
+  if (exclusiveAudio.role === ROLE_READONLY) {
+    return { ok: false, reason: "exclusive_readonly" };
+  }
+  if (
+    exclusiveAudio.connection !== "connected" ||
+    exclusiveAudio.role !== ROLE_CONTROLLER
+  ) {
+    return { ok: false, reason: "exclusive_not_ready" };
+  }
+  if (!exclusiveAudio.selectedDeviceId) {
+    return { ok: false, reason: "exclusive_needs_device" };
+  }
+  if (
+    isExclusiveArmed() &&
+    exclusiveAudio.companionDeviceId === exclusiveAudio.selectedDeviceId
+  ) {
+    return { ok: true };
+  }
+
+  syncPreferredDevice();
+
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (Date.now() < deadline) {
+    if (
+      isExclusiveArmed() &&
+      exclusiveAudio.companionDeviceId === exclusiveAudio.selectedDeviceId
+    ) {
+      return { ok: true };
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  if (
+    isExclusiveArmed() &&
+    exclusiveAudio.companionDeviceId === exclusiveAudio.selectedDeviceId
+  ) {
+    return { ok: true };
+  }
+  return { ok: false, reason: "exclusive_needs_device" };
+}
+
 function handleMessage(raw) {
   let msg;
   try {
@@ -111,11 +195,8 @@ function handleMessage(raw) {
     exclusiveAudio.lastError = null;
     reconnectAttempt = 0;
     applyStatus(msg);
-    // Controller: re-arm preferred device (exclusive) + refresh device list.
     if (msg.role === ROLE_CONTROLLER) {
-      if (exclusiveAudio.selectedDeviceId) {
-        requestSetDevice(exclusiveAudio.selectedDeviceId);
-      }
+      syncPreferredDevice();
       send(envelope(MSG_LIST_DEVICES));
     }
     emit({ type: "hello_ok", role: msg.role });
@@ -125,6 +206,7 @@ function handleMessage(raw) {
   if (type === MSG_HELLO_REJECT) {
     exclusiveAudio.connection = "rejected";
     exclusiveAudio.role = null;
+    clearLiveDevice();
     exclusiveAudio.lastError = msg.reason || "rejected";
     emit({ type: "hello_reject", reason: msg.reason });
     return;
@@ -145,12 +227,16 @@ function handleMessage(raw) {
       sample_rates: d.sample_rates || d.sampleRates || [],
       bit_depths: d.bit_depths || d.bitDepths || [],
     }));
-    // Keep selected device if still present
-    if (
-      exclusiveAudio.selectedDeviceId &&
-      !exclusiveAudio.devices.some((d) => d.id === exclusiveAudio.selectedDeviceId)
-    ) {
-      exclusiveAudio.selectedDeviceId = null;
+    const pref = exclusiveAudio.selectedDeviceId;
+    if (pref && !exclusiveAudio.devices.some((d) => d.id === pref)) {
+      clearSelectedDevicePreference();
+      emit({
+        type: "error",
+        code: "exclusive_needs_device",
+        message: PLAY_BLOCK_MESSAGES.exclusive_needs_device,
+      });
+    } else {
+      syncPreferredDevice();
     }
     emit({ type: "devices", devices: exclusiveAudio.devices });
     return;
@@ -183,12 +269,16 @@ function handleMessage(raw) {
 }
 
 function applyStatus(msg) {
-  // selectedDeviceId is user preference (localStorage). Companion
-  // selected_device_id is the live hog target only — never overwrite
-  // preference with null after ensure-release.
-  if (msg.selected_device_id) {
-    exclusiveAudio.selectedDeviceId = msg.selected_device_id;
+  // Live hog target only — never write user preference from companion.
+  if ("selected_device_id" in msg) {
+    const raw = msg.selected_device_id;
+    if (raw) {
+      setCompanionDeviceId(String(raw));
+    } else {
+      clearLiveDevice();
+    }
   }
+
   if (typeof msg.playing === "boolean") {
     exclusiveAudio.companionPlaying = msg.playing;
   }
@@ -198,6 +288,7 @@ function applyStatus(msg) {
   // TTL demotion: socket stays open so disconnect does not fire — hard-stop via error.
   if (msg.role === ROLE_READONLY && msg.reason === "controller_ttl") {
     exclusiveAudio.lastError = "controller_ttl";
+    clearLiveDevice();
     emit({
       type: "error",
       code: "controller_lost",
@@ -258,6 +349,7 @@ function connectNow() {
     exclusiveAudio.connection = "disconnected";
     exclusiveAudio.role = null;
     exclusiveAudio.companionPlaying = false;
+    clearLiveDevice();
     if (!intentionalClose && wantConnected) {
       emit({ type: "disconnect" });
       scheduleReconnect();
@@ -281,6 +373,7 @@ export function disconnectCompanion() {
   }
   exclusiveAudio.connection = "disconnected";
   exclusiveAudio.role = null;
+  clearLiveDevice();
 }
 
 /**
@@ -297,7 +390,6 @@ export function syncCompanionConnection() {
     return;
   }
   wantConnected = true;
-  // If port/token changed while open, reconnect.
   if (ws && ws.readyState === WebSocket.OPEN) {
     intentionalClose = true;
     try {
@@ -357,4 +449,3 @@ export function companionSeek(t) {
 export function companionSetVolume(volume0to100) {
   return send(envelope(MSG_SET_VOLUME, { volume: volume0to100 }));
 }
-
