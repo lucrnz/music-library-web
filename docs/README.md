@@ -15,7 +15,8 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 
 ## Start here
 
-- `docs/development/commands.md`: install, run, migrate.
+- `docs/setup.md`: operator on-ramp (prerequisites, configure, run, PWA notes).
+- `docs/development/commands.md`: install, run, library CLI, migrate.
 - `docs/development/project-structure.md`: repository layout and ownership boundaries.
 - `docs/architecture/index.md`: architecture map and technical decisions.
 - `docs/product/core-guidelines.md`: product behavior and audio quality principles.

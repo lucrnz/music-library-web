@@ -23,6 +23,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (no bundler). Strea
 ## Deep dives
 
 - [Documentation map](docs/README.md)
+- [Setup (operator on-ramp)](docs/setup.md)
 - [Commands](docs/development/commands.md)
 - [Project structure](docs/development/project-structure.md)
 - [Environment and config](docs/development/environment.md)

@@ -1,24 +1,17 @@
-# Music Library Web Server
-
-Browse and stream a lossless music library over your LAN. Mobile-first web UI with folder / artist / album discovery, session queue, saved playlists, and live multi-codec transcoding via ffmpeg (libsoxr + Opus / FLAC).
+# Musicweb
 
 > **Disclaimer:** This project has been developed heavily with AI-assisted tools. The developer does not guarantee production readiness, stability, or security. Use it at your own risk. Scope is driven solely by the developer’s interests; pull requests and feature requests are not accepted.
 
-## Documentation
+Musicweb is a personal LAN library player: stream your own lossless collection to phones and desktops with high-fidelity delivery. There is no authentication — anyone who can reach the port can browse and stream. Keep it on your network; do not expose it to the public internet.
 
-Start with [docs/README.md](./docs/README.md). Agent-specific operating rules live in [AGENTS.md](./AGENTS.md).
+- **High-fidelity streaming** from a packed-lossless library, with transparent browser-oriented encodes
+- **Mobile-first browse** — folders, artists, albums, and search on phone and desktop
+- **Offline downloads** on the device, with separate stream and download quality preferences (including Wi‑Fi vs cellular when the browser reports connection type)
+- **Installable PWA shell** when you open a secure-context origin
 
-Environment variables (including PWA public origin / secure context): [docs/development/environment.md](./docs/development/environment.md). Installable shell design: [docs/systems/pwa.md](./docs/systems/pwa.md).
+## Setup
 
-Quick start:
-
-```bash
-cp .env.example .env   # set MUSIC_LIBRARY_PATH; optional MUSICWEB_PUBLIC_ORIGIN
-uv sync
-uv run musicweb
-```
-
-PWA install requires opening a **secure-context** URL (`https://…` or `http://localhost` / `127.0.0.1`), not plain LAN HTTP.
+Operator on-ramp (prerequisites, configure, run, PWA notes): [docs/setup.md](./docs/setup.md).
 
 ## License
 
