@@ -67,6 +67,14 @@ class ExclusiveHub:
         except asyncio.CancelledError:
             return
 
+    async def _ensure_no_controller_exclusive(self) -> None:
+        """Drop exclusive hold after controller is gone. Call only when _controller_id is None."""
+        if self._controller_id is not None:
+            return
+        # Release mpv first; only clear hub device id after success (honest status on failure).
+        await asyncio.to_thread(self._player.release_device)
+        self._device_id = None
+
     async def _check_ttl(self) -> None:
         async with self._lock:
             cid = self._controller_id
@@ -75,11 +83,14 @@ class ExclusiveHub:
             sess = self._clients.get(cid)
             if sess is None:
                 self._controller_id = None
+                await self._ensure_no_controller_exclusive()
+                await self._broadcast_status_unlocked()
                 return
             if time.monotonic() - sess.last_heartbeat > p.CONTROLLER_TTL_S:
                 logger.info("Controller %s TTL expired", cid)
                 sess.role = p.ROLE_READONLY
                 self._controller_id = None
+                await self._ensure_no_controller_exclusive()
                 await self._broadcast_status_unlocked()
                 try:
                     await self._send(
@@ -214,6 +225,7 @@ class ExclusiveHub:
             if self._controller_id == session_id:
                 self._controller_id = None
                 logger.info("Controller %s disconnected; lock free", session_id)
+                await self._ensure_no_controller_exclusive()
             await self._broadcast_status_unlocked()
 
     async def handle_message(

@@ -80,13 +80,13 @@ class MpvPlayer:
 
         self._tmpdir = tempfile.TemporaryDirectory(prefix="musicweb-mpv-")
         self._ipc_path = Path(self._tmpdir.name) / "ipc.sock"
+        # Exclusive is armed only via set_device (not a process-wide startup flag).
         cmd = [
             self._mpv_path,
             "--idle=yes",
             "--force-window=no",
             "--no-video",
             "--keep-open=no",
-            "--audio-exclusive=yes",
             "--gapless-audio=no",
             "--pause",
             "--volume=100",
@@ -141,8 +141,10 @@ class MpvPlayer:
                 self._tmpdir = None
 
     def set_device(self, mpv_device: str) -> None:
+        """Select output and arm exclusive mode for that device."""
         with self._lock:
             self._device = mpv_device
+            self._command_unlocked("set_property", "audio-exclusive", True)
             self._command_unlocked("set_property", "audio-device", mpv_device)
 
     def load(self, url: str) -> None:
@@ -167,12 +169,30 @@ class MpvPlayer:
             self._paused = False
 
     def stop(self) -> None:
+        """Stop playback; keep selected device and exclusive arming."""
         with self._lock:
-            self._command_unlocked("stop")
-            self._url = None
-            self._position = 0.0
-            self._duration = 0.0
-            self._paused = True
+            self._clear_transport_unlocked()
+
+    def release_device(self) -> None:
+        """Stop playback and drop exclusive Core Audio hold (idle process stays up)."""
+        with self._lock:
+            self._clear_transport_unlocked()
+            self._command_unlocked("set_property", "audio-exclusive", False)
+            self._command_unlocked("set_property", "audio-device", "auto")
+            self._device = None
+            logger.info("Exclusive device released")
+
+    def _clear_transport_unlocked(self) -> None:
+        if self._sock is not None:
+            try:
+                self._command_unlocked("stop")
+            except Exception:
+                # Still clear local state so status matches intent.
+                pass
+        self._url = None
+        self._position = 0.0
+        self._duration = 0.0
+        self._paused = True
 
     def seek(self, seconds: float) -> None:
         with self._lock:
