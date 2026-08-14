@@ -60,6 +60,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **Stream encode policy** (profiles, aresample/dither rules) lives under `transcode/`. Do not reimplement encode argv in routes.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is no-bundler ESM under `static/js/`. Stores hold client state; components render; `api.js` talks to the server.
+- **Row action menus** live under `static/js/components/menu/`. Desktop media queries for new JS live in `static/js/layout.js`. See `docs/frontend/conventions.md`.
 - **Offline downloads** stay under `static/js/downloads/` and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.
 

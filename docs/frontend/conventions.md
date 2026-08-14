@@ -17,6 +17,7 @@
 - **SPA fallback:** FastAPI serves the same shell for client routes so refresh works on `/folders`, `/artists/…`, etc.
 - **Stores** hold player, playlist/queue, settings, and UI chrome. Components should prefer store APIs over ad-hoc globals.
 - **Library UI** lives under `components/library/`; player under `components/player/`; settings modal under `components/settings/`.
+- **Row action menus** live under `components/menu/` (`ActionCard`, `AnchoredMenu`, thin `ActionMenu` picker). Callers own open/anchor state and pass items with `run()`. Do not add `stores/actionMenu.js`. Do not add an `actions` mode to `dialog.js`. A second surface mounts its own picker; do not invent a second overlay system.
 - **Downloads** (`static/js/downloads/`) own client-side offline catalog (OPFS + IndexedDB). Keep offline concerns out of server index code. Design, storage split, queue policy, and import-surface rules: `docs/systems/downloads.md`.
 - **Playback / quality** (play source, stream vs download policy, prepare): `docs/systems/playback.md`.
 - **Exclusive audio** (Mac PWA + companion sinks; optional): `docs/systems/exclusive-audio.md`. Player transport goes through sinks — do not re-export a shared `HTMLAudioElement` from `player.js`.
@@ -34,8 +35,9 @@ To upgrade Vue/Router: change version + URL in `vendor_deps.py` and restart with
 - Desktop: two-pane library + playlist with persistent player bar (breakpoint owned by CSS).
 - Codec list in settings reflects **probed** browser decode support (`codecSupport.js` / related probes), not a static marketing list alone — see `docs/systems/playback.md`.
 - **No native browser dialogs.** Use `confirmDialog` / `promptDialog` from `stores/dialog.js` (themed via `AppDialog`) for blocking confirm/prompt flows, and `showToast` from `stores/ui.js` for transient errors and soft info. Do not call `alert`, `confirm`, or `prompt`.
-- **Modal scroll lock:** `stores/modalLock.js` acquire/release tokens only — settings, downloads manager, and dialog must not toggle `body.modal-open` directly.
-- **Interactive downloads:** user-facing `downloadTrack(s)` live in `downloads/ui.js` (near-quota confirm). Pure enqueue / lifecycle stay in `downloads/index.js` (no dialog imports). Details: `docs/systems/downloads.md`.
+- **Action-menu chrome** follows `(min-width: 900px)` via `layout.js` (`DESKTOP_MEDIA`, `useDesktopViewport()`): centered card below, anchored dropdown at/above. Same breakpoint as the dual-pane shell. New JS does not copy the query string. Close the menu before `confirmDialog` / `promptDialog` (picker closes, then `run()`). The card acquires modal-lock token `"action-menu"`; the desktop dropdown does not. Queue rows: overflow button + desktop `contextmenu` (no native browser menu; no long-press unless product revisits it). The caller closes on route change and when Edit is entered; the picker does not import the router.
+- **Modal scroll lock:** `stores/modalLock.js` acquire/release tokens only — settings, downloads manager, dialog, and the action-menu card must not toggle `body.modal-open` directly.
+- **Interactive downloads:** user-facing `downloadTrack(s)` and `confirmRemoveDownloadedTrack` live in `downloads/ui.js` (near-quota / remove confirms). Pure enqueue / lifecycle stay in `downloads/index.js` (no dialog imports). Download **kind** join (`downloads/actionKind.js`) returns `{ kind }` only; icon titles, glyphs, disabled, and menu labels stay with their callers. Details: `docs/systems/downloads.md`.
 
 ## Guardrails
 
