@@ -16,12 +16,12 @@ import {
   pauseAllDownloads,
   removeDownloadedAlbum,
   removeDownloadedArtist,
-  removeDownloadedTrack,
   resumeAllDownloads,
   retryQueueItem,
 } from "../../downloads/index.js";
 import { downloads } from "../../downloads/state.js";
 import { formatBytes } from "../../downloads/storageInfo.js";
+import { confirmRemoveDownloadedTrack } from "../../downloads/ui.js";
 import { confirmDialog } from "../../stores/dialog.js";
 import { settings } from "../../stores/settings.js";
 import Icon from "../icons/Icon.js";
@@ -134,14 +134,7 @@ export default defineComponent({
     onUnmounted(() => document.removeEventListener("keydown", onKey));
 
     async function onDeleteTrack(trackId) {
-      const ok = await confirmDialog({
-        title: "Remove download",
-        message: "Remove this download from this device?",
-        confirmLabel: "Remove",
-        danger: true,
-      });
-      if (!ok) return;
-      await removeDownloadedTrack(trackId);
+      if (!(await confirmRemoveDownloadedTrack(trackId))) return;
       await loadTree();
     }
 

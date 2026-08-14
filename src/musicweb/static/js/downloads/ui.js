@@ -6,6 +6,7 @@ import {
   enqueueTrack,
   enqueueTracks,
   getNearQuotaWarning,
+  removeDownloadedTrack,
 } from "./index.js";
 
 /**
@@ -38,4 +39,22 @@ export async function downloadTracks(tracks) {
   if (!list.length) return;
   if (!(await confirmNearQuotaIfNeeded(list.length))) return;
   await enqueueTracks(list);
+}
+
+/**
+ * Confirm + remove a local download. Shared by the manager and queue menu.
+ * @param {string} trackId
+ * @returns {Promise<boolean>} true if the download was removed
+ */
+export async function confirmRemoveDownloadedTrack(trackId) {
+  if (!trackId) return false;
+  const ok = await confirmDialog({
+    title: "Remove download",
+    message: "Remove this download from this device?",
+    confirmLabel: "Remove",
+    danger: true,
+  });
+  if (!ok) return false;
+  await removeDownloadedTrack(trackId);
+  return true;
 }

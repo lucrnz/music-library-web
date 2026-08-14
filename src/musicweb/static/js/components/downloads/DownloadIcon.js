@@ -3,12 +3,10 @@
  */
 import { computed, defineComponent } from "vue";
 import {
-  catalogIndex,
-  trackDownloadState,
-} from "../../downloads/catalog.js";
-import { downloads } from "../../downloads/state.js";
+  downloadActionKind,
+  isBusyDownloadKind,
+} from "../../downloads/actionKind.js";
 import { downloadTrack } from "../../downloads/ui.js";
-import { settings } from "../../stores/settings.js";
 import { showToast } from "../../stores/ui.js";
 import Icon from "../icons/Icon.js";
 
@@ -19,18 +17,10 @@ export default defineComponent({
     track: { type: Object, required: true },
   },
   setup(props) {
-    const state = computed(() => {
-      if (!downloads.enabled) return "hidden";
-      if (!props.track?.id || props.track.isMissing) return "hidden";
-      // Touch reactive sources used by the on-read join.
-      void downloads.queue;
-      void settings.download;
-      void catalogIndex.byTrack;
-      return trackDownloadState(props.track.id);
-    });
+    const kind = computed(() => downloadActionKind(props.track).kind);
 
     const title = computed(() => {
-      switch (state.value) {
+      switch (kind.value) {
         case "ready":
           return "Downloaded";
         case "other":
@@ -41,7 +31,7 @@ export default defineComponent({
           return "Downloading…";
         case "paused":
           return "Download paused";
-        case "failed":
+        case "retry":
           return "Download failed — tap to retry";
         default:
           return "Download";
@@ -49,35 +39,22 @@ export default defineComponent({
     });
 
     const iconName = computed(() => {
-      switch (state.value) {
+      switch (kind.value) {
         case "ready":
           return "check";
         case "other":
           return "download-check";
-        case "failed":
-          return "download";
-        case "pending":
-        case "active":
-        case "paused":
-          return "download";
         default:
           return "download";
       }
     });
 
-    const busy = computed(
-      () =>
-        state.value === "pending" ||
-        state.value === "active" ||
-        state.value === "paused"
-    );
+    const busy = computed(() => isBusyDownloadKind(kind.value));
 
     async function onClick(e) {
       e.stopPropagation();
       e.preventDefault();
-      if (!downloads.enabled || !props.track?.id) return;
-      if (state.value === "ready") return;
-      if (busy.value) return;
+      if (kind.value === "hide" || kind.value === "ready" || busy.value) return;
       try {
         await downloadTrack(props.track);
       } catch (err) {
@@ -86,22 +63,22 @@ export default defineComponent({
       }
     }
 
-    return { state, title, iconName, busy, onClick, downloads };
+    return { kind, title, iconName, busy, onClick };
   },
   template: `
     <button
-      v-if="state !== 'hidden'"
+      v-if="kind !== 'hide'"
       type="button"
       class="icon-btn row-download"
       :class="{
-        'is-ready': state === 'ready',
-        'is-other': state === 'other',
+        'is-ready': kind === 'ready',
+        'is-other': kind === 'other',
         'is-busy': busy,
-        'is-failed': state === 'failed',
+        'is-failed': kind === 'retry',
       }"
       :title="title"
       :aria-label="title"
-      :disabled="busy || state === 'ready'"
+      :disabled="busy || kind === 'ready'"
       @click="onClick"
     >
       <span v-if="busy" class="dl-spinner" aria-hidden="true"></span>
