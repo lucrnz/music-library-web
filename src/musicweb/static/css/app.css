@@ -411,6 +411,14 @@ main {
   display: flex;
 }
 
+.row-list.editing .row .row-menu {
+  display: none;
+}
+
+#view-playlist .row {
+  -webkit-touch-callout: none;
+}
+
 .row-list.editing .row .row-dur,
 .row-list.editing .row .eq {
   display: none;

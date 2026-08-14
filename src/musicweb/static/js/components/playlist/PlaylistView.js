@@ -1,6 +1,7 @@
-import { defineComponent, onMounted, ref, watch } from "vue";
+import { computed, defineComponent, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { coverUrl, fetchPlaylistTracks } from "../../api.js";
+import { isDesktopViewport, useDesktopViewport } from "../../layout.js";
 import { formatTime } from "../../util.js";
 import {
   pl,
@@ -22,15 +23,26 @@ import { downloadTracks } from "../../downloads/ui.js";
 import { confirmDialog, promptDialog } from "../../stores/dialog.js";
 import { showToast } from "../../stores/ui.js";
 import Icon from "../icons/Icon.js";
+import ActionMenu from "../menu/ActionMenu.js";
+import {
+  buildQueueMenuItems,
+  slotKey,
+  slotMatches,
+} from "./queueMenuItems.js";
 
 export default defineComponent({
   name: "PlaylistView",
-  components: { Icon },
+  components: { Icon, ActionMenu },
   setup() {
     const route = useRoute();
+    const desktop = useDesktopViewport();
     const saved = ref([]);
     const dropTarget = ref(-1);
     const draggingFrom = ref(-1);
+    const menuIndex = ref(-1);
+    const menuOpenedKey = ref("");
+    const menuAnchor = ref(/** @type {object|null} */ (null));
+    const menuRestoreEl = ref(/** @type {HTMLElement|null} */ (null));
 
     async function refreshSaved() {
       try {
@@ -48,9 +60,64 @@ export default defineComponent({
       clearPlaylist(stopPlayback);
     }
 
+    function closeMenu() {
+      menuIndex.value = -1;
+      menuOpenedKey.value = "";
+      menuAnchor.value = null;
+      menuRestoreEl.value = null;
+    }
+
+    const menuSlotMatches = computed(() =>
+      slotMatches(menuIndex.value, menuOpenedKey.value)
+    );
+    const menuOpen = computed(() => menuSlotMatches.value);
+    const menuItems = computed(() => {
+      if (!menuSlotMatches.value) return [];
+      return buildQueueMenuItems({
+        track: pl.tracks[menuIndex.value],
+        index: menuIndex.value,
+        openedKey: menuOpenedKey.value,
+      });
+    });
+
+    function openMenu(index, anchor, restoreEl) {
+      if (pl.editing) return;
+      const track = pl.tracks[index];
+      if (!track) return;
+      menuIndex.value = index;
+      menuOpenedKey.value = slotKey(track);
+      menuAnchor.value = anchor;
+      menuRestoreEl.value = restoreEl || null;
+    }
+
+    function onMenuClick(index, e) {
+      e.stopPropagation();
+      e.preventDefault();
+      if (pl.editing) return;
+      if (menuOpen.value && menuIndex.value === index) {
+        closeMenu();
+        return;
+      }
+      openMenu(index, { kind: "el", el: e.currentTarget }, e.currentTarget);
+    }
+
+    function onRowContextMenu(index, e) {
+      e.preventDefault();
+      if (pl.editing) return;
+      if (!isDesktopViewport()) return;
+      const btn = e.currentTarget.querySelector(".row-menu");
+      openMenu(index, { kind: "point", x: e.clientX, y: e.clientY }, btn);
+    }
+
     function onRowClick(index, e) {
       if (pl.editing) return;
-      if (e.target.closest(".row-delete") || e.target.closest(".row-drag")) return;
+      if (
+        e.target.closest(".row-delete") ||
+        e.target.closest(".row-drag") ||
+        e.target.closest(".row-menu")
+      ) {
+        return;
+      }
       playIndex(index);
     }
 
@@ -172,16 +239,38 @@ export default defineComponent({
       }
     );
 
+    watch(() => route.fullPath, closeMenu);
+
+    watch(
+      () => pl.editing,
+      (editing) => {
+        if (editing) closeMenu();
+      }
+    );
+
+    watch(menuSlotMatches, (matches) => {
+      if (!matches && menuIndex.value >= 0) closeMenu();
+    });
+
     return {
       pl,
       player,
       saved,
       dropTarget,
       draggingFrom,
+      desktop,
+      menuOpen,
+      menuItems,
+      menuAnchor,
+      menuRestoreEl,
+      menuIndex,
       formatTime,
       toggleEdit,
       onClear,
       onRowClick,
+      onRowContextMenu,
+      onMenuClick,
+      closeMenu,
       onDelete,
       onDragStart,
       onLoadSaved,
@@ -264,6 +353,7 @@ export default defineComponent({
           }"
           :data-pl-index="index"
           @click="(e) => onRowClick(index, e)"
+          @contextmenu="(e) => onRowContextMenu(index, e)"
         >
           <button
             type="button"
@@ -285,6 +375,15 @@ export default defineComponent({
             <span class="row-sub">{{ trackSub(track) }}</span>
           </span>
           <span class="row-dur">{{ formatTime(track.duration) }}</span>
+          <button
+            type="button"
+            class="icon-btn row-menu"
+            title="Track actions"
+            aria-label="Track actions"
+            :aria-haspopup="desktop ? 'menu' : 'dialog'"
+            :aria-expanded="menuOpen && menuIndex === index ? 'true' : 'false'"
+            @click="(e) => onMenuClick(index, e)"
+          ><Icon name="more-vert" /></button>
           <span
             class="row-drag"
             title="Drag to reorder"
@@ -293,6 +392,13 @@ export default defineComponent({
           ><Icon name="drag" /></span>
         </div>
       </div>
+      <ActionMenu
+        :open="menuOpen"
+        :items="menuItems"
+        :anchor="menuAnchor"
+        :restore-el="menuRestoreEl"
+        @close="closeMenu"
+      />
     </section>
   `,
 });
