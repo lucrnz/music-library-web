@@ -10,9 +10,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from starlette.responses import Response
 
-from musicweb.diag.emit import utc_ts
-from musicweb.diag.store import append
-from musicweb.timeutil import parse_iso_utc
+from musicweb.diag.envelope import envelope
+from musicweb.diag.store import append_many
 
 router = APIRouter(prefix="/api", tags=["diag"])
 
@@ -42,12 +41,6 @@ class IngestBody(BaseModel):
     events: list[ClientEvent] = Field(...)
 
 
-def _event_ts(raw: str | None) -> str:
-    if raw and parse_iso_utc(raw) is not None:
-        return raw
-    return utc_ts()
-
-
 @router.post("/diag/events")
 def ingest_events(request: Request, payload: IngestBody) -> Response:
     if len(payload.events) > 100:
@@ -56,20 +49,23 @@ def ingest_events(request: Request, payload: IngestBody) -> Response:
     directory = getattr(settings, "diag_dir", None)
     if directory is None:
         raise HTTPException(status_code=500, detail="diag store unavailable")
+    prepared: list[dict[str, Any]] = []
     for item in payload.events:
         data = item.data if item.data is not None else {}
         blob = json.dumps(data, ensure_ascii=False, allow_nan=False)
         if len(blob.encode("utf-8")) > _MAX_DATA_BYTES:
             raise HTTPException(status_code=400, detail="event data too large")
-        record = {
-            "ts": _event_ts(item.ts),
-            "source": "client",
-            "event": item.event,
-            "level": item.level or "info",
-            "client_id": item.client_id or None,
-            "session_id": item.session_id or None,
-            "play_id": item.play_id or None,
-            "data": data,
-        }
-        append(directory, record)
+        prepared.append(
+            envelope(
+                source="client",
+                event=item.event,
+                level=item.level,
+                client_id=item.client_id or None,
+                session_id=item.session_id or None,
+                play_id=item.play_id or None,
+                data=data,
+                ts=item.ts,
+            )
+        )
+    append_many(directory, prepared)
     return Response(status_code=204)

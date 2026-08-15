@@ -19,8 +19,6 @@ COOKIE_MODE = "musicweb_mode"
 
 Mode = Literal["errors", "everything"]
 
-_MODES = frozenset({"errors", "everything"})
-
 
 @dataclass(frozen=True, slots=True)
 class DiagIds:
@@ -39,8 +37,8 @@ def _clean(value: str | None) -> str | None:
 
 def normalize_mode(value: str | None) -> Mode:
     text = (value or "").strip().lower()
-    if text in _MODES:
-        return text  # type: ignore[return-value]
+    if text == "everything":
+        return "everything"
     return "errors"
 
 

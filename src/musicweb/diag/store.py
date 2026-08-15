@@ -24,6 +24,32 @@ def events_filename(day: datetime | None = None) -> str:
     return f"events-{when.date().isoformat()}.jsonl"
 
 
+def append_many(
+    directory: Path,
+    records: list[dict],
+    *,
+    day: datetime | None = None,
+    max_bytes: int = DIAG_DIR_MAX_BYTES,
+) -> Path | None:
+    """Append *records* as JSON lines under one lock, then rotate once."""
+    if not records:
+        return None
+    for record in records:
+        if not isinstance(record, dict):
+            raise TypeError(f"diag record must be a dict, got {type(record)!r}")
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / events_filename(day)
+    lines = "".join(
+        json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n"
+        for record in records
+    )
+    with _append_lock:
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(lines)
+        maybe_rotate(directory, max_bytes=max_bytes)
+    return path
+
+
 def append(
     directory: Path,
     record: dict,
@@ -32,15 +58,9 @@ def append(
     max_bytes: int = DIAG_DIR_MAX_BYTES,
 ) -> Path:
     """Serialize *record* as one JSON line and append. Returns the file path."""
-    if not isinstance(record, dict):
-        raise TypeError(f"diag record must be a dict, got {type(record)!r}")
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / events_filename(day)
-    line = json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n"
-    with _append_lock:
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(line)
-        maybe_rotate(directory, max_bytes=max_bytes)
+    path = append_many(directory, [record], day=day, max_bytes=max_bytes)
+    if path is None:
+        raise RuntimeError("append_many returned None for a single record")
     return path
 
 
@@ -51,7 +71,7 @@ def maybe_rotate(directory: Path, *, max_bytes: int = DIAG_DIR_MAX_BYTES) -> Non
     skipped; rotation must not raise into the caller.
     """
     try:
-        files = _event_files(directory)
+        files = event_files(directory)
     except OSError:
         return
     if len(files) < 2:
@@ -79,7 +99,8 @@ def maybe_rotate(directory: Path, *, max_bytes: int = DIAG_DIR_MAX_BYTES) -> Non
         total -= size
 
 
-def _event_files(directory: Path) -> list[Path]:
+def event_files(directory: Path) -> list[Path]:
+    """Matching ``events-YYYY-MM-DD.jsonl`` files, oldest name first."""
     if not directory.is_dir():
         return []
     found: list[Path] = []

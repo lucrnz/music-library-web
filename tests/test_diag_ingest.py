@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from starlette.requests import Request
 
 from musicweb.diag.emit import emit
+from musicweb.diag.envelope import envelope
 from musicweb.diag.ids import from_request
 from musicweb.routes.diag import ClientEvent, IngestBody, ingest_events
 
@@ -161,3 +162,59 @@ def test_emit_io_error_does_not_raise(tmp_path: Path):
     blocked = tmp_path / "not-a-dir"
     blocked.write_text("x", encoding="utf-8")
     emit(None, "http.stream.reject", level="error", store_dir=blocked)
+
+
+def test_ingest_oversize_in_batch_writes_nothing(tmp_path: Path):
+    req = _request(tmp_path)
+    huge = {"pad": "x" * (8 * 1024 + 1)}
+    body = IngestBody(
+        events=[
+            ClientEvent(event="player.load.fail", level="error"),
+            ClientEvent(event="player.load.fail", level="error"),
+            ClientEvent(event="player.load.fail", level="error"),
+            ClientEvent(event="player.load.fail", level="error", data=huge),
+        ]
+    )
+    with pytest.raises(HTTPException) as exc:
+        ingest_events(req, body)
+    assert exc.value.status_code == 400
+    assert _lines(tmp_path) == []
+
+
+def test_ingest_rotates_once_after_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    calls: list[Path] = []
+
+    def spy(directory: Path, *, max_bytes: int | None = None) -> None:
+        calls.append(directory)
+
+    monkeypatch.setattr("musicweb.diag.store.maybe_rotate", spy)
+    req = _request(tmp_path)
+    body = IngestBody(
+        events=[
+            ClientEvent(event="player.load.fail", level="error"),
+            ClientEvent(event="player.load.fail", level="error"),
+            ClientEvent(event="player.load.fail", level="error"),
+        ]
+    )
+    res = ingest_events(req, body)
+    assert res.status_code == 204
+    assert len(_lines(tmp_path)) == 3
+    assert calls == [tmp_path]
+
+
+def test_envelope_defaults():
+    record = envelope(source="server", event="http.stream", level="nope", data="x")
+    assert record["source"] == "server"
+    assert record["event"] == "http.stream"
+    assert record["level"] == "info"
+    assert record["data"] == {}
+    assert record["ts"].endswith("Z")
+
+
+def test_envelope_keeps_parseable_ts():
+    ts = "2026-08-15T12:00:00.000Z"
+    record = envelope(source="client", event="diag.boot", ts=ts)
+    assert record["ts"] == ts
+    assert record["level"] == "info"

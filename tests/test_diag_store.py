@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 
 from musicweb.config import Settings
-from musicweb.diag.store import append, events_filename, maybe_rotate
+from musicweb.diag.store import (
+    append,
+    append_many,
+    event_files,
+    events_filename,
+    maybe_rotate,
+)
 
 
 def test_append_rejects_non_dict(tmp_path: Path):
@@ -69,6 +75,46 @@ def test_rotate_ignores_non_event_files(tmp_path: Path):
 def test_events_filename_utc():
     naive = datetime(2026, 8, 15, 23, 0, 0)
     assert events_filename(naive) == "events-2026-08-15.jsonl"
+
+
+def test_event_files_lists_matching_sorted(tmp_path: Path):
+    (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
+    later = tmp_path / "events-2026-08-16.jsonl"
+    earlier = tmp_path / "events-2026-08-15.jsonl"
+    later.write_text("{}\n", encoding="utf-8")
+    earlier.write_text("{}\n", encoding="utf-8")
+    assert event_files(tmp_path) == [earlier, later]
+
+
+def test_append_many_rotates_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    called = []
+    monkeypatch.setattr(
+        "musicweb.diag.store.maybe_rotate",
+        lambda *args, **kwargs: called.append(True),
+    )
+    path = append_many(tmp_path, [{"n": 1}, {"n": 2}, {"n": 3}])
+    assert path is not None
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        '{"n": 1}',
+        '{"n": 2}',
+        '{"n": 3}',
+    ]
+    assert called == [True]
+
+
+def test_append_many_empty_is_noop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    called = []
+    monkeypatch.setattr(
+        "musicweb.diag.store.maybe_rotate",
+        lambda *args, **kwargs: called.append(True),
+    )
+    assert append_many(tmp_path, []) is None
+    assert called == []
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_ensure_data_dir_creates_diag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

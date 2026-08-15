@@ -3,26 +3,16 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from starlette.requests import Request
 
+from musicweb.diag.envelope import envelope
 from musicweb.diag.ids import DiagIds, from_request
 from musicweb.diag.store import append
 
 logger = logging.getLogger(__name__)
-
-_LEVELS = frozenset({"info", "warn", "error"})
-
-
-def utc_ts() -> str:
-    return (
-        datetime.now(timezone.utc)
-        .isoformat(timespec="milliseconds")
-        .replace("+00:00", "Z")
-    )
 
 
 def _store_dir(request: Request | None, store_dir: Path | None) -> Path | None:
@@ -48,22 +38,20 @@ def emit(
     """Append a ``source=server`` line, or no-op on cutoff / I/O failure."""
     try:
         resolved = ids if ids is not None else from_request(request)
-        lvl = level if level in _LEVELS else "info"
-        if lvl != "error" and resolved.mode == "errors":
+        record = envelope(
+            source="server",
+            event=event,
+            level=level,
+            client_id=resolved.client_id,
+            session_id=resolved.session_id,
+            play_id=resolved.play_id,
+            data=data,
+        )
+        if record["level"] != "error" and resolved.mode == "errors":
             return
         directory = _store_dir(request, store_dir)
         if directory is None:
             return
-        record = {
-            "ts": utc_ts(),
-            "source": "server",
-            "event": event,
-            "level": lvl,
-            "client_id": resolved.client_id,
-            "session_id": resolved.session_id,
-            "play_id": resolved.play_id,
-            "data": data if isinstance(data, dict) else {},
-        }
         append(directory, record)
     except Exception:
         logger.exception("diag emit failed")
