@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from musicweb.scan.formats import (
+    audio_kind,
     is_indexable_audio,
     is_lossless_audio,
     is_lossy_audio,
@@ -40,7 +41,7 @@ def test_mp3_is_lossy_and_flag_gated(tmp_path: Path):
 def test_aac_m4a_is_lossy_not_lossless(tmp_path: Path):
     path = tmp_path / "track.m4a"
     path.write_bytes(b"")
-    with patch("musicweb.scan.formats._is_alac", return_value=False):
+    with patch("musicweb.scan.formats._probe_mp4_kind", return_value="aac"):
         assert is_lossless_audio(path) is False
         assert is_lossy_audio(path) is True
         assert is_indexable_audio(path, index_lossy=False) is False
@@ -50,7 +51,7 @@ def test_aac_m4a_is_lossy_not_lossless(tmp_path: Path):
 def test_alac_m4a_is_lossless_not_lossy(tmp_path: Path):
     path = tmp_path / "track.m4a"
     path.write_bytes(b"")
-    with patch("musicweb.scan.formats._is_alac", return_value=True):
+    with patch("musicweb.scan.formats._probe_mp4_kind", return_value="alac"):
         assert is_lossless_audio(path) is True
         assert is_lossy_audio(path) is False
         assert is_indexable_audio(path, index_lossy=False) is True
@@ -65,10 +66,39 @@ def test_file_cannot_be_both_lossless_and_lossy(tmp_path: Path):
     m4a.write_bytes(b"")
     assert not (is_lossless_audio(flac) and is_lossy_audio(flac))
     assert not (is_lossless_audio(mp3) and is_lossy_audio(mp3))
-    with patch("musicweb.scan.formats._is_alac", return_value=True):
+    with patch("musicweb.scan.formats._probe_mp4_kind", return_value="alac"):
         assert not (is_lossless_audio(m4a) and is_lossy_audio(m4a))
-    with patch("musicweb.scan.formats._is_alac", return_value=False):
+    with patch("musicweb.scan.formats._probe_mp4_kind", return_value="aac"):
         assert not (is_lossless_audio(m4a) and is_lossy_audio(m4a))
+
+
+def test_unreadable_m4a_is_not_indexable(tmp_path: Path):
+    path = tmp_path / "track.m4a"
+    path.write_bytes(b"")
+    assert audio_kind(path) is None
+    assert is_lossless_audio(path) is False
+    assert is_lossy_audio(path) is False
+    assert is_indexable_audio(path, index_lossy=True) is False
+
+
+def test_indexable_m4a_probes_once(tmp_path: Path):
+    path = tmp_path / "track.m4a"
+    path.write_bytes(b"")
+    with patch(
+        "musicweb.scan.formats._probe_mp4_kind", return_value="aac"
+    ) as probe:
+        assert is_indexable_audio(path, index_lossy=True) is True
+        assert probe.call_count == 1
+    with patch(
+        "musicweb.scan.formats._probe_mp4_kind", return_value="aac"
+    ) as probe:
+        assert is_lossless_audio(path) is False
+        assert probe.call_count == 1
+    with patch(
+        "musicweb.scan.formats._probe_mp4_kind", return_value="aac"
+    ) as probe:
+        assert is_lossy_audio(path) is True
+        assert probe.call_count == 1
 
 
 def test_wav_never_indexable(tmp_path: Path):

@@ -27,40 +27,55 @@ LOSSY_SOURCE_CODECS = frozenset({"mp3", "aac"})
 # Always-lossless by extension (no further probe required for indexing).
 ALWAYS_LOSSLESS = frozenset({".flac", ".alac"})
 
+AudioKind = Literal["lossless", "lossy"]
+
+
+def _probe_mp4_kind(path: Path) -> Literal["alac", "aac"] | None:
+    """Open an MP4/M4A once. None if unreadable or missing info."""
+    try:
+        audio = MP4(path)
+    except Exception:
+        return None
+    if audio is None or audio.info is None:
+        return None
+    return mp4_kind(audio.info)
+
+
+def audio_kind(path: Path) -> AudioKind | None:
+    """Classify a file for index eligibility. Opens an MP4 at most once."""
+    if not path.is_file():
+        return None
+    ext = path.suffix.lower()
+    if ext in ALWAYS_LOSSLESS:
+        return "lossless"
+    if ext == ".mp3":
+        return "lossy"
+    if ext in {".m4a", ".mp4"}:
+        probed = _probe_mp4_kind(path)
+        if probed == "alac":
+            return "lossless"
+        if probed == "aac":
+            return "lossy"
+        return None
+    return None
+
 
 def is_lossless_audio(path: Path) -> bool:
     """Return True if the file is packed lossless (FLAC or ALAC) we index."""
-    if not path.is_file():
-        return False
-    ext = path.suffix.lower()
-    if ext not in CANDIDATE_EXTENSIONS:
-        return False
-    if ext in ALWAYS_LOSSLESS or ext == ".flac":
-        return True
-    if ext in {".m4a", ".mp4"}:
-        return _is_alac(path)
-    return False
+    return audio_kind(path) == "lossless"
 
 
 def is_lossy_audio(path: Path) -> bool:
     """Return True if the file is MP3 or AAC-in-MP4 (not ALAC)."""
-    if not path.is_file():
-        return False
-    ext = path.suffix.lower()
-    if ext not in LOSSY_EXTENSIONS:
-        return False
-    if ext == ".mp3":
-        return True
-    if ext in {".m4a", ".mp4"}:
-        return not _is_alac(path)
-    return False
+    return audio_kind(path) == "lossy"
 
 
 def is_indexable_audio(path: Path, *, index_lossy: bool) -> bool:
     """Lossless always; MP3/AAC only when ``index_lossy`` is true."""
-    if is_lossless_audio(path):
+    kind = audio_kind(path)
+    if kind == "lossless":
         return True
-    return bool(index_lossy) and is_lossy_audio(path)
+    return kind == "lossy" and bool(index_lossy)
 
 
 def source_codec_is_lossy(source_codec: str | None) -> bool:
@@ -78,14 +93,3 @@ def mp4_kind(info: object | None) -> Literal["alac", "aac"] | None:
     if "alac" in desc or "lossless" in desc:
         return "alac"
     return "aac"
-
-
-def _is_alac(path: Path) -> bool:
-    """True when an MP4/M4A container holds ALAC (not AAC)."""
-    try:
-        audio = MP4(path)
-    except Exception:
-        return False
-    if audio is None or audio.info is None:
-        return False
-    return mp4_kind(audio.info) == "alac"

@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
-from musicweb.metadata import read_metadata
+from musicweb.metadata import TrackMetadata, read_metadata
 from musicweb.scan.formats import is_lossless_audio
 
 Slot = tuple[str, int | str, int] | tuple[str, str]
@@ -41,11 +40,11 @@ def lossless_slots_in_dir(directory: Path) -> dict[Slot, Path]:
 
 def should_skip_lossy(
     path: Path,
-    meta: Any,
+    meta: TrackMetadata,
     slots: dict[Slot, Path],
 ) -> bool:
     """True when ``path`` shares a slot with a lossless file in the same folder."""
-    key = slot_key(getattr(meta, "disc", None), getattr(meta, "track", None), path.stem)
+    key = slot_key(meta.disc, meta.track, path.stem)
     hit = slots.get(key)
     if hit is None:
         return False

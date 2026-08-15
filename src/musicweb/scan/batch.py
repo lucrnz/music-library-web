@@ -14,7 +14,7 @@ from musicweb.db.models import Track
 from musicweb.library import Library
 from musicweb.metadata import read_metadata
 from musicweb.scan.fingerprint import compute_fingerprint
-from musicweb.scan.formats import is_lossy_audio
+from musicweb.scan.formats import audio_kind
 from musicweb.scan.identity import apply_track_fields, resolve_track
 from musicweb.scan.siblings import lossless_slots_in_dir, should_skip_lossy
 from musicweb.timeutil import utc_now_iso
@@ -60,7 +60,7 @@ def process_batch(
                 continue
 
             lossy_meta = None
-            if is_lossy_audio(path):
+            if audio_kind(path) == "lossy":
                 parent = path.parent
                 if parent not in slot_cache:
                     slot_cache[parent] = lossless_slots_in_dir(parent)
