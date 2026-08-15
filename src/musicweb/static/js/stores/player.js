@@ -13,7 +13,7 @@ import { createCompanionSink } from "../playback/sinks/companionSink.js";
 import { createHtmlAudioSink } from "../playback/sinks/htmlAudioSink.js";
 import { ensurePreferredDevice } from "../exclusive/companionClient.js";
 import { supportsCodecKind } from "../codecSupport.js";
-import { deliveryCodec } from "../lossyKind.js";
+import { SOURCE_TAG, deliveryCodec } from "../lossyKind.js";
 import { PLAY_BLOCK_MESSAGES } from "../playBlock.js";
 import { showToast } from "./ui.js";
 import { PLACEHOLDER_COVER } from "../util.js";
@@ -472,7 +472,6 @@ function maybePrepareNext() {
  * @param {import("../models/track.js").Track} nextTrack
  */
 async function issueNearEndPrepare(nextTrack) {
-  if (nextTrack?.isLossy) return;
   if (isExclusiveEnabled()) {
     const tag = getExclusiveProfileTag(nextTrack);
     if (!tag) return;
@@ -606,13 +605,15 @@ async function playExclusive(gen, track) {
  */
 async function playHtml(gen, track) {
   selectSink("htmlAudio");
-  if (track?.isLossy) {
+  const activeCodec = deliveryCodec(track, getActiveStreamCodec());
+  if (activeCodec === SOURCE_TAG) {
     const kind = (track.sourceCodec || "").toLowerCase();
-    const ok = kind ? await supportsCodecKind(kind) : false;
+    const ok =
+      (kind === "mp3" || kind === "aac") && (await supportsCodecKind(kind));
     if (!still(gen)) return;
     if (!ok) {
       failPlayback(
-        "source",
+        SOURCE_TAG,
         "codec_unsupported",
         PLAY_BLOCK_MESSAGES.codec_unsupported
       );
@@ -620,7 +621,6 @@ async function playHtml(gen, track) {
       return;
     }
   }
-  const activeCodec = deliveryCodec(track, getActiveStreamCodec());
   const source = await resolvePlaySource(track, {
     enabled: downloads.enabled,
     activeStreamCodec: activeCodec,
@@ -659,31 +659,28 @@ async function playHtml(gen, track) {
       syncTransportFlags();
       return;
     }
-    const streamCodec = deliveryCodec(track, getActiveStreamCodec());
-    const remote = streamUrl(track, streamCodec);
+    const remote = streamUrl(track, activeCodec);
     if (remote) {
-      setPlaySourceState("streaming", streamCodec || null, null);
+      setPlaySourceState("streaming", activeCodec || null, null);
       result = await attemptPlay(remote, gen);
       if (!still(gen)) return;
       if (!result.ok) {
         console.error("Playback failed", result.err);
-        const reason = track?.isLossy ? "codec_unsupported" : "play_failed";
         failPlayback(
-          streamCodec,
-          reason,
-          PLAY_BLOCK_MESSAGES[reason]
+          activeCodec,
+          "play_failed",
+          PLAY_BLOCK_MESSAGES.play_failed
         );
       }
     } else {
-      failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
+      failPlayback(activeCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
     }
   } else if (!result.ok) {
     console.error("Playback failed", result.err);
-    const reason = track?.isLossy ? "codec_unsupported" : "play_failed";
     failPlayback(
       player.playProfileId || activeCodec || null,
-      reason,
-      PLAY_BLOCK_MESSAGES[reason]
+      "play_failed",
+      PLAY_BLOCK_MESSAGES.play_failed
     );
   }
   if (still(gen) && result.ok) {

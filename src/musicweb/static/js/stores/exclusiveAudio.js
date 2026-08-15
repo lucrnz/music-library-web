@@ -174,6 +174,7 @@ export function exclusiveStatusSnapshot() {
  * @returns {string|null}
  */
 export function getExclusiveProfileTag(track) {
+  if (track?.isLossy) return null;
   const device = deviceForCaps();
   const caps = device
     ? {

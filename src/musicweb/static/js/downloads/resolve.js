@@ -3,7 +3,6 @@
  */
 
 import { streamUrl } from "../api.js";
-import { SOURCE_TAG } from "../lossyKind.js";
 import {
   PLAY_BLOCK_MESSAGES,
   playBlockMessage,
@@ -110,7 +109,7 @@ export async function resolvePlaySource(track, ctx) {
 
   const policy = ctx.playbackPolicy || "prefer_better";
   const catalog = ctx.catalog || [];
-  const active = track.isLossy ? SOURCE_TAG : ctx.activeStreamCodec;
+  const active = ctx.activeStreamCodec;
 
   /** @type {object|null} */
   let rec = null;

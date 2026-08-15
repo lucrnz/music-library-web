@@ -4,6 +4,7 @@
  */
 
 import { canReachServer, isHardOffline } from "../connectivity.js";
+import { deliveryCodec } from "../lossyKind.js";
 import { normalizeTrack } from "../models/track.js";
 import { codecExt } from "./catalog.js";
 import {
@@ -354,7 +355,7 @@ export async function listQueue() {
 async function enqueueTrackCore(track, codec, ctx) {
   const n = normalizeTrack(track);
   if (n.isMissing) throw new Error("Track file is missing on server");
-  if (n.isLossy) codec = "source";
+  codec = deliveryCodec(n, codec);
 
   const key = trackCodecKey(n.id, codec);
   const existing = await withStore("queue", "readonly", (s) =>

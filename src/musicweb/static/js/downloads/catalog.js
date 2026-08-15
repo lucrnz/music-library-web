@@ -79,7 +79,7 @@ export function catalogUiStatus(rec, preferredDownloadCodec) {
   if (!rec) return null;
   if (rec.status === "broken") return "failed";
   if (!rec.codec) return null;
-  if (rec.codec === "source") return "ready";
+  if (rec.codec === SOURCE_TAG) return "ready";
   if (rec.codec !== preferredDownloadCodec) return "other";
   return "ready";
 }

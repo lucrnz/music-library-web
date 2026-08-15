@@ -364,20 +364,19 @@ export function requestExclusivePrepare(tracks, opts = {}) {
  * @returns {Track[]}
  */
 export function tracksNeedingPrepare(tracks, activeCodec) {
+  const eligible = (tracks || []).filter((t) => t?.id && !t.isLossy);
   // Exclusive always needs server stream tags (never skip for downloads).
   if (isExclusiveEnabled()) {
-    return (tracks || []).filter((t) => t?.id);
+    return eligible;
   }
   if (!downloads.enabled) {
-    return (tracks || []).filter((t) => t?.id);
+    return eligible;
   }
   const out = [];
   const policy = settings.playbackPolicy;
   const codecCatalog = settings.options;
   const byTrack = catalogIndex.byTrack;
-  for (const t of tracks || []) {
-    if (!t?.id) continue;
-    if (t.isLossy) continue;
+  for (const t of eligible) {
     const proj = byTrack[t.id];
     if (
       proj &&
@@ -398,8 +397,6 @@ export function tracksNeedingPrepare(tracks, activeCodec) {
  * @returns {boolean}
  */
 export function trackNeedsStreamPrepare(track, activeCodec) {
-  if (!track?.id) return false;
-  if (track.isLossy) return false;
   return tracksNeedingPrepare([track], activeCodec).length > 0;
 }
 

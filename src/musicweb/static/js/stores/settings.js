@@ -288,7 +288,12 @@ function applyActiveStreamSideEffects(tracks, opts = {}) {
   if (changed || opts.force) {
     lastPreparedActive = active;
     preparedKeys.clear();
-    const list = tracks || (getTracksFn ? getTracksFn() : []) || [];
+    const raw = tracks || (getTracksFn ? getTracksFn() : []) || [];
+    const list = raw.filter((t) => {
+      if (!t || typeof t !== "object") return false;
+      const row = /** @type {{ id?: string, isLossy?: boolean }} */ (t);
+      return !!row.id && !row.isLossy;
+    });
     requestPrepare(list, active, { replace: true });
   }
   if (opts.notifyDownloads) {
