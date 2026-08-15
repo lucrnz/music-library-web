@@ -26,6 +26,8 @@ let healthQueueHasWork = false;
  * Cleared on success, real server_down, hard offline, or when health is disabled.
  */
 let probeRequested = false;
+/** True after reportSuccess() treated the server as up this page lifetime. */
+let reachabilityConfirmed = false;
 
 /** @type {Set<(s: ConnectivityState, prev: ConnectivityState) => void>} */
 const listeners = new Set();
@@ -73,6 +75,10 @@ export function isHardOffline() {
 
 export function canReachServer() {
   return state === "online" && !browserOffline();
+}
+
+export function hasConfirmedReachability() {
+  return reachabilityConfirmed;
 }
 
 /**
@@ -218,6 +224,7 @@ export function reportSuccess() {
   }
   backoffMs = BACKOFF_START_MS;
   probeRequested = false;
+  reachabilityConfirmed = true;
   setState("online");
 }
 

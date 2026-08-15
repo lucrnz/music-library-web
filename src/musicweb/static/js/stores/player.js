@@ -4,7 +4,11 @@
  */
 import { reactive } from "vue";
 import { coverUrl, requestPrepare, streamUrl } from "../api.js";
-import { canReachServer, getConnectivityState } from "../connectivity.js";
+import {
+  canReachServer,
+  getConnectivityState,
+  hasConfirmedReachability,
+} from "../connectivity.js";
 import { beginPlay, emit } from "../diag/log.js";
 import { markDownloadBroken } from "../downloads/index.js";
 import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
@@ -249,7 +253,7 @@ async function updateMediaSession() {
   const albumId = t.albumId || null;
   if (gen !== coverResolveGen) return;
 
-  const allowRemote = canReachServer();
+  const allowRemote = canReachServer() && hasConfirmedReachability();
   const opts = { offline: !allowRemote };
   const remoteThumb = allowRemote ? coverUrl(t, "thumb", false) : null;
   const remoteFull = allowRemote ? coverUrl(t, "full", false) : null;
@@ -626,7 +630,7 @@ async function playHtml(gen, track) {
     activeStreamCodec: activeCodec,
     playbackPolicy: settings.playbackPolicy,
     catalog: settings.options,
-    offline: !canReachServer(),
+    offline: !(canReachServer() && hasConfirmedReachability()),
   });
   if (!still(gen)) return;
 

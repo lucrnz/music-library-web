@@ -28,11 +28,11 @@ loadPlaylist();
 applyVolume();
 applyExpanded();
 initAudioListeners();
+// Connectivity store before codecs so the first probe report is mirrored.
+bindConnectivityStore();
 loadCodecs();
 initExclusiveAudio();
 bindNetworkConstraintEffects(() => pl.tracks);
-// Connectivity store before downloads (downloads only hooks policy/orphans).
-bindConnectivityStore();
 bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.
 initDownloads().then(() => refreshPlayerCovers());

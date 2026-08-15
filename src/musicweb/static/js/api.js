@@ -14,8 +14,8 @@ function apiFetch(url, init = {}) {
   return fetch(url, { ...init, headers });
 }
 
-export async function apiGet(url) {
-  const res = await apiFetch(url);
+export async function apiGet(url, init = {}) {
+  const res = await apiFetch(url, init);
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText);
     throw new Error(detail || res.statusText);

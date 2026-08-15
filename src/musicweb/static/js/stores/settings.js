@@ -4,6 +4,7 @@
  */
 import { reactive } from "vue";
 import { apiGet, requestPrepare, preparedKeys } from "../api.js";
+import { reportFailure, reportSuccess } from "../connectivity.js";
 import { emit } from "../diag/log.js";
 import { filterCodecsByDecodeSupport } from "../codecSupport.js";
 import {
@@ -22,6 +23,7 @@ const KEY_STREAM_CELLULAR = "musicweb.streamCodecCellular";
 const KEY_DOWNLOAD = "musicweb.downloadCodec";
 const KEY_PLAYBACK_POLICY = "musicweb.playbackPolicy";
 const KEY_ONLY_WIFI = "musicweb.onlyDownloadOnWifi";
+const KEY_CATALOG = "musicweb.codecCatalog.v1";
 
 const DEFAULT_CODEC = "opus_192_48000";
 const DEFAULT_CELLULAR = "opus_160_48000";
@@ -101,14 +103,99 @@ function pickDefaultCellular() {
   return null;
 }
 
-function loadPrefs() {
+/**
+ * @param {string} id
+ */
+function kindFromTag(id) {
+  if (!id || typeof id !== "string") return undefined;
+  const i = id.indexOf("_");
+  return i > 0 ? id.slice(0, i) : id;
+}
+
+/**
+ * Keep a stored tag visible in pickers when the catalog is the stub.
+ * @param {string} id
+ */
+function ensureSyntheticOption(id) {
+  if (!id || settings.options.some((o) => o.id === id)) return;
+  settings.options.push({ id, label: id, kind: kindFromTag(id) });
+}
+
+/**
+ * @returns {{ codecs: object[], default?: string } | null}
+ */
+function readCachedCatalog() {
+  try {
+    const raw = localStorage.getItem(KEY_CATALOG);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.codecs) || !data.codecs.length) return null;
+    if (!data.codecs.every((c) => c && typeof c.id === "string" && c.id)) {
+      return null;
+    }
+    return {
+      codecs: data.codecs,
+      default: typeof data.default === "string" ? data.default : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {{ codecs: object[], default?: string }} data
+ */
+function writeCachedCatalog(data) {
+  try {
+    localStorage.setItem(
+      KEY_CATALOG,
+      JSON.stringify({
+        codecs: data.codecs,
+        default: data.default,
+      })
+    );
+  } catch {
+    /* ignore quota */
+  }
+}
+
+/**
+ * Probe-filter a raw server catalog into settings.options.
+ * @param {{ codecs: object[], default?: string }} data
+ */
+async function applyServerCatalog(data) {
+  const catalog = data.codecs;
+  settings.options = await filterCodecsByDecodeSupport(catalog);
+  emit(
+    "codec.probe.summary",
+    {
+      catalog: catalog.map((c) => c.id).filter(Boolean),
+      kept: settings.options.map((c) => c.id).filter(Boolean),
+    },
+    "info"
+  );
+  if (typeof data.default === "string" && data.default) {
+    settings.default = data.default;
+  }
+}
+
+/**
+ * @param {{ catalogIsAuthoritative: boolean }} opts
+ */
+function loadPrefs({ catalogIsAuthoritative }) {
   const ids = new Set(settings.options.map((o) => o.id));
   const fallback = pickDefault();
 
   try {
     const wifiRaw = localStorage.getItem(KEY_STREAM_WIFI);
-    settings.streamWifi =
-      wifiRaw != null && ids.has(wifiRaw) ? wifiRaw : fallback;
+    if (wifiRaw != null && ids.has(wifiRaw)) {
+      settings.streamWifi = wifiRaw;
+    } else if (wifiRaw != null && !catalogIsAuthoritative) {
+      settings.streamWifi = wifiRaw;
+      ensureSyntheticOption(wifiRaw);
+    } else {
+      settings.streamWifi = fallback;
+    }
   } catch {
     settings.streamWifi = fallback;
   }
@@ -119,6 +206,9 @@ function loadPrefs() {
       settings.streamCellular = null;
     } else if (cellRaw != null && ids.has(cellRaw)) {
       settings.streamCellular = cellRaw;
+    } else if (cellRaw != null && !catalogIsAuthoritative) {
+      settings.streamCellular = cellRaw;
+      ensureSyntheticOption(cellRaw);
     } else {
       settings.streamCellular = pickDefaultCellular();
     }
@@ -128,8 +218,14 @@ function loadPrefs() {
 
   try {
     const dlRaw = localStorage.getItem(KEY_DOWNLOAD);
-    settings.download =
-      dlRaw != null && ids.has(dlRaw) ? dlRaw : settings.streamWifi;
+    if (dlRaw != null && ids.has(dlRaw)) {
+      settings.download = dlRaw;
+    } else if (dlRaw != null && !catalogIsAuthoritative) {
+      settings.download = dlRaw;
+      ensureSyntheticOption(dlRaw);
+    } else {
+      settings.download = settings.streamWifi;
+    }
   } catch {
     settings.download = settings.streamWifi;
   }
@@ -152,7 +248,24 @@ function loadPrefs() {
     settings.onlyDownloadOnWifi = true;
   }
 
-  persistAll();
+  if (catalogIsAuthoritative) persistAll();
+  else persistNonCodecPrefs();
+}
+
+function persistNonCodecPrefs() {
+  try {
+    localStorage.setItem(KEY_PLAYBACK_POLICY, settings.playbackPolicy);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.setItem(
+      KEY_ONLY_WIFI,
+      settings.onlyDownloadOnWifi ? "true" : "false"
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
 function persistAll() {
@@ -174,19 +287,7 @@ function persistAll() {
   } catch {
     /* ignore */
   }
-  try {
-    localStorage.setItem(KEY_PLAYBACK_POLICY, settings.playbackPolicy);
-  } catch {
-    /* ignore */
-  }
-  try {
-    localStorage.setItem(
-      KEY_ONLY_WIFI,
-      settings.onlyDownloadOnWifi ? "true" : "false"
-    );
-  } catch {
-    /* ignore */
-  }
+  persistNonCodecPrefs();
 }
 
 /**
@@ -204,33 +305,41 @@ export function getActiveStreamCodec() {
 }
 
 /**
- * Fetch the codec catalog once at boot, drop formats this browser cannot
- * actually decode, then apply stored preferences.
+ * Hydrate the codec catalog from localStorage (if any), apply stored
+ * preferences, then refresh from GET /api/codecs when the network answers.
  */
 export async function loadCodecs() {
+  const cached = readCachedCatalog();
+  if (cached) {
+    await applyServerCatalog(cached);
+  }
+  loadPrefs({ catalogIsAuthoritative: !!cached });
+  refreshNetworkFlags();
+  lastPreparedActive = getActiveStreamCodec();
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
   try {
-    const data = await apiGet("/api/codecs");
+    const data = await apiGet("/api/codecs", { signal: ctrl.signal });
+    reportSuccess();
     if (Array.isArray(data.codecs) && data.codecs.length) {
-      const catalog = data.codecs;
-      settings.options = await filterCodecsByDecodeSupport(catalog);
-      emit(
-        "codec.probe.summary",
-        {
-          catalog: catalog.map((c) => c.id).filter(Boolean),
-          kept: settings.options.map((c) => c.id).filter(Boolean),
-        },
-        "info"
-      );
-    }
-    if (typeof data.default === "string" && data.default) {
-      settings.default = data.default;
+      writeCachedCatalog({
+        codecs: data.codecs,
+        default: typeof data.default === "string" ? data.default : undefined,
+      });
+      await applyServerCatalog(data);
+      loadPrefs({ catalogIsAuthoritative: true });
     }
   } catch (err) {
     console.error("Failed to load codec list", err);
+    if (err && /** @type {{ name?: string }} */ (err).name === "AbortError") {
+      reportFailure(err, 503);
+    } else {
+      reportFailure(err);
+    }
+  } finally {
+    clearTimeout(timer);
   }
-  loadPrefs();
-  refreshNetworkFlags();
-  lastPreparedActive = getActiveStreamCodec();
 }
 
 export function refreshNetworkFlags() {
