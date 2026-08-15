@@ -4,7 +4,8 @@
  */
 import { reactive } from "vue";
 import { coverUrl, requestPrepare, streamUrl } from "../api.js";
-import { canReachServer } from "../connectivity.js";
+import { canReachServer, getConnectivityState } from "../connectivity.js";
+import { beginPlay, emit } from "../diag/log.js";
 import { markDownloadBroken } from "../downloads/index.js";
 import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
@@ -106,8 +107,20 @@ function clearPlaySourceState() {
   setPlaySourceState("none", null, null);
 }
 
+function failCtx(extra) {
+  return {
+    track_id: pl.current?.id ?? null,
+    play_source: player.playSource,
+    profile: player.playProfileId,
+    reason: extra?.reason ?? player.playBlockReason,
+    connectivity: getConnectivityState(),
+    ...(extra && typeof extra === "object" ? extra : {}),
+  };
+}
+
 function beginLoad() {
   playGen += 1;
+  beginPlay();
   clearPlaySourceState();
   try {
     htmlSink.stop();
@@ -170,6 +183,12 @@ function applyResolvedSource(source, activeCodec) {
 function failPlayback(profileId, reason, notice) {
   setPlaySourceState("unavailable", profileId || null, reason);
   setPlayNotice(notice);
+  emit(
+    "player.load.fail",
+    failCtx({ reason, message: notice || null }),
+    "error"
+  );
+  emit("player.unavailable", failCtx({ reason }), "error");
 }
 
 const msSupported = "mediaSession" in navigator;
@@ -349,7 +368,7 @@ function wireSinkHandlers() {
       }
     },
     onEnded: onSinkEnded,
-    onError: (message, code) => {
+    onError: (message, code, details) => {
       if (code === "exclusive_needs_device") {
         if (player.playSource === "none") {
           if (pl.index < 0) {
@@ -372,6 +391,16 @@ function wireSinkHandlers() {
         hardStopCompanion(message, "exclusive_failed");
         return;
       }
+      emit(
+        "sink.html.error",
+        failCtx({
+          reason: "play_failed",
+          media_code: details?.media_code ?? null,
+          network_state: details?.network_state ?? null,
+          ready_state: details?.ready_state ?? null,
+        }),
+        "error"
+      );
       failPlayback(
         player.playProfileId,
         "play_failed",
@@ -465,6 +494,16 @@ async function attemptPlay(url, gen) {
     await activeSink.load(url);
     return { ok: true };
   } catch (err) {
+    if (activeSink.kind === "htmlAudio") {
+      emit(
+        "sink.html.play_reject",
+        failCtx({
+          name: err && err.name ? err.name : null,
+          message: err && err.message ? err.message : String(err ?? ""),
+        }),
+        "error"
+      );
+    }
     return { ok: false, err };
   }
 }
@@ -595,9 +634,20 @@ async function playHtml(gen, track) {
   if (source.type === "unavailable") {
     const title = track?.title || "Track";
     setPlayNotice(source.message ? `${title}: ${source.message}` : source.message);
+    emit(
+      "player.unavailable",
+      failCtx({ reason: source.reason || "missing" }),
+      "error"
+    );
     syncTransportFlags();
     return;
   }
+
+  emit(
+    "player.resolve",
+    { type: source.type, profile: source.codec || activeCodec || null },
+    "info"
+  );
 
   if (source.type === "downloaded") {
     localPlayUrl = source.url;
@@ -633,6 +683,12 @@ async function playHtml(gen, track) {
           reason,
           PLAY_BLOCK_MESSAGES[reason]
         );
+      } else {
+        emit(
+          "player.load.ok",
+          { play_source: player.playSource, profile: player.playProfileId },
+          "info"
+        );
       }
     } else {
       failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
@@ -644,6 +700,12 @@ async function playHtml(gen, track) {
       player.playProfileId || activeCodec || null,
       reason,
       PLAY_BLOCK_MESSAGES[reason]
+    );
+  } else {
+    emit(
+      "player.load.ok",
+      { play_source: player.playSource, profile: player.playProfileId },
+      "info"
     );
   }
   syncTransportFlags();
@@ -657,6 +719,11 @@ export async function playIndex(index) {
     pl.shufflePos = pl.shuffleOrder.indexOf(index);
   }
   const track = pl.current;
+  emit(
+    "player.load.begin",
+    { track_id: track?.id ?? null, index },
+    "info"
+  );
   commit();
   nearEndPrepareSent = false;
   lastCoverTrackId = null;

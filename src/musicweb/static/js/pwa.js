@@ -1,3 +1,5 @@
+import { emit } from "./diag/log.js";
+
 /**
  * Service worker registration for shell-only PWA.
  * Registers only in a secure context; if MUSICWEB_PUBLIC_ORIGIN was injected
@@ -33,7 +35,10 @@ export async function registerServiceWorker() {
  */
 async function doRegister() {
   if (typeof window === "undefined") return null;
-  if (!("serviceWorker" in navigator)) return null;
+  if (!("serviceWorker" in navigator)) {
+    emit("pwa.sw", { result: "unsupported" }, "info");
+    return null;
+  }
 
   // Browsers only allow SW in secure contexts (https or localhost loopback).
   if (!window.isSecureContext) {
@@ -42,6 +47,7 @@ async function doRegister() {
         "Open via https://… or http://localhost / http://127.0.0.1 " +
         "(see MUSICWEB_PUBLIC_ORIGIN / docs/development/environment.md)."
     );
+    emit("pwa.sw", { result: "skipped_insecure" }, "info");
     return null;
   }
 
@@ -52,6 +58,7 @@ async function doRegister() {
         `≠ MUSICWEB_PUBLIC_ORIGIN ${configured}. Open the configured URL to install ` +
         `(host string must match exactly, e.g. localhost vs 127.0.0.1).`
     );
+    emit("pwa.sw", { result: "skipped_origin" }, "info");
     return null;
   }
 
@@ -66,9 +73,15 @@ async function doRegister() {
         reg.update().catch(() => {});
       }
     });
+    emit("pwa.sw", { result: "registered" }, "info");
     return reg;
   } catch (err) {
     console.warn("[pwa] Service worker registration failed:", err);
+    emit(
+      "pwa.sw",
+      { result: "error", message: err && err.message ? err.message : String(err) },
+      "error"
+    );
     return null;
   }
 }

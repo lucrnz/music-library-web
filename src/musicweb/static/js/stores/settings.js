@@ -4,6 +4,7 @@
  */
 import { reactive } from "vue";
 import { apiGet, requestPrepare, preparedKeys } from "../api.js";
+import { emit } from "../diag/log.js";
 import { filterCodecsByDecodeSupport } from "../codecSupport.js";
 import {
   canDetectConnectionType,
@@ -210,7 +211,16 @@ export async function loadCodecs() {
   try {
     const data = await apiGet("/api/codecs");
     if (Array.isArray(data.codecs) && data.codecs.length) {
-      settings.options = await filterCodecsByDecodeSupport(data.codecs);
+      const catalog = data.codecs;
+      settings.options = await filterCodecsByDecodeSupport(catalog);
+      emit(
+        "codec.probe.summary",
+        {
+          catalog: catalog.map((c) => c.id).filter(Boolean),
+          kept: settings.options.map((c) => c.id).filter(Boolean),
+        },
+        "info"
+      );
     }
     if (typeof data.default === "string" && data.default) {
       settings.default = data.default;

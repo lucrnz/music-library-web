@@ -1,3 +1,5 @@
+import { emit } from "./diag/log.js";
+
 /**
  * Platform network connectivity: online / offline / server_down.
  * Health probes, error classification, banner/toast copy.
@@ -41,6 +43,7 @@ function setState(next) {
   if (state === next) return;
   const prev = state;
   state = next;
+  emit("connectivity.state", { from: prev, to: state }, "info");
   for (const fn of listeners) {
     try {
       fn(state, prev);

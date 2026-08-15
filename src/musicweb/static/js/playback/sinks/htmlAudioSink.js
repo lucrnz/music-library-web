@@ -36,7 +36,12 @@ export function createHtmlAudioSink() {
     });
     audio.addEventListener("error", () => {
       if (!audio.getAttribute("src")) return;
-      handlers.onError?.("HTML audio playback failed");
+      const media = audio.error;
+      handlers.onError?.("HTML audio playback failed", "html_audio", {
+        media_code: media ? media.code : null,
+        network_state: audio.networkState,
+        ready_state: audio.readyState,
+      });
     });
   }
 
