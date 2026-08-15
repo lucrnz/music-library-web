@@ -5,6 +5,7 @@
 Musicweb is a personal LAN library player: stream your own lossless collection to phones and desktops with high-fidelity delivery. There is no authentication — anyone who can reach the port can browse and stream. Keep it on your network; do not expose it to the public internet.
 
 - **High-fidelity streaming** from a packed-lossless library, with transparent browser-oriented encodes
+- **Opt-in MP3/AAC** when that is the only copy you have (`MUSICWEB_INDEX_LOSSY`): marked on every title, streamed and downloaded as stored — never re-encoded
 - **Mobile-first browse** — folders, artists, albums, and search on phone and desktop
 - **Offline downloads** on the device, with separate stream and download quality preferences (including Wi‑Fi vs cellular when the browser reports connection type)
 - **Installable PWA shell** when you open a secure-context origin

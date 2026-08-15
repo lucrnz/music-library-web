@@ -13,7 +13,7 @@
 
 ## Purpose
 
-Build and refresh the SQLite index from the lossless files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. All library jobs (scan and regen) share a **single-flight** runner with cancel support and persisted `ScanState` progress. HTTP, CLI (local or via UDS), and startup use the same runner.
+Build and refresh the SQLite index from the files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. The walk is **indexable** audio: packed lossless always, plus MP3/AAC when `MUSICWEB_INDEX_LOSSY` is on. A lossy file that shares a folder + disc/track (or stem) with a lossless sibling is skipped so leftover transcode copies do not become duplicate tracks. After finalize, albums roll up a `lossy_kind` (mp3 / aac / mixed / none) for title marks. All library jobs (scan and regen) share a **single-flight** runner with cancel support and persisted `ScanState` progress. HTTP, CLI (local or via UDS), and startup use the same runner.
 
 ## Modes and kinds
 
@@ -31,7 +31,7 @@ Exact skip/rehash heuristics live in source; docs only state the product intent.
 
 ## Pipeline (conceptual)
 
-1. Walk eligible lossless files.
+1. Walk eligible indexable files (lossless, plus MP3/AAC when the flag is on). Skip a lossy file when a lossless sibling exists in the same folder.
 2. Fingerprint / identity resolution → stable track IDs.
 3. Batch upsert track and graph metadata (tags, audio tech for later encode policy).
 4. Cover extraction to durable WebP under the data dir (missing art).

@@ -1,7 +1,7 @@
 # Stage 05: Client play of source audio
 
 ## Status
-pending
+done
 
 ## Description
 

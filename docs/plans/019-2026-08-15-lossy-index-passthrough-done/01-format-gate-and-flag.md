@@ -1,7 +1,7 @@
 # Stage 01: Format gate and env flag
 
 ## Status
-pending
+done
 
 ## Description
 

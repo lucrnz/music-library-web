@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Deliver browser-playable audio from a lossless library using **explicit stream profiles** (Opus or FLAC at defined rates/depths). Conversion always goes through ffmpeg with quality-first resampling policy.
+Deliver browser-playable audio from a lossless library using **explicit stream profiles** (Opus or FLAC at defined rates/depths). Conversion always goes through ffmpeg with quality-first resampling policy. Lossy-indexed tracks are **not** a profile — they use reserved `source` passthrough (`transcode/passthrough.py` + the media stream route) and never enter this encode pipeline.
 
 ## Startup requirements
 

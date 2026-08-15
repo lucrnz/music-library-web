@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Music library web server: FastAPI + SQLite index + Vue 3 SPA (no bundler). Stream lossless libraries with high-fidelity ffmpeg transcoding.
+Music library web server: FastAPI + SQLite index + Vue 3 SPA (no bundler). Stream a lossless-first library with high-fidelity ffmpeg transcoding.
 
 ## Essentials
 
@@ -13,7 +13,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (no bundler). Strea
 
 ## Hard rules
 
-- Lossless source library - Index packed lossless only. Do not add lossy indexing paths without an explicit product decision.
+- Lossless-first library — index packed lossless by default. MP3/AAC are opt-in (`MUSICWEB_INDEX_LOSSY`), always marked, and streamed/downloaded as stored. Do not add other lossy formats or a lossy transcode path without a new product decision.
 - High-fidelity transcoding is a primary goal. Prefer transparent encode settings (libsoxr VHQ, correct dither policy) over “good enough” shortcuts. See product audio guidelines.
 - Stable track identity comes from content fingerprints, not paths. Renames should reattach when the fingerprint matches.
 - Process-temp stream cache is wiped on shutdown; do not treat it as durable storage.

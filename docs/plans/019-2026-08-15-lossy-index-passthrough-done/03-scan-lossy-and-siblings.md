@@ -1,7 +1,7 @@
 # Stage 03: Scan lossy files and skip siblings
 
 ## Status
-pending
+done
 
 ## Description
 

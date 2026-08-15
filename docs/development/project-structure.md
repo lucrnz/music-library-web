@@ -1,6 +1,6 @@
 # Project structure
 
-FastAPI server that indexes a lossless music tree into SQLite and serves a Vue 3 ESM SPA plus on-demand transcoded streams.
+FastAPI server that indexes a lossless-first music tree into SQLite and serves a Vue 3 ESM SPA plus on-demand transcoded streams (lossy originals pass through when opted in).
 
 ## Source of truth
 

@@ -15,7 +15,7 @@ from musicweb.cli import stats as stats_cmd
 
 app = typer.Typer(
     name="musicweb",
-    help="Browse and stream a lossless music library; manage index from the CLI.",
+    help="Browse and stream a lossless-first music library; manage index from the CLI.",
     no_args_is_help=False,
     invoke_without_command=True,
 )

@@ -1,3 +1,5 @@
+> **Archive.** Decisions in this file were current as of 2026-08-15 (the plan date in the directory name). They may be outdated. Do not treat this as living documentation. This plan directory is an archive.
+
 # Lossy index and source passthrough
 
 ## Goal

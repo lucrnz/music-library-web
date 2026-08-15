@@ -1,7 +1,7 @@
 # Stage 04: Stream original bytes
 
 ## Status
-pending
+done
 
 ## Description
 

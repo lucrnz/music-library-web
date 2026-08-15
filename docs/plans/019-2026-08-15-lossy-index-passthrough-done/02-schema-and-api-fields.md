@@ -1,7 +1,7 @@
 # Stage 02: Schema and API fields
 
 ## Status
-pending
+done
 
 ## Description
 

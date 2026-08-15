@@ -1,7 +1,7 @@
 # Stage 07: Lossy marks on every title
 
 ## Status
-pending
+done
 
 ## Description
 

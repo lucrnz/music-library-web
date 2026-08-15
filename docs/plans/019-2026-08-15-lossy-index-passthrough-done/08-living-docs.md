@@ -1,7 +1,7 @@
 # Stage 08: Living docs and README
 
 ## Status
-pending
+done
 
 ## Description
 

@@ -6,7 +6,7 @@ Operator on-ramp for running Musicweb on your network. For the full command refe
 
 - **Python 3.11+** and [uv](https://github.com/astral-sh/uv)
 - **ffmpeg** on `PATH`, built with **libsoxr**, **libopus**, and **flac** (the server refuses to start if those are missing)
-- A **packed-lossless** music library root (any folder layout)
+- A music library root (any folder layout). Packed lossless (FLAC/ALAC) is indexed by default. MP3/AAC in the tree are ignored unless `MUSICWEB_INDEX_LOSSY` is on.
 
 ## Configure
 

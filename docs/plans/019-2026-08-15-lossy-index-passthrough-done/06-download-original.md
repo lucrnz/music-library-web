@@ -1,7 +1,7 @@
 # Stage 06: Download the original lossy file
 
 ## Status
-pending
+done
 
 ## Description
 

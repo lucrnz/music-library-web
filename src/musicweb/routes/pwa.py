@@ -28,7 +28,7 @@ async def web_manifest(request: Request) -> JSONResponse:
     body = {
         "name": "Music Library",
         "short_name": "MusicLib",
-        "description": "Browse and stream your lossless music library",
+        "description": "Browse and stream your lossless-first music library",
         "id": manifest_id,
         "start_url": start_url,
         "scope": scope,

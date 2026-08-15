@@ -1,4 +1,4 @@
-"""Music library web server — browse & stream lossless audio over the LAN."""
+"""Music library web server — browse & stream a lossless-first library over the LAN."""
 
 from musicweb.cli.app import main
 

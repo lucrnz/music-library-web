@@ -24,9 +24,9 @@ The music directory may be any layout and may live on slow or network storage. T
 
 Track primary keys are derived from content fingerprints (FLAC STREAMINFO MD5; other lossless uses a content hash). Paths can change; identity should reattach when the fingerprint matches. This enables durable playlists and covers across renames.
 
-### Packed lossless only
+### Packed lossless default; marked MP3/AAC exception
 
-Indexed formats are FLAC and ALAC-in-MP4 family containers. WAV/AIFF and AAC are out of scope for the index so the product stays focused on a high-quality source library.
+Indexed formats are FLAC and ALAC-in-MP4 by default. MP3 and AAC-in-M4A/MP4 may be indexed when `MUSICWEB_INDEX_LOSSY` is on: they are marked on every title, streamed and downloaded as stored (`source` passthrough), and never sent through the Opus/FLAC encode pipeline. Same-folder lossless siblings win (the MP3 is skipped). Exclusive playback refuses lossy sources. WAV/AIFF, Vorbis, WMA, and Opus-as-source stay out of the index.
 
 ### ffmpeg + libsoxr for all stream conversion
 

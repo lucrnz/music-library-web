@@ -1,6 +1,6 @@
 # Playback and quality
 
-How the client chooses **what** to play (stream vs downloaded file), **which** quality profile to use, and when to **prepare** server encodes — without weakening server encode policy.
+How the client chooses **what** to play (stream vs downloaded file), **which** quality profile to use, and when to **prepare** server encodes — without weakening server encode policy. Lossy-indexed tracks ignore quality prefs and play the original (`codec=source`). Exclusive mode refuses them (`exclusive_lossy`). mp3/aac families are probed like Opus/FLAC; a failed probe is `codec_unsupported`. Prepare skips lossy ids. Status shows `Streaming · MP3 320` (source format), not the unused Opus/FLAC profile.
 
 ## Source of truth
 
