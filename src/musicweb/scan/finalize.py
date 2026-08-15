@@ -67,3 +67,22 @@ def recount_entities(session: Session) -> None:
             """
         )
     )
+    session.execute(
+        text(
+            """
+            UPDATE albums SET lossy_kind = (
+              SELECT CASE
+                WHEN COUNT(*) = 0 THEN NULL
+                WHEN COUNT(DISTINCT source_codec) = 1
+                     AND MIN(source_codec) IN ('mp3', 'aac')
+                  THEN MIN(source_codec)
+                ELSE 'mixed'
+              END
+              FROM tracks
+              WHERE tracks.album_id = albums.id
+                AND tracks.is_missing = 0
+                AND tracks.is_lossy = 1
+            )
+            """
+        )
+    )

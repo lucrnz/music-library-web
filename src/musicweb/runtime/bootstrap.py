@@ -49,7 +49,10 @@ def bootstrap_services(
     if migrate is None:
         migrate = should_migrate_for_cli(settings.musicweb_data_dir)
     database = init_database(settings.musicweb_data_dir, migrate=migrate)
-    library = Library(settings.music_library_path)
+    library = Library(
+        settings.music_library_path,
+        index_lossy=settings.index_lossy,
+    )
     cover_store = CoverStore(settings.musicweb_data_dir)
     artist_image_store = ArtistImageStore(settings.musicweb_data_dir)
     jobs = LibraryJobRunner(

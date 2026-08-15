@@ -24,6 +24,9 @@ def track_dict(track: Track) -> dict:
         "is_missing": track.is_missing,
         "sample_rate_hz": track.sample_rate_hz,
         "bit_depth": track.bit_depth,
+        "is_lossy": bool(track.is_lossy),
+        "source_codec": track.source_codec,
+        "bitrate_kbps": track.bitrate_kbps,
     }
 
 
@@ -50,6 +53,7 @@ def album_dict(album: Album, *, artist_name: str | None = None) -> dict:
         "year": album.year,
         "track_count": album.track_count,
         "has_cover": album.has_cover,
+        "lossy_kind": album.lossy_kind,
     }
 
 

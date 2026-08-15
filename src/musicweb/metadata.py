@@ -9,6 +9,8 @@ from pathlib import Path
 from mutagen import File as MutagenFile
 from mutagen.mp4 import MP4
 
+from musicweb.scan.formats import mp4_kind
+
 _YEAR_RE = re.compile(r"(\d{4})")
 
 
@@ -28,6 +30,7 @@ class TrackMetadata:
     bit_depth: int | None
     channels: int | None
     source_codec: str | None
+    bitrate_kbps: int | None = None
 
 
 def _first(tags: dict | None, *keys: str) -> str | None:
@@ -107,19 +110,35 @@ def _audio_tech_from_info(info: object, path: Path) -> dict:
     ext = path.suffix.lower()
     if ext == ".flac":
         source_codec = "flac"
+    elif ext == ".mp3":
+        source_codec = "mp3"
     elif ext in {".m4a", ".mp4", ".alac"}:
-        codec = (getattr(info, "codec", None) or "").lower()
-        source_codec = codec or "alac"
+        source_codec = mp4_kind(info)
+        if source_codec is None and ext == ".alac":
+            source_codec = "alac"
     else:
         codec = getattr(info, "codec", None)
         if codec:
             source_codec = str(codec).lower()
+
+    bitrate_kbps: int | None = None
+    raw_br = getattr(info, "bitrate", None)
+    if raw_br is not None:
+        try:
+            bps = int(raw_br)
+            if bps > 0:
+                bitrate_kbps = int(round(bps / 1000))
+                if bitrate_kbps <= 0:
+                    bitrate_kbps = None
+        except (TypeError, ValueError):
+            bitrate_kbps = None
 
     return {
         "sample_rate_hz": sample_rate_hz,
         "bit_depth": bit_depth,
         "channels": channels,
         "source_codec": source_codec,
+        "bitrate_kbps": bitrate_kbps,
     }
 
 
@@ -143,6 +162,7 @@ def read_metadata(path: Path) -> TrackMetadata:
     bit_depth: int | None = None
     channels: int | None = None
     source_codec: str | None = None
+    bitrate_kbps: int | None = None
 
     try:
         audio = MutagenFile(path, easy=True)
@@ -205,6 +225,7 @@ def read_metadata(path: Path) -> TrackMetadata:
         bit_depth = tech["bit_depth"]
         channels = tech["channels"]
         source_codec = tech["source_codec"]
+        bitrate_kbps = tech["bitrate_kbps"]
 
     tags = getattr(audio, "tags", None)
     if tags is None:

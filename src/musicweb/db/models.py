@@ -54,6 +54,8 @@ class Album(Base):
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     track_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     has_cover: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # NULL = no present lossy tracks; else mp3 | aac | mixed
+    lossy_kind: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     album_artist: Mapped[Artist] = relationship(
         back_populates="albums",
@@ -91,6 +93,8 @@ class Track(Base):
     bit_depth: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     channels: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     source_codec: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    is_lossy: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    bitrate_kbps: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
     is_missing: Mapped[bool] = mapped_column(

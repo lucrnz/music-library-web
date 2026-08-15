@@ -19,6 +19,7 @@ from musicweb.db.names import (
     sort_name,
 )
 from musicweb.metadata import TrackMetadata
+from musicweb.scan.formats import source_codec_is_lossy
 
 
 def ensure_artist(session: Session, display: str) -> Artist:
@@ -199,6 +200,8 @@ def apply_track_fields(
     track.bit_depth = meta.bit_depth
     track.channels = meta.channels
     track.source_codec = meta.source_codec
+    track.is_lossy = source_codec_is_lossy(meta.source_codec)
+    track.bitrate_kbps = meta.bitrate_kbps
     track.size_bytes = size
     track.mtime_ns = mtime_ns
     track.is_missing = False

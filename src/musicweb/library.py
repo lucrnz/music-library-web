@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from musicweb.scan.formats import is_lossless_audio
+from musicweb.scan.formats import is_indexable_audio
 
 
 class PathEscapeError(ValueError):
@@ -27,8 +27,9 @@ def _natural_key(name: str) -> list:
 class Library:
     """Browse an arbitrary directory tree under a configured root."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, index_lossy: bool = False) -> None:
         self.root = root.resolve()
+        self.index_lossy = bool(index_lossy)
 
     def resolve(self, relative: str | None) -> Path:
         """Resolve a library-relative path and ensure it stays inside the root."""
@@ -52,8 +53,8 @@ class Library:
         return path.resolve().relative_to(self.root).as_posix()
 
     def is_audio(self, path: Path) -> bool:
-        """True for indexable/streamable lossless audio files."""
-        return is_lossless_audio(path)
+        """True for indexable audio (lossless, plus MP3/AAC when opted in)."""
+        return is_indexable_audio(path, index_lossy=self.index_lossy)
 
     def browse(self, relative: str | None = None) -> dict:
         """

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # WebServer/ (parent of src/)
@@ -183,6 +183,14 @@ class Settings(BaseSettings):
     musicbrainz_contact_email: str = Field(
         default="",
         description="Contact email embedded in the MusicBrainz User-Agent.",
+    )
+    index_lossy: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("MUSICWEB_INDEX_LOSSY", "index_lossy"),
+        description=(
+            "When true, the scanner may index MP3/AAC as marked lossy sources. "
+            "Default off."
+        ),
     )
 
     @field_validator("music_library_path", "musicweb_data_dir", mode="before")

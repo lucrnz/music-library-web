@@ -14,7 +14,9 @@ from musicweb.db.models import Track
 from musicweb.library import Library
 from musicweb.metadata import read_metadata
 from musicweb.scan.fingerprint import compute_fingerprint
+from musicweb.scan.formats import is_lossy_audio
 from musicweb.scan.identity import apply_track_fields, resolve_track
+from musicweb.scan.siblings import lossless_slots_in_dir, should_skip_lossy
 from musicweb.timeutil import utc_now_iso
 
 logger = logging.getLogger(__name__)
@@ -29,16 +31,20 @@ def process_batch(
     mode: ScanMode,
     *,
     cancel: Callable[[], bool] | None = None,
-) -> tuple[int, int, dict[str, Path]]:
+) -> tuple[int, int, dict[str, Path], set[str]]:
     """
     Index a batch of audio paths.
 
-    Returns ``(seen, upserted, cover_queue)`` where cover_queue maps
-    album_id → representative audio path.
+    Returns ``(seen, upserted, cover_queue, skipped_rels)``. ``skipped_rels``
+    are lossy siblings of a lossless file in the same folder — not added to
+    the scan's seen-path set so finalize can mark a previously indexed row
+    missing.
     """
     seen = 0
     upserted = 0
     covers: dict[str, Path] = {}
+    skipped_rels: set[str] = set()
+    slot_cache: dict[Path, dict] = {}
     with database.session() as session:
         for path in paths:
             if cancel and cancel():
@@ -52,6 +58,16 @@ def process_batch(
                 )
             except OSError:
                 continue
+
+            lossy_meta = None
+            if is_lossy_audio(path):
+                parent = path.parent
+                if parent not in slot_cache:
+                    slot_cache[parent] = lossless_slots_in_dir(parent)
+                lossy_meta = read_metadata(path)
+                if should_skip_lossy(path, lossy_meta, slot_cache[parent]):
+                    skipped_rels.add(rel)
+                    continue
 
             seen += 1
             existing = session.execute(
@@ -83,7 +99,7 @@ def process_batch(
                 existing_by_path=existing,
                 now=now,
             )
-            meta = read_metadata(path)
+            meta = lossy_meta if lossy_meta is not None else read_metadata(path)
             album_id = apply_track_fields(
                 session,
                 track,
@@ -98,4 +114,4 @@ def process_batch(
                 covers[album_id] = path
 
         session.commit()
-    return seen, upserted, covers
+    return seen, upserted, covers, skipped_rels

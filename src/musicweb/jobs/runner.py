@@ -23,7 +23,7 @@ from musicweb.scan.batch import process_batch
 from musicweb.scan.covers import album_cover_sources, extract_covers
 from musicweb.scan.finalize import mark_missing, recount_entities
 from musicweb.scan.lyrics import fetch_track_lyrics
-from musicweb.scan.walk import iter_lossless_audio
+from musicweb.scan.walk import iter_indexable_audio
 from musicweb.timeutil import utc_now_iso
 
 logger = logging.getLogger(__name__)
@@ -439,7 +439,7 @@ class LibraryJobRunner:
             nonlocal seen_count, upserted, batch
             if not batch_paths:
                 return
-            s, u, covers = process_batch(
+            s, u, covers, skipped = process_batch(
                 self._db,
                 self._library,
                 batch_paths,
@@ -450,7 +450,9 @@ class LibraryJobRunner:
             upserted += u
             cover_queue.update(covers)
             for p in batch_paths:
-                seen_paths.add(self._library.relative_to_root(p))
+                rel = self._library.relative_to_root(p)
+                if rel not in skipped:
+                    seen_paths.add(rel)
             last_rel = (
                 None
                 if clear_path
@@ -465,8 +467,10 @@ class LibraryJobRunner:
             )
             batch = []
 
-        for path in iter_lossless_audio(
-            self._library.root, cancel=self._cancel.is_set
+        for path in iter_indexable_audio(
+            self._library.root,
+            index_lossy=self._library.index_lossy,
+            cancel=self._cancel.is_set,
         ):
             if self._cancel.is_set():
                 break
