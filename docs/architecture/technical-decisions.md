@@ -26,7 +26,7 @@ Track primary keys are derived from content fingerprints (FLAC STREAMINFO MD5; o
 
 ### Packed lossless default; marked MP3/AAC exception
 
-Indexed formats are FLAC and ALAC-in-MP4 by default. MP3 and AAC-in-M4A/MP4 may be indexed when `MUSICWEB_INDEX_LOSSY` is on: they are marked on every title, streamed and downloaded as stored (`source` passthrough), and never sent through the Opus/FLAC encode pipeline. Same-folder lossless siblings win (the MP3 is skipped). Exclusive playback refuses lossy sources. WAV/AIFF, Vorbis, WMA, and Opus-as-source stay out of the index.
+Indexed formats are FLAC and ALAC-in-MP4 by default. MP3 and AAC-in-M4A/MP4 may be indexed when `MUSICWEB_INDEX_LOSSY` is on: they are marked on every title, streamed and downloaded as stored (`source` passthrough), and never sent through the Opus/FLAC encode pipeline. Walk eligibility classifies a file once; an unreadable MP4 is not treated as AAC. Same-folder lossless siblings win (the MP3 is skipped). Exclusive playback and prepare follow `source` delivery — refuse (`exclusive_lossy`), do not pick a companion FLAC tag. WAV/AIFF, Vorbis, WMA, and Opus-as-source stay out of the index.
 
 ### ffmpeg + libsoxr for all stream conversion
 

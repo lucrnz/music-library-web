@@ -7,11 +7,12 @@
 - Dependency gate: `src/musicweb/transcode/deps.py`
 - Probe helpers: `src/musicweb/transcode/probe.py`
 - HTTP stream / prepare / cache clear: `src/musicweb/routes/media.py`
+- Reserved `source` passthrough: `src/musicweb/transcode/passthrough.py`
 - Process cache lifecycle: `src/musicweb/cache.py`
 
 ## Purpose
 
-Deliver browser-playable audio from a lossless library using **explicit stream profiles** (Opus or FLAC at defined rates/depths). Conversion always goes through ffmpeg with quality-first resampling policy. Lossy-indexed tracks are **not** a profile — they use reserved `source` passthrough (`transcode/passthrough.py` + the media stream route) and never enter this encode pipeline.
+Deliver browser-playable audio from a lossless library using **explicit stream profiles** (Opus or FLAC at defined rates/depths). Conversion always goes through ffmpeg with quality-first resampling policy. Lossy-indexed tracks are **not** a profile — they use reserved `source` passthrough and never enter this encode pipeline. Passthrough mime/extension are defined for MP3 and AAC only; an unknown stored source codec is a 400, not an encode and not a guessed container.
 
 ## Startup requirements
 

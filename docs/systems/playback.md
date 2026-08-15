@@ -1,13 +1,15 @@
 # Playback and quality
 
-How the client chooses **what** to play (stream vs downloaded file), **which** quality profile to use, and when to **prepare** server encodes — without weakening server encode policy. Lossy-indexed tracks ignore quality prefs and play the original (`codec=source`). Exclusive mode refuses them (`exclusive_lossy`). mp3/aac families are probed like Opus/FLAC; a failed probe is `codec_unsupported`. Prepare skips lossy ids. Status shows `Streaming · MP3 320` (source format), not the unused Opus/FLAC profile.
+How the client chooses **what** to play (stream vs downloaded file), **which** quality profile to use, and when to **prepare** server encodes — without weakening server encode policy. Lossy-indexed tracks ignore quality prefs and play the original (`source` delivery). Exclusive mode refuses them (`exclusive_lossy`) and does not pick a companion FLAC tag. HTML play probes mp3/aac for source delivery; a failed family probe is `codec_unsupported`, a load or network failure is `play_failed`. Prepare skips those ids (browser and exclusive). Status shows `Streaming · MP3 320` (source format), not an unused Opus/FLAC profile.
 
 ## Source of truth
 
 - Player store: `src/musicweb/static/js/stores/player.js`
 - Quality / network prefs: `src/musicweb/static/js/stores/settings.js`
 - Session queue + prepare helpers: `src/musicweb/static/js/stores/playlist.js`
+- Delivery tag / lossy kind: `src/musicweb/static/js/lossyKind.js`
 - Play source resolution: `src/musicweb/static/js/downloads/resolve.js`
+- Exclusive profile pick: `src/musicweb/static/js/stores/exclusiveAudio.js`
 - Block reasons / copy: `src/musicweb/static/js/playBlock.js`
 - Quality ranking: `src/musicweb/static/js/qualityRank.js`
 - Status presentation: `src/musicweb/static/js/playbackStatus.js`
@@ -52,7 +54,8 @@ Settings and download/stream pickers list only profiles the **current browser ca
 ## Prepare and near-end urgent prepare
 
 - **Prepare** asks the server to prewarm encodes for queue tracks that will need a stream (see `docs/systems/transcoding.md`).
-- When downloads are enabled, tracks that will play from a local file under the current policy need not be prepared for stream.
+- Lossy / `source` delivery is never prepared (no encode exists). Exclusive prepare also skips those ids — there is no companion tag for them.
+- When downloads are enabled, lossless tracks that will play from a local file under the current policy need not be prepared for stream.
 - Near end of the current track, the player may send **one** urgent prepare for the next queue item so interactive encode priority can run before natural advance. Offline does not permanently suppress prepare after reconnect while still in the lead window (behavior owned by the player store).
 
 Exact lead time and API flags live in source.
