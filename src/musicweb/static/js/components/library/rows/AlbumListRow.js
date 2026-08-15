@@ -23,7 +23,7 @@ export default defineComponent({
     const sub = computed(() => {
       const a = props.album;
       const year = a.year ? ` · ${a.year}` : "";
-      return `${a.artist || ""}${year} · ${a.track_count} tracks`;
+      return `${a.artist || ""}${year} · ${a.trackCount ?? 0} tracks`;
     });
     const lossyKind = computed(() => kindForAlbum(props.album));
     function onClick(e) {

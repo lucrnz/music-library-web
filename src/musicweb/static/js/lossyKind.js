@@ -47,12 +47,14 @@ export function kindForTracks(tracks) {
 }
 
 /**
- * @param {{ lossyKind?: string|null, lossy_kind?: string|null }|null|undefined} album
- * @returns {'mp3'|'aac'|'mixed'|null}
+ * @param {{ lossyKind?: string|null }|null|undefined} album
+ * @returns {'mp3'|'aac'|'mixed'|'lossy'|null}
  */
 export function kindForAlbum(album) {
-  const raw = album?.lossyKind ?? album?.lossy_kind ?? null;
-  if (raw === "mp3" || raw === "aac" || raw === "mixed") return raw;
+  const raw = album?.lossyKind ?? null;
+  if (raw === "mp3" || raw === "aac" || raw === "mixed" || raw === "lossy") {
+    return raw;
+  }
   return null;
 }
 

@@ -7,6 +7,7 @@ import {
   apiGet,
   coverUrl,
   fetchAlbum,
+  fetchAlbums,
   fetchAlbumTracks,
   fetchArtist,
   fetchArtistAlbums,
@@ -161,7 +162,7 @@ export async function loadAlbumDetail(id) {
   try {
     const album = await fetchAlbum(id);
     title = album.title || "Album";
-    const aid = album.artist_id || album.artistId;
+    const aid = album.artistId;
     if (aid) backArtistId = String(aid);
   } catch {
     /* keep default */
@@ -196,8 +197,7 @@ export async function loadArtistsList() {
 
 export async function loadAlbumsList() {
   const chrome = { title: "Albums", showBack: false };
-  const data = await apiGet("/api/albums?limit=500&sort=title");
-  const albums = data.items || [];
+  const albums = await fetchAlbums();
   if (!albums.length) {
     return page(chrome, {
       kind: "empty",

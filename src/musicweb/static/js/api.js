@@ -5,6 +5,7 @@
  */
 
 import { diagRequestHeaders } from "./diag/log.js";
+import { fromApiAlbum, mapAlbums } from "./models/album.js";
 import { fromApiLyrics } from "./models/lyrics.js";
 import { fromApiTrack, mapTracks } from "./models/track.js";
 
@@ -173,7 +174,7 @@ export async function fetchPlaylistTracks(playlistId) {
 }
 
 /**
- * GET /api/search — maps tracks only; artists/albums stay server shape.
+ * GET /api/search — maps tracks and albums; artists stay server shape.
  * @param {string} q
  * @param {number} [limit]
  */
@@ -183,7 +184,7 @@ export async function fetchSearch(q, limit = 50) {
   );
   return {
     artists: data.artists || [],
-    albums: data.albums || [],
+    albums: mapAlbums(data.albums || []),
     tracks: mapTracks(data.tracks || []),
   };
 }
@@ -209,7 +210,16 @@ export async function fetchArtistAlbums(artistId) {
   const data = await apiGet(
     `/api/artists/${encodeURIComponent(artistId)}/albums`
   );
-  return data.items || [];
+  return mapAlbums(data.items || []);
+}
+
+/**
+ * GET /api/albums — album list (not tracks).
+ * @param {string} [query]
+ */
+export async function fetchAlbums(query = "limit=500&sort=title") {
+  const data = await apiGet(`/api/albums?${query}`);
+  return mapAlbums(data.items || []);
 }
 
 /**
@@ -225,7 +235,9 @@ export async function fetchArtist(artistId) {
  * @param {string} albumId
  */
 export async function fetchAlbum(albumId) {
-  return apiGet(`/api/albums/${encodeURIComponent(albumId)}`);
+  return fromApiAlbum(
+    await apiGet(`/api/albums/${encodeURIComponent(albumId)}`)
+  );
 }
 
 export function clearCache(...scopes) {
@@ -273,6 +285,7 @@ export function requestPrepare(
   }).catch(() => {});
 }
 
+export { fromApiAlbum, mapAlbums } from "./models/album.js";
 export {
   fromApiTrack,
   fromCatalogRecord,

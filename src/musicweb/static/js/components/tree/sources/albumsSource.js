@@ -1,7 +1,7 @@
 /**
  * Albums tree: album → tracks.
  */
-import { apiGet, coverUrl, fetchAlbumTracks } from "../../../api.js";
+import { coverUrl, fetchAlbums, fetchAlbumTracks } from "../../../api.js";
 import { kindForAlbum, kindForTrack } from "../../../lossyKind.js";
 
 /**
@@ -9,15 +9,14 @@ import { kindForAlbum, kindForTrack } from "../../../lossyKind.js";
  */
 
 export async function listAlbumRoots() {
-  const data = await apiGet("/api/albums?limit=500&sort=title");
-  const items = data.items || [];
+  const items = await fetchAlbums();
   return items.map(
     /** @returns {TreeNode} */ (al) => ({
       key: `album:${al.id}`,
       isLeaf: false,
       kind: "album",
       title: al.title || "Unknown album",
-      subtitle: al.artist_name || al.artist || "",
+      subtitle: al.artist || "",
       cover: coverUrl({ albumId: al.id }, "thumb", false),
       lossyKind: kindForAlbum(al),
       data: al,

@@ -3,6 +3,7 @@
  * Track lists are projected to the client Track type.
  */
 
+import { kindForTracks } from "../lossyKind.js";
 import { fromCatalogRecord } from "../models/track.js";
 import { getLocalArtistImageUrl, getLocalCoverUrl } from "./catalog.js";
 import { buildDownloadsHierarchy } from "./hierarchy.js";
@@ -113,7 +114,8 @@ export async function loadDownloadsView(opts) {
         id: al.albumId,
         title: al.title,
         artist: ar.name,
-        track_count: al.tracks.length,
+        trackCount: al.tracks.length,
+        lossyKind: kindForTracks(al.tracks),
       })),
       tracks: [],
       albumGrid: true,
