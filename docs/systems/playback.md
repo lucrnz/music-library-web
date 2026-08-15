@@ -31,7 +31,7 @@ Each successful load records a **play source** (not a library path):
 | `unavailable` | Cannot start; structured block reason set |
 | `none` | Player idle (no current load) |
 
-Resolution is decision-first: load catalog record when downloads are enabled, apply **playback policy**, open a local blob only if local wins, otherwise stream when the server is reachable. Play-source “online” means `canReachServer()` (see `docs/systems/connectivity.md`) — not `navigator.onLine` alone. When `canReachServer()` is false (`offline`, `server_down`, or browser offline), resolve uses the offline path: a playable download wins, otherwise unavailable (reasons such as missing, broken, or offline-without-local — exact set in `playBlock.js`).
+Resolution is decision-first: load catalog record when downloads are enabled, apply **playback policy**, open a local blob only if local wins, otherwise stream when the server is reachable. Play-source “online” means `canReachServer()` **and** this page has seen `reportSuccess` (`hasConfirmedReachability` in `connectivity.js`) — not `navigator.onLine` alone, and not the optimistic boot `online` state. Until that confirmation, a playable download wins. When `canReachServer()` is false (`offline`, `server_down`, or browser offline), resolve uses the same offline path: a playable download wins, otherwise unavailable (reasons such as missing, broken, or offline-without-local — exact set in `playBlock.js`). A failed stream load does not fall back to OPFS while the session is confirmed reachable.
 
 ## Quality preferences
 
@@ -43,13 +43,15 @@ Independent client preferences (exact storage keys and defaults live in `setting
 - **Playback policy** when a download exists while online:
   - Prefer higher quality (use local when at least as good as the active stream profile)
   - Prefer downloaded file
-  - Prefer live stream when the server is reachable (`canReachServer()`) (local only when unreachable / stream unavailable)
+  - Prefer live stream when the server is reachable (`canReachServer()` and this session has confirmed) (local only when unreachable / stream unavailable)
+
+The browser catalog is fetched at boot when the server answers and stored locally as the raw `/api/codecs` payload (`musicweb.codecCatalog.v1` in `settings.js`). Offline or failed fetch reuses that cache; stored quality tags are not rewritten against the hardcoded one-row stub. Decode probes still run locally after hydrate and after a successful fetch.
 
 Active stream profile for prepare and play follows the current network constraint state when type detection works. Network cost hints never replace an explicit user setting.
 
 ## Honest codecs
 
-Settings and download/stream pickers list only profiles the **current browser can decode**, via runtime media probes — not UA marketing lists alone. Server profile catalog still comes from `/api/codecs`; the client filters and ranks.
+Settings and download/stream pickers list only profiles the **current browser can decode**, via runtime media probes — not UA marketing lists alone. The server catalog comes from `/api/codecs` (cached in `settings.js` for offline boot); the client filters and ranks.
 
 ## Prepare and near-end urgent prepare
 
@@ -67,4 +69,4 @@ Exact lead time and API flags live in source.
 - Prefer stable track IDs for stream, prepare, and download keys over paths.
 - Do not claim a codec is playable without a successful probe path for that browser.
 - Network Information API absence is normal on desktop — UI and policy must degrade gracefully (hide cellular-only options; treat connection as unrestricted).
-- Do not use `isHardOffline()` alone to decide stream vs download — play-source online is `canReachServer()`.
+- Do not use `isHardOffline()` alone to decide stream vs download — play-source online is `canReachServer()` and `hasConfirmedReachability()`.

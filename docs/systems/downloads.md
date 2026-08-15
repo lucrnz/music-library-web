@@ -35,7 +35,7 @@ OPFS is mandatory for resumable Range downloads and partials. Exact object-store
 
 ## Behavior (intent)
 
-1. **Optional.** Downloads start disabled until the user enables them; enabling needs OPFS support.
+1. **Optional.** Downloads start disabled until the user enables them; enabling needs OPFS support. A failed cold-start boot (`initDownloads`) must not persist the enable flag off — only explicit disable, or a failed explicit enable, writes it false.
 2. **Enqueue.** Pure enqueue / lifecycle lives in `index.js`. User-facing `downloadTrack(s)` in `ui.js` may confirm near-quota, then call enqueue.
 3. **Queue.** Background workers fetch the chosen **download** stream profile from the server and write OPFS; catalog records track status (including broken/orphan cases). Lossy-indexed tracks always download the original file (`source`); the download quality picker applies to lossless only. Original-file extension and MIME are defined for MP3 and AAC only.
 4. **Network policy.** Auto-pause when hard offline, server unreachable, or (when “only download on Wi‑Fi” is on and connection type is detectable) on constrained/cellular links. User pause is separate from auto-pause.
@@ -60,6 +60,7 @@ Import connectivity notes from `connectivity.js` / `stores/connectivity.js`, not
 ## Guardrails
 
 - Do not write or mutate the server library index from the downloads package.
+- Do not persist the downloads enable flag off from a cold-start boot failure.
 - Do not use the service worker cache as a substitute for OPFS offline audio (`docs/systems/pwa.md`).
 - Do not re-grow a god barrel on `index.js` (re-exporting resolve, catalog, hierarchy, storage formatters, or connectivity).
 - Keep secrets and API keys on the server; downloads only consume authenticated-by-network stream URLs like the rest of the SPA.

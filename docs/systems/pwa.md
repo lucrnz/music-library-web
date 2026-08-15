@@ -19,7 +19,7 @@ Installable app shell and offline **bootstrap** for the Vue SPA. Offline **audio
 
 ### Shell-only service worker
 
-The SW is **generated** on each `GET /sw.js`: Python walks `static/{css,js,img,vendor}` and injects a complete `PRECACHE_URLS` list plus a content-derived cache version. The worker **never** caches `/api/*` (including streams). Offline music stays under explicit user Downloads.
+The SW is **generated** on each `GET /sw.js`: Python walks `static/{css,js,img,vendor}` and injects a complete `PRECACHE_URLS` list plus a content-derived cache version. Install is **fail-closed**: any inventory miss aborts install so the previous complete cache stays controlling. The worker **never** caches `/api/*` (including streams). Offline music stays under explicit user Downloads.
 
 ### Server-derived inventory
 
@@ -44,7 +44,7 @@ Connectivity UX is quiet: transition toasts via the shell binder (`connectivityU
 | Class | Intent |
 |-------|--------|
 | Navigations (`request.mode === "navigate"`) | Network first; offline → cached shell at `/` |
-| `/static/*` | Cache-first (full inventory precached at install) |
+| `/static/*` | Cache-first (full inventory; install aborts if any URL misses) |
 | `/api/*` | Network only — never SW cache |
 | `/sw.js` | Network only (always fresh worker script) |
 | `/manifest.webmanifest` | Network first; offline cache or 503 Response |
@@ -52,6 +52,7 @@ Connectivity UX is quiet: transition toasts via the shell binder (`connectivityU
 ## Guardrails
 
 - Do not store audio or library API responses in the service worker cache.
+- Do not activate a worker whose precache is incomplete; a miss must fail install.
 - Do not register a SW when `MUSICWEB_PUBLIC_ORIGIN` is set and the page origin differs.
 - Do not introduce a Node/Workbox build pipeline for the SW without an explicit project decision.
 - Do not serve `sw.template.js` as the worker; only the generated `/sw.js` body is registered.

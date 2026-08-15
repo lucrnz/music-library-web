@@ -23,6 +23,8 @@ Three published states (`ConnectivityState`):
 
 Truth and probes live in non-Vue `connectivity.js`. The Vue store mirrors state for templates. Success/failure reporters from API helpers feed classification (network vs item failure vs abort).
 
+Boot is **optimistic** `online` so the shell does not flash “Can’t reach server.” `canReachServer()` stays `state === "online"` and not browser-offline — prepare, download-queue policy, and library loaders use that. Play and player remote covers also require `hasConfirmedReachability()`, set when `reportSuccess()` treats the server as up this page lifetime (codecs, browse, or health). `GET /api/codecs` at boot is that first probe: success confirms; failure or timeout reports `server_down`. No fourth published state.
+
 ### Health probes
 
 When downloads are enabled and the queue has work (or other callers request a probe), a backoff health loop checks whether the server is back. Recovery notifies listeners so queue policy can resume and playback can retry prepare paths. Exact intervals and probe endpoints live in source.
