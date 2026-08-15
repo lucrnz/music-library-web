@@ -1,15 +1,18 @@
-"""Stream/prepare emit cutoff and worker isolation."""
+"""Stream route emit cutoff, failure context, and worker isolation."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from fastapi import FastAPI
+import pytest
+from fastapi import FastAPI, HTTPException
 from starlette.requests import Request
+from starlette.responses import FileResponse
 
-from musicweb.diag.emit import emit
+from musicweb.routes.media import stream
 
 
 def _request(
@@ -20,6 +23,7 @@ def _request(
 ) -> Request:
     app = FastAPI()
     app.state.settings = SimpleNamespace(diag_dir=tmp_path)
+    app.state.library = SimpleNamespace()
     header_list: list[tuple[bytes, bytes]] = []
     for key, value in (headers or {}).items():
         header_list.append((key.lower().encode("latin-1"), value.encode("latin-1")))
@@ -52,54 +56,77 @@ def _lines(directory: Path) -> list[dict]:
     return out
 
 
-def test_http_stream_info_dropped_without_everything(tmp_path: Path):
-    req = _request(tmp_path, cookies={"musicweb_mode": "errors"})
-    emit(
-        req,
-        "http.stream",
-        level="info",
-        data={"track_id": "t1", "codec": "opus_192_48000", "plan": "encode"},
+def _lossy_track() -> SimpleNamespace:
+    return SimpleNamespace(
+        is_lossy=True,
+        is_missing=False,
+        rel_path="song.mp3",
+        source_codec="mp3",
     )
-    assert _lines(tmp_path) == []
 
 
-def test_http_stream_info_when_everything(tmp_path: Path):
-    req = _request(tmp_path, headers={"X-Musicweb-Mode": "everything"})
-    emit(
-        req,
-        "http.stream",
-        level="info",
-        data={"track_id": "t1", "codec": "opus_192_48000", "plan": "passthrough"},
-    )
-    lines = _lines(tmp_path)
-    assert len(lines) == 1
-    assert lines[0]["event"] == "http.stream"
-    assert lines[0]["data"]["plan"] == "passthrough"
-
-
-def test_http_stream_reject_always_written(tmp_path: Path):
+def test_stream_missing_track_writes_reject(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     req = _request(tmp_path)
-    emit(
-        req,
-        "http.stream.reject",
-        level="error",
-        data={
-            "track_id": "missing",
-            "play_source": "streaming",
-            "profile": "opus_192_48000",
-            "reason": "Track not found",
-            "connectivity": None,
-            "codec": "opus_192_48000",
-            "status": 404,
-            "detail": "Track not found",
-        },
+    monkeypatch.setattr(
+        "musicweb.routes.media.tracks_repo.get", lambda db, tid: None
     )
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(stream(req, id="missing", codec="opus_192_48000", db=None))
+    assert exc.value.status_code == 404
     lines = _lines(tmp_path)
     assert len(lines) == 1
     assert lines[0]["event"] == "http.stream.reject"
     assert lines[0]["level"] == "error"
-    assert lines[0]["data"]["track_id"] == "missing"
-    assert "status" in lines[0]["data"]
+    data = lines[0]["data"]
+    assert data["track_id"] == "missing"
+    assert data["play_source"] == "streaming"
+    assert data["profile"] == "opus_192_48000"
+    assert data["reason"] == "Track not found"
+    assert data["connectivity"] is None
+    assert data["status"] == 404
+    assert data["detail"] == "Track not found"
+    assert "codec" not in data
+
+
+def test_stream_passthrough_everything_writes_info(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    audio = tmp_path / "song.mp3"
+    audio.write_bytes(b"xx")
+    req = _request(tmp_path, headers={"X-Musicweb-Mode": "everything"})
+    monkeypatch.setattr(
+        "musicweb.routes.media.tracks_repo.get", lambda db, tid: _lossy_track()
+    )
+    monkeypatch.setattr(
+        "musicweb.routes.media._resolve_track_file", lambda lib, track: audio
+    )
+    res = asyncio.run(stream(req, id="t1", codec="source", db=None))
+    assert isinstance(res, FileResponse)
+    lines = _lines(tmp_path)
+    assert len(lines) == 1
+    assert lines[0]["event"] == "http.stream"
+    assert lines[0]["level"] == "info"
+    assert lines[0]["data"]["plan"] == "passthrough"
+    assert lines[0]["data"]["track_id"] == "t1"
+
+
+def test_stream_passthrough_errors_only_skips_info(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    audio = tmp_path / "song.mp3"
+    audio.write_bytes(b"xx")
+    req = _request(tmp_path, cookies={"musicweb_mode": "errors"})
+    monkeypatch.setattr(
+        "musicweb.routes.media.tracks_repo.get", lambda db, tid: _lossy_track()
+    )
+    monkeypatch.setattr(
+        "musicweb.routes.media._resolve_track_file", lambda lib, track: audio
+    )
+    res = asyncio.run(stream(req, id="t1", codec="source", db=None))
+    assert isinstance(res, FileResponse)
+    assert _lines(tmp_path) == []
 
 
 def test_worker_has_no_diag_import():

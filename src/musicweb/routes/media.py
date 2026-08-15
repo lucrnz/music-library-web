@@ -49,25 +49,6 @@ def _placeholder_response(size: str) -> Response:
     )
 
 
-def _stream_fail_ctx(
-    track_id: str | None,
-    codec: str,
-    *,
-    status: int,
-    detail: str,
-) -> dict:
-    return {
-        "track_id": track_id,
-        "play_source": "streaming",
-        "profile": codec,
-        "reason": detail,
-        "connectivity": None,
-        "codec": codec,
-        "status": status,
-        "detail": detail,
-    }
-
-
 def _emit_prepare(request: Request, payload: PrepareRequest, counts: dict) -> None:
     emit(
         request,
@@ -94,7 +75,15 @@ def _emit_stream_reject(
         request,
         "http.stream.reject",
         level="error",
-        data=_stream_fail_ctx(track_id, codec, status=status, detail=detail),
+        data={
+            "track_id": track_id,
+            "play_source": "streaming",
+            "profile": codec,
+            "reason": detail,
+            "connectivity": None,
+            "status": status,
+            "detail": detail,
+        },
     )
 
 
@@ -141,15 +130,60 @@ async def stream(
     codec: str = Query(default=DEFAULT_PROFILE_TAG),
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    lib = library(request)
-    track = tracks_repo.get(db, id)
-    if track is None:
-        _emit_stream_reject(
-            request, id, codec, status=404, detail="Track not found"
-        )
-        raise HTTPException(status_code=404, detail="Track not found")
     try:
+        lib = library(request)
+        track = tracks_repo.get(db, id)
+        if track is None:
+            raise HTTPException(status_code=404, detail="Track not found")
         resolved = _resolve_track_file(lib, track)
+        try:
+            plan = plan_stream(is_lossy=bool(track.is_lossy), codec=codec)
+        except StreamConflict as exc:
+            raise HTTPException(status_code=409, detail=exc.message) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if plan == "passthrough":
+            media_type, ext = passthrough_media(track.source_codec)
+            media_path = resolved
+            filename = f"{resolved.stem}.{resolved.suffix.lstrip('.') or ext}"
+        else:
+            profile = get_profile(codec)
+            warn_null_track_tech(track)
+            try:
+                media_path = await run_in_threadpool(
+                    transcoder(request).ensure_stream,
+                    resolved,
+                    track.rel_path,
+                    profile_tag=codec,
+                    source_tech=tech_from_track(track),
+                )
+            except Exception as exc:
+                _emit_stream_reject(
+                    request,
+                    id,
+                    codec,
+                    status=500,
+                    detail=f"{type(exc).__name__}: {exc}"[:300],
+                )
+                raise
+            media_type = profile.media_type
+            filename = f"{resolved.stem}.{profile.extension}"
+        emit(
+            request,
+            "http.stream",
+            level="info",
+            data={"track_id": id, "codec": codec, "plan": plan},
+        )
+        return FileResponse(
+            path=media_path,
+            media_type=media_type,
+            filename=filename,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "private, max-age=3600",
+            },
+        )
     except HTTPException as exc:
         _emit_stream_reject(
             request,
@@ -159,67 +193,6 @@ async def stream(
             detail=str(exc.detail),
         )
         raise
-    try:
-        plan = plan_stream(is_lossy=bool(track.is_lossy), codec=codec)
-    except StreamConflict as exc:
-        _emit_stream_reject(request, id, codec, status=409, detail=exc.message)
-        raise HTTPException(status_code=409, detail=exc.message) from exc
-    except ValueError as exc:
-        _emit_stream_reject(request, id, codec, status=400, detail=str(exc))
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if plan == "passthrough":
-        media_type, ext = passthrough_media(track.source_codec)
-        emit(
-            request,
-            "http.stream",
-            level="info",
-            data={"track_id": id, "codec": codec, "plan": "passthrough"},
-        )
-        return FileResponse(
-            path=resolved,
-            media_type=media_type,
-            filename=f"{resolved.stem}.{resolved.suffix.lstrip('.') or ext}",
-            headers={
-                "Accept-Ranges": "bytes",
-                "Cache-Control": "private, max-age=3600",
-            },
-        )
-
-    profile = get_profile(codec)
-    warn_null_track_tech(track)
-    try:
-        media_path = await run_in_threadpool(
-            transcoder(request).ensure_stream,
-            resolved,
-            track.rel_path,
-            profile_tag=codec,
-            source_tech=tech_from_track(track),
-        )
-    except Exception as exc:
-        _emit_stream_reject(
-            request,
-            id,
-            codec,
-            status=500,
-            detail=f"{type(exc).__name__}: {exc}"[:300],
-        )
-        raise
-    emit(
-        request,
-        "http.stream",
-        level="info",
-        data={"track_id": id, "codec": codec, "plan": "encode"},
-    )
-    return FileResponse(
-        path=media_path,
-        media_type=profile.media_type,
-        filename=f"{resolved.stem}.{profile.extension}",
-        headers={
-            "Accept-Ranges": "bytes",
-            "Cache-Control": "private, max-age=3600",
-        },
-    )
 
 
 class PrepareRequest(BaseModel):
