@@ -9,9 +9,6 @@ const SHELL_CACHE_VERSION = __SHELL_CACHE_VERSION__;
 const SHELL_CACHE = `musicweb-${SHELL_CACHE_VERSION}`;
 const PRECACHE_URLS = __PRECACHE_URLS__;
 
-/** Must succeed during install or the worker rejects install. */
-const CRITICAL_URLS = ["/", "/static/js/main.js"];
-
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -34,15 +31,9 @@ self.addEventListener("install", (event) => {
           }
         })
       );
-      const critical = new Set(CRITICAL_URLS);
-      for (const u of PRECACHE_URLS) {
-        if (u.includes("/static/vendor/vue.esm-browser")) critical.add(u);
-      }
-      const criticalFailed = [...critical].filter((u) => failedUrls.includes(u));
-      if (criticalFailed.length) {
+      if (failedUrls.length) {
         throw new Error(
-          "[sw] install aborted; critical assets failed: " +
-            criticalFailed.join(", ")
+          "[sw] install aborted; precache failed: " + failedUrls.join(", ")
         );
       }
       await self.skipWaiting();
