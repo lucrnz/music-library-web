@@ -25,6 +25,12 @@ from musicweb.transcode import (
     tech_from_track,
 )
 from musicweb.transcode.null_tech_log import warn_null_track_tech
+from musicweb.transcode.passthrough import (
+    SOURCE_TAG,
+    StreamConflict,
+    passthrough_media,
+    plan_stream,
+)
 
 router = APIRouter(prefix="/api", tags=["media"])
 
@@ -91,9 +97,25 @@ async def stream(
         raise HTTPException(status_code=404, detail="Track not found")
     resolved = _resolve_track_file(lib, track)
     try:
-        profile = get_profile(codec)
+        plan = plan_stream(is_lossy=bool(track.is_lossy), codec=codec)
+    except StreamConflict as exc:
+        raise HTTPException(status_code=409, detail=exc.message) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if plan == "passthrough":
+        media_type, ext = passthrough_media(track.source_codec)
+        return FileResponse(
+            path=resolved,
+            media_type=media_type,
+            filename=f"{resolved.stem}.{resolved.suffix.lstrip('.') or ext}",
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "private, max-age=3600",
+            },
+        )
+
+    profile = get_profile(codec)
     warn_null_track_tech(track)
     media_path = await run_in_threadpool(
         transcoder(request).ensure_stream,
@@ -128,6 +150,10 @@ def transcode_prepare(
 ) -> dict:
     lib = library(request)
     tc = transcoder(request)
+    if payload.codec == SOURCE_TAG:
+        counts = {"queued": 0, "already": 0, "ready": 0, "skipped": 0}
+        counts["skipped"] = len(payload.ids)
+        return counts
     try:
         get_profile(payload.codec)
     except ValueError as exc:
@@ -142,6 +168,9 @@ def transcode_prepare(
 
     for t in tracks_repo.get_many(db, payload.ids):
         if t.is_missing or not t.rel_path:
+            counts["skipped"] += 1
+            continue
+        if t.is_lossy:
             counts["skipped"] += 1
             continue
         try:
