@@ -3,14 +3,7 @@
  */
 
 import { reactive } from "vue";
-import { canReachServer } from "../connectivity.js";
-import {
-  openDiagDb,
-  outboxAll,
-  outboxDelete,
-  outboxPut,
-  outboxTrim,
-} from "./idb.js";
+import { outboxAll, outboxDelete, outboxPut } from "./idb.js";
 
 const KEY_CLIENT = "musicweb.diag.clientId";
 const KEY_SESSION = "musicweb.diag.sessionId";
@@ -36,11 +29,11 @@ export const diag = reactive({
   playId: /** @type {string | null} */ (null),
 });
 
-/** @type {object[]} used only when IndexedDB is unavailable */
-const memory = [];
+/** @type {object[]} memory source of truth; IDB is a persist mirror */
+const unacked = [];
 
-/** @type {Promise<boolean>} */
-const idbReady = openDiagDb().then((db) => !!db);
+/** @type {Promise<void> | null} */
+let hydratePromise = null;
 
 let flushTimer = 0;
 let flushing = false;
@@ -115,22 +108,6 @@ export function diagRequestHeaders() {
   return headers;
 }
 
-export function getMode() {
-  return diag.mode;
-}
-
-export function getClientId() {
-  return diag.clientId;
-}
-
-export function getSessionId() {
-  return diag.sessionId;
-}
-
-export function getPlayId() {
-  return diag.playId;
-}
-
 /**
  * @param {"errors" | "everything"} next
  */
@@ -181,6 +158,20 @@ function toIngestEvent(row) {
   };
 }
 
+function dropIds(ids) {
+  const nums = ids.filter((id) => typeof id === "number");
+  if (!nums.length) return Promise.resolve();
+  return outboxDelete(nums).catch(() => {});
+}
+
+function dropRows(rows) {
+  for (const row of rows) {
+    const idx = unacked.indexOf(row);
+    if (idx >= 0) unacked.splice(idx, 1);
+  }
+  dropIds(rows.map((r) => r.id));
+}
+
 async function postBatch(events) {
   const res = await fetch("/api/diag/events", {
     method: "POST",
@@ -194,31 +185,29 @@ async function postBatch(events) {
   return res.ok;
 }
 
+function ensureHydrated() {
+  if (!hydratePromise) {
+    hydratePromise = outboxAll()
+      .then((rows) => {
+        if (Array.isArray(rows) && rows.length) {
+          unacked.push(...rows);
+        }
+      })
+      .catch(() => {});
+  }
+  return hydratePromise;
+}
+
 export async function flushOutbox() {
   if (flushing) return;
-  if (!canReachServer()) return;
   flushing = true;
   try {
-    const rows = await outboxAll();
-    if (rows.length) {
-      for (let i = 0; i < rows.length; i += BATCH) {
-        const chunk = rows.slice(i, i + BATCH);
-        const ok = await postBatch(chunk.map(toIngestEvent));
-        if (!ok) return;
-        await outboxDelete(
-          chunk.map((r) => r.id).filter((id) => typeof id === "number")
-        );
-      }
-      return;
-    }
-    if (memory.length) {
-      const copy = memory.slice();
-      for (let i = 0; i < copy.length; i += BATCH) {
-        const chunk = copy.slice(i, i + BATCH);
-        const ok = await postBatch(chunk.map(toIngestEvent));
-        if (!ok) return;
-        memory.splice(0, chunk.length);
-      }
+    await ensureHydrated();
+    while (unacked.length) {
+      const chunk = unacked.slice(0, BATCH);
+      const ok = await postBatch(chunk.map(toIngestEvent));
+      if (!ok) return;
+      dropRows(chunk);
     }
   } catch {
     /* leave rows in place */
@@ -228,16 +217,16 @@ export async function flushOutbox() {
 }
 
 function beaconFlush() {
-  const rows = memory.slice();
-  if (!rows.length) return;
+  const chunk = unacked.slice(0, BATCH);
+  if (!chunk.length) return;
   if (typeof navigator === "undefined" || !navigator.sendBeacon) return;
   try {
     const body = JSON.stringify({
-      events: rows.slice(0, BATCH).map(toIngestEvent),
+      events: chunk.map(toIngestEvent),
     });
     const blob = new Blob([body], { type: "application/json" });
     if (navigator.sendBeacon("/api/diag/events", blob)) {
-      memory.splice(0, Math.min(BATCH, memory.length));
+      dropRows(chunk);
     }
   } catch {
     /* ignore */
@@ -259,6 +248,15 @@ function bindHide() {
   });
 }
 
+async function persist(record) {
+  const id = await outboxPut(record);
+  if (id != null) record.id = id;
+  if (unacked.length > OUTBOX_MAX) {
+    const dropped = unacked.splice(0, unacked.length - OUTBOX_MAX);
+    await dropIds(dropped.map((r) => r.id));
+  }
+}
+
 /**
  * @param {string} event
  * @param {object} [data]
@@ -277,20 +275,14 @@ export function emit(event, data, level = "info") {
       play_id: diag.playId,
       data: data && typeof data === "object" ? data : {},
     };
-    idbReady
-      .then((ok) => {
-        if (ok) {
-          return outboxPut(record).then(() => outboxTrim(OUTBOX_MAX));
-        }
-        memory.push(record);
-        if (memory.length > OUTBOX_MAX) {
-          memory.splice(0, memory.length - OUTBOX_MAX);
-        }
-        return undefined;
+    ensureHydrated()
+      .then(() => {
+        unacked.push(record);
+        return persist(record);
       })
       .then(() => scheduleFlush())
       .catch(() => {
-        memory.push(record);
+        if (!unacked.includes(record)) unacked.push(record);
         scheduleFlush();
       });
   } catch {
@@ -329,13 +321,17 @@ export function initDiag() {
   }
   writeCookies();
   bindHide();
-  emit("diag.boot", {
-    ua: typeof navigator !== "undefined" ? navigator.userAgent : "",
-    displayMode: displayMode(),
-    standalone: displayMode() === "standalone",
-    origin: typeof location !== "undefined" ? location.origin : "",
-    isSecureContext:
-      typeof window !== "undefined" ? !!window.isSecureContext : false,
-  }, "info");
-  flushOutbox().catch(() => {});
+  ensureHydrated()
+    .then(() => {
+      emit("diag.boot", {
+        ua: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        displayMode: displayMode(),
+        standalone: displayMode() === "standalone",
+        origin: typeof location !== "undefined" ? location.origin : "",
+        isSecureContext:
+          typeof window !== "undefined" ? !!window.isSecureContext : false,
+      }, "info");
+      flushOutbox().catch(() => {});
+    })
+    .catch(() => {});
 }

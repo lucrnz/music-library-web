@@ -102,18 +102,4 @@ export async function outboxDelete(ids) {
   }
 }
 
-/**
- * Drop oldest rows until at most *max* remain.
- * @param {number} max
- */
-export async function outboxTrim(max) {
-  const rows = await outboxAll();
-  if (rows.length <= max) return;
-  const extra = rows
-    .slice()
-    .sort((a, b) => (a.id || 0) - (b.id || 0))
-    .slice(0, rows.length - max)
-    .map((r) => r.id)
-    .filter((id) => typeof id === "number");
-  await outboxDelete(extra);
-}
+

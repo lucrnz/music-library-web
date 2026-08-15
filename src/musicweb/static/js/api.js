@@ -8,12 +8,13 @@ import { diagRequestHeaders } from "./diag/log.js";
 import { fromApiLyrics } from "./models/lyrics.js";
 import { fromApiTrack, mapTracks } from "./models/track.js";
 
-function jsonHeaders() {
-  return { "Content-Type": "application/json", ...diagRequestHeaders() };
+function apiFetch(url, init = {}) {
+  const headers = { ...diagRequestHeaders(), ...(init.headers || {}) };
+  return fetch(url, { ...init, headers });
 }
 
 export async function apiGet(url) {
-  const res = await fetch(url, { headers: diagRequestHeaders() });
+  const res = await apiFetch(url);
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText);
     throw new Error(detail || res.statusText);
@@ -22,9 +23,9 @@ export async function apiGet(url) {
 }
 
 export async function apiPost(url, body) {
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method: "POST",
-    headers: jsonHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
   if (!res.ok) {
@@ -35,9 +36,9 @@ export async function apiPost(url, body) {
 }
 
 export async function apiPut(url, body) {
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method: "PUT",
-    headers: jsonHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
   if (!res.ok) {
@@ -48,9 +49,9 @@ export async function apiPut(url, body) {
 }
 
 export async function apiPatch(url, body) {
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method: "PATCH",
-    headers: jsonHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
   if (!res.ok) {
@@ -61,10 +62,7 @@ export async function apiPatch(url, body) {
 }
 
 export async function apiDelete(url) {
-  const res = await fetch(url, {
-    method: "DELETE",
-    headers: diagRequestHeaders(),
-  });
+  const res = await apiFetch(url, { method: "DELETE" });
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText);
     throw new Error(detail || res.statusText);
@@ -234,7 +232,7 @@ export function clearCache(...scopes) {
   const only = scopes.filter((s) => s === "streams");
   if (!only.length) return;
   const q = only.map((s) => `scope=${encodeURIComponent(s)}`).join("&");
-  return fetch(`/api/cache/clear?${q}`, { method: "POST" }).catch(() => {});
+  return apiFetch(`/api/cache/clear?${q}`, { method: "POST" }).catch(() => {});
 }
 
 /** Keys already prepared: "id|codec" */
@@ -268,7 +266,7 @@ export function requestPrepare(
   }
   if (!use.length) return;
   use.forEach((id) => preparedKeys.add(`${id}|${codec}`));
-  fetch("/api/transcode/prepare", {
+  apiFetch("/api/transcode/prepare", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids: use, codec, replace, urgent: !!urgent }),
