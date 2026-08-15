@@ -18,6 +18,7 @@ Musicweb is a single-process LAN server:
 3. **HTTP API + SPA** — FastAPI JSON API and a Vue 3 ESM client (no bundler).
 4. **On-demand transcoder** — ffmpeg worker produces Opus/FLAC stream profiles into a process-temp cache.
 5. **Client offline path** — optional OPFS downloads, connectivity, and play-source resolution in the browser.
+6. **Diagnostics** — structured client/server events as JSONL under the data dir; Settings cutoff + `musicweb logs`. See `docs/systems/diagnostics.md`.
 
 ```text
 Browser (Vue ESM SPA)

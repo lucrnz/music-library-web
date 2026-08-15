@@ -73,6 +73,7 @@ $MUSICWEB_DATA_DIR/
   library.db
   covers/albums/
   covers/artists/
+  diag/events-YYYY-MM-DD.jsonl
 ```
 
 Stream encode cache is **not** under the data dir; it lives in a process temp directory and is wiped on shutdown.

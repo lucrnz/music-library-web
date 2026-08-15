@@ -22,6 +22,7 @@
 - **Playback / quality** (play source, stream vs download policy, prepare): `docs/systems/playback.md`.
 - **Exclusive audio** (Mac PWA + companion sinks; optional): `docs/systems/exclusive-audio.md`. Player transport goes through sinks — do not re-export a shared `HTMLAudioElement` from `player.js`.
 - **Connectivity** (online / offline / server_down, network cost hints): `docs/systems/connectivity.md`.
+- **Diagnostics** (`static/js/diag/`): always-on emit with an Errors only / Everything cutoff in Settings. Design: `docs/systems/diagnostics.md`.
 
 ## Vendor assets
 

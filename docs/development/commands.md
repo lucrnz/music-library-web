@@ -72,10 +72,27 @@ Write jobs use the same multi-kind job runner as HTTP (`musicweb.jobs`). If the 
 | `musicweb regen-lyrics [--force]` | Lyrics fetch |
 | `musicweb stats` | Counts (artists/albums/tracks/missing) |
 | `musicweb doctor` | Hard checks (library path, data dir, ffmpeg, DB, lock info) |
+| `musicweb logs list` | Diagnostic event files (sizes, line counts) |
+| `musicweb logs show` | Print matching JSONL (`--session`, `--level`, `--client`, …) |
+| `musicweb logs tail` | Last N matching lines; `--follow` |
+| `musicweb logs purge` | Delete old or all event files (`--older-than` / `--all`) |
 
 `--force` redoes work that would otherwise skip (covers already present, artist cooldown/images, lyrics cooldown). Full scan (`--mode full`) also forces covers, artist images, and lyrics enrichment.
 
 Ctrl+C cancels a **local** foreground job cooperatively. Cross-process cancel is `scan cancel` against a live server.
+
+## Diagnostic logs
+
+JSONL under `$MUSICWEB_DATA_DIR/diag/` (see `docs/systems/diagnostics.md`). The CLI reads and purges files only — no data-dir lock, no control socket, safe while the server runs.
+
+```sh
+uv run musicweb logs list
+uv run musicweb logs show --level error
+uv run musicweb logs show --session <id>
+uv run musicweb logs purge --older-than 7 --yes
+```
+
+Exact flags: `uv run musicweb logs --help`.
 
 ## Exclusive audio companion (macOS)
 

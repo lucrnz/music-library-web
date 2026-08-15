@@ -38,6 +38,7 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 - `docs/systems/playback.md`: play source, quality prefs, prepare.
 - `docs/systems/exclusive-audio.md`: operator get started (Mac), then design (companion hog, mpv, loopback WS).
 - `docs/systems/connectivity.md`: online / offline / server_down and network cost hints.
+- `docs/systems/diagnostics.md`: client/server event capture, Errors only vs Everything, `musicweb logs`.
 
 ## Data and UI
 

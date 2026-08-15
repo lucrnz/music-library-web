@@ -38,6 +38,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (no bundler). Strea
 - [Offline downloads](docs/systems/downloads.md)
 - [Playback and quality](docs/systems/playback.md)
 - [Connectivity](docs/systems/connectivity.md)
+- [Diagnostics](docs/systems/diagnostics.md)
 
 ## Documentation scope
 
