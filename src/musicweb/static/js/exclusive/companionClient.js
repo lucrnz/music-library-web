@@ -36,6 +36,8 @@ import {
 
 /** @type {WebSocket | null} */
 let ws = null;
+/** @type {string | null} */
+let inFlightKey = null;
 /** @type {ReturnType<typeof setInterval> | null} */
 let heartbeatTimer = null;
 /** @type {ReturnType<typeof setTimeout> | null} */
@@ -43,6 +45,21 @@ let reconnectTimer = null;
 let reconnectAttempt = 0;
 let wantConnected = false;
 let intentionalClose = false;
+
+function desiredConnectKey() {
+  const port = exclusiveAudio.port || 18765;
+  const token = (exclusiveAudio.hogToken || "").trim();
+  return `${port}\0${token}`;
+}
+
+/** OPEN or CONNECTING. close() goes to CLOSING, so connectNow can assign a new socket. */
+function isLiveSocket(socket) {
+  return (
+    !!socket &&
+    (socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING)
+  );
+}
 
 /** @type {Set<(evt: { type: string, [k: string]: unknown }) => void>} */
 const listeners = new Set();
@@ -299,7 +316,7 @@ function applyStatus(msg) {
 
 function connectNow() {
   if (!wantConnected) return;
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+  if (isLiveSocket(ws)) {
     return;
   }
 
@@ -323,6 +340,7 @@ function connectNow() {
     scheduleReconnect();
     return;
   }
+  inFlightKey = desiredConnectKey();
 
   ws.onopen = () => {
     send(
@@ -343,7 +361,8 @@ function connectNow() {
     exclusiveAudio.lastError = "websocket error";
   };
 
-  ws.onclose = () => {
+  ws.onclose = (event) => {
+    if (event.target !== ws) return;
     clearHeartbeat();
     ws = null;
     exclusiveAudio.connection = "disconnected";
@@ -360,6 +379,7 @@ function connectNow() {
 export function disconnectCompanion() {
   wantConnected = false;
   intentionalClose = true;
+  inFlightKey = null;
   clearReconnect();
   clearHeartbeat();
   reconnectAttempt = 0;
@@ -390,14 +410,18 @@ export function syncCompanionConnection() {
     return;
   }
   wantConnected = true;
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  const desired = desiredConnectKey();
+  if (isLiveSocket(ws) && desired === inFlightKey) {
+    return;
+  }
+  if (isLiveSocket(ws)) {
     intentionalClose = true;
+    clearHeartbeat();
     try {
       ws.close();
     } catch {
       /* ignore */
     }
-    ws = null;
   }
   clearReconnect();
   reconnectAttempt = 0;

@@ -94,7 +94,6 @@ export const pl = reactive({
     for (const i of [...indices].sort((a, b) => b - a)) {
       this.tracks.splice(i, 1);
       if (i < this.index) this.index -= 1;
-      else if (i === this.index) this.index = -1;
     }
     if (this.index >= this.tracks.length) this.index = this.tracks.length - 1;
     this.rebuildShuffle();

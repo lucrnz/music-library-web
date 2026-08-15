@@ -29,7 +29,7 @@ Each successful load records a **play source** (not a library path):
 | `unavailable` | Cannot start; structured block reason set |
 | `none` | Player idle (no current load) |
 
-Resolution is decision-first: load catalog record when downloads are enabled, apply **playback policy**, open a local blob only if local wins, otherwise stream when online. Offline without a playable local file is unavailable (with reasons such as missing, broken, or offline-without-local — exact set in `playBlock.js`).
+Resolution is decision-first: load catalog record when downloads are enabled, apply **playback policy**, open a local blob only if local wins, otherwise stream when the server is reachable. Play-source “online” means `canReachServer()` (see `docs/systems/connectivity.md`) — not `navigator.onLine` alone. When `canReachServer()` is false (`offline`, `server_down`, or browser offline), resolve uses the offline path: a playable download wins, otherwise unavailable (reasons such as missing, broken, or offline-without-local — exact set in `playBlock.js`).
 
 ## Quality preferences
 
@@ -41,7 +41,7 @@ Independent client preferences (exact storage keys and defaults live in `setting
 - **Playback policy** when a download exists while online:
   - Prefer higher quality (use local when at least as good as the active stream profile)
   - Prefer downloaded file
-  - Prefer live stream when online (local only when offline / stream unavailable)
+  - Prefer live stream when the server is reachable (`canReachServer()`) (local only when unreachable / stream unavailable)
 
 Active stream profile for prepare and play follows the current network constraint state when type detection works. Network cost hints never replace an explicit user setting.
 
@@ -64,3 +64,4 @@ Exact lead time and API flags live in source.
 - Prefer stable track IDs for stream, prepare, and download keys over paths.
 - Do not claim a codec is playable without a successful probe path for that browser.
 - Network Information API absence is normal on desktop — UI and policy must degrade gracefully (hide cellular-only options; treat connection as unrestricted).
+- Do not use `isHardOffline()` alone to decide stream vs download — play-source online is `canReachServer()`.

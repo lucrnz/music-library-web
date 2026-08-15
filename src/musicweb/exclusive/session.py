@@ -182,13 +182,10 @@ class ExclusiveHub:
             )
             return None
 
+        old: ClientSession | None = None
         async with self._lock:
-            # Replace existing socket for same session id
             old = self._clients.pop(session_id, None)
-            if old and self._controller_id == session_id:
-                self._controller_id = None
-
-            if self._controller_id is None:
+            if self._controller_id is None or self._controller_id == session_id:
                 role = p.ROLE_CONTROLLER
                 self._controller_id = session_id
             else:
@@ -201,6 +198,12 @@ class ExclusiveHub:
             )
             self._clients[session_id] = sess
             self.ensure_ttl_watch()
+
+        if old is not None:
+            try:
+                await old.websocket.close()
+            except Exception:
+                pass
 
         await self._send(
             sess,
@@ -217,26 +220,45 @@ class ExclusiveHub:
         )
         return sess
 
-    async def handle_disconnect(self, session_id: str) -> None:
+    def _is_current(self, sess: ClientSession) -> bool:
+        return self._clients.get(sess.session_id) is sess
+
+    def _is_live_controller(self, sess: ClientSession) -> bool:
+        return (
+            self._is_current(sess)
+            and sess.role == p.ROLE_CONTROLLER
+            and self._controller_id == sess.session_id
+        )
+
+    async def handle_disconnect(self, sess: ClientSession) -> None:
         async with self._lock:
-            sess = self._clients.pop(session_id, None)
-            if sess is None:
+            if not self._is_current(sess):
                 return
-            if self._controller_id == session_id:
+            self._clients.pop(sess.session_id, None)
+            if self._controller_id == sess.session_id:
                 self._controller_id = None
-                logger.info("Controller %s disconnected; lock free", session_id)
+                logger.info(
+                    "Controller %s disconnected; lock free", sess.session_id
+                )
                 await self._ensure_no_controller_exclusive()
             await self._broadcast_status_unlocked()
 
     async def handle_message(
         self, sess: ClientSession, msg: dict[str, Any]
     ) -> None:
-        mtype = msg["type"]
-        if mtype == p.MSG_HEARTBEAT:
-            sess.last_heartbeat = time.monotonic()
-            return
+        async with self._lock:
+            if not self._is_current(sess):
+                return
+            mtype = msg["type"]
+            if mtype == p.MSG_HEARTBEAT:
+                sess.last_heartbeat = time.monotonic()
+                return
+            live = self._is_live_controller(sess)
 
         if mtype == p.MSG_LIST_DEVICES:
+            async with self._lock:
+                if not self._is_current(sess):
+                    return
             self._devices = list_output_devices()
             await self._send(
                 sess,
@@ -247,8 +269,7 @@ class ExclusiveHub:
             )
             return
 
-        # Controller-only playback commands
-        if sess.role != p.ROLE_CONTROLLER:
+        if not live:
             await self._send(
                 sess,
                 p.envelope(
@@ -272,6 +293,9 @@ class ExclusiveHub:
         self, sess: ClientSession, mtype: str, msg: dict[str, Any]
     ) -> None:
         if mtype == p.MSG_SET_DEVICE:
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
             device_id = str(msg.get("deviceId") or msg.get("device_id") or "")
             if not device_id:
                 raise ValueError("deviceId required")
@@ -280,41 +304,65 @@ class ExclusiveHub:
                 if d.id == device_id:
                     mpv_dev = d.mpv_device or d.id
                     break
-            self._device_id = device_id
             await asyncio.to_thread(self._player.set_device, mpv_dev)
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
+                self._device_id = device_id
             await self.broadcast(
                 p.envelope(p.MSG_STATUS, **self._status_fields())
             )
             return
 
         if mtype in (p.MSG_LOAD, p.MSG_PLAY):
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
+                if not self._device_id:
+                    raise ValueError("select a device first")
             url = str(msg.get("url") or "")
             if not url.startswith(("http://", "https://")):
                 raise ValueError("absolute http(s) url required")
-            if not self._device_id:
-                raise ValueError("select a device first")
             await asyncio.to_thread(self._player.load, url)
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
             await self.broadcast(
                 p.envelope(p.MSG_STATUS, **self._status_fields())
             )
             return
 
         if mtype == p.MSG_PAUSE:
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
             await asyncio.to_thread(self._player.pause)
             return
 
         if mtype == p.MSG_RESUME:
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
             await asyncio.to_thread(self._player.resume)
             return
 
         if mtype == p.MSG_STOP:
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
             await asyncio.to_thread(self._player.stop)
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
             await self.broadcast(
                 p.envelope(p.MSG_STATUS, **self._status_fields())
             )
             return
 
         if mtype == p.MSG_SEEK:
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
             t = msg.get("t")
             if t is None:
                 t = msg.get("position")
@@ -324,15 +372,24 @@ class ExclusiveHub:
             return
 
         if mtype == p.MSG_SET_VOLUME:
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
             vol = msg.get("volume")
             if vol is None:
                 raise ValueError("volume required")
             await asyncio.to_thread(self._player.set_volume, float(vol))
+            async with self._lock:
+                if not self._is_live_controller(sess):
+                    return
             await self.broadcast(
                 p.envelope(p.MSG_STATUS, **self._status_fields())
             )
             return
 
+        async with self._lock:
+            if not self._is_live_controller(sess):
+                return
         await self._send(
             sess,
             p.envelope(p.MSG_ERROR, message=f"unknown type {mtype}"),

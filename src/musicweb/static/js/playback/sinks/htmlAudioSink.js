@@ -35,6 +35,7 @@ export function createHtmlAudioSink() {
       handlers.onDuration?.(audio.duration);
     });
     audio.addEventListener("error", () => {
+      if (!audio.getAttribute("src")) return;
       handlers.onError?.("HTML audio playback failed");
     });
   }

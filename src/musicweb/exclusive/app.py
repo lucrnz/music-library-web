@@ -91,6 +91,6 @@ def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
             logger.exception("websocket error: %s", exc)
         finally:
             if sess is not None:
-                await hub.handle_disconnect(sess.session_id)
+                await hub.handle_disconnect(sess)
 
     return app

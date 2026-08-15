@@ -207,20 +207,29 @@ export function consumeMissingTechToast(trackId) {
   return true;
 }
 
+/** @param {(m: typeof import("../exclusive/companionClient.js")) => unknown} fn */
+function companion(fn) {
+  import("../exclusive/companionClient.js")
+    .then(fn)
+    .catch(() => {});
+}
+
 export function setExclusiveEnabled(on) {
   exclusiveAudio.enabled = !!on;
   persist();
-  import("../exclusive/companionClient.js")
-    .then((m) => m.syncCompanionConnection())
-    .catch(() => {});
+  companion((m) => m.syncCompanionConnection());
 }
 
 export function setHogToken(token) {
   exclusiveAudio.hogToken = String(token || "");
   persist();
-  import("../exclusive/companionClient.js")
-    .then((m) => m.syncCompanionConnection())
-    .catch(() => {});
+  if (!(exclusiveAudio.hogToken || "").trim()) {
+    companion((m) => m.disconnectCompanion());
+  }
+}
+
+export function commitHogToken() {
+  companion((m) => m.syncCompanionConnection());
 }
 
 export function setExclusivePort(port) {
@@ -228,9 +237,7 @@ export function setExclusivePort(port) {
   if (!Number.isFinite(n) || n <= 0 || n >= 65536) return;
   exclusiveAudio.port = Math.floor(n);
   persist();
-  import("../exclusive/companionClient.js")
-    .then((m) => m.syncCompanionConnection())
-    .catch(() => {});
+  companion((m) => m.syncCompanionConnection());
 }
 
 export function setFormatMode(mode) {
@@ -257,9 +264,7 @@ export function setSelectedDeviceId(id) {
     exclusiveAudio.companionDeviceId = null;
   }
   persist();
-  import("../exclusive/companionClient.js")
-    .then((m) => m.syncPreferredDevice())
-    .catch(() => {});
+  companion((m) => m.syncPreferredDevice());
 }
 
 /**

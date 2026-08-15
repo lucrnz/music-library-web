@@ -9,6 +9,7 @@ import {
   setExclusiveEnabled,
   setExclusivePort,
   setFormatMode,
+  commitHogToken,
   setHogToken,
   setSelectedDeviceId,
 } from "../../stores/exclusiveAudio.js";
@@ -61,6 +62,10 @@ export default defineComponent({
       setHogToken(e.target.value);
     }
 
+    function onTokenCommit() {
+      commitHogToken();
+    }
+
     function onPort(e) {
       setExclusivePort(e.target.value);
     }
@@ -90,6 +95,7 @@ export default defineComponent({
       DEFAULT_PORT,
       onEnable,
       onToken,
+      onTokenCommit,
       onPort,
       onFormatMode,
       onDevice,
@@ -128,6 +134,7 @@ export default defineComponent({
           class="text-input text-input-block"
           :value="exclusiveAudio.hogToken"
           @input="onToken"
+          @change="onTokenCommit"
           placeholder="Same value as companion env"
           aria-labelledby="exclusive-token-label"
         />

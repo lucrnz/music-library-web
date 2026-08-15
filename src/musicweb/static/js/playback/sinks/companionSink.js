@@ -24,6 +24,7 @@ export function createCompanionSink() {
   let paused = true;
   let currentTime = 0;
   let duration = 0;
+  let hasLoad = false;
   let unsub = null;
 
   function ensureListen() {
@@ -39,8 +40,9 @@ export function createCompanionSink() {
         handlers.onPauseState?.(paused);
       } else if (evt.type === "eof") {
         paused = true;
-        handlers.onEnded?.();
+        if (hasLoad) handlers.onEnded?.();
       } else if (evt.type === "error" || evt.type === "disconnect") {
+        if (!hasLoad) return;
         handlers.onError?.(
           evt.message || "Exclusive companion disconnected",
           evt.code || null
@@ -60,8 +62,8 @@ export function createCompanionSink() {
       paused = false;
       currentTime = 0;
       duration = 0;
-      const ok = companionLoad(url);
-      if (!ok) {
+      hasLoad = companionLoad(url);
+      if (!hasLoad) {
         throw new Error("Companion not ready for load");
       }
     },
@@ -74,6 +76,7 @@ export function createCompanionSink() {
       paused = false;
     },
     stop() {
+      hasLoad = false;
       companionStop();
       paused = true;
       currentTime = 0;
