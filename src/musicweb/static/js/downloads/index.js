@@ -293,8 +293,7 @@ export async function initDownloads() {
   } catch (err) {
     console.error("Downloads init failed", err);
     downloads.error = err?.message || String(err);
-    downloads.enabled = false;
-    saveEnabledFlag(false);
+    downloads.enabled = on;
     downloads.ready = true;
   }
   syncControlFlags();
