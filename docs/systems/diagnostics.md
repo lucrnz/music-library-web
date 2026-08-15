@@ -39,7 +39,7 @@ A stable per-install client id, optional session id (Everything only), and a per
 
 ## Client outbox
 
-Events that pass the current cutoff go to a small IndexedDB (`musicweb-diag`, not the downloads database) and flush to ingest when the server is reachable. Hide/unload uses keepalive / sendBeacon. Emit never blocks play. Ingest writes whatever it receives (no second level filter) and does not log itself.
+Events that pass the current cutoff go onto one in-memory unacked list. IndexedDB (`musicweb-diag`, not the downloads database) only persists that list. Flush and hide/unload sendBeacon both read the same list. A failed POST leaves the rows in place. Emit never blocks play. Ingest writes whatever it receives (no second level filter) and does not log itself.
 
 ## Operator read path
 
@@ -56,3 +56,9 @@ Stdout Python `logging` is unchanged.
 - Do not store events in `library.db`.
 - Do not add `timeupdate` / byte / chunk streams.
 - Exclusive-audio companion, scan, lyrics, covers, and the download worker are out of this system’s instrumentation.
+- Playback events fire from existing player state seams. Do not add a silent exclusive-only fail path or a second exclusive logger.
+- One client outbox: the memory list plus an IDB mirror of that list. Do not add a second flush buffer. Do not trim IDB independently of that list.
+- All same-origin `/api` fetches share the client helper. Ingest flush stays a dedicated request so it cannot recurse through that helper.
+- Ingest validates the whole batch; the store writes it in one append (rotation included). Do not rotate from the ingest route.
+- Stream reject emit is one exception path on the route, not a site before each raise. Success emit happens once after the file is chosen.
+- The CLI lists event files through the store module. Do not copy a second directory walker.
