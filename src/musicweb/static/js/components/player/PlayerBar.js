@@ -19,7 +19,9 @@ import {
 } from "../../stores/player.js";
 import { settings } from "../../stores/settings.js";
 import { downloads } from "../../downloads/state.js";
+import { kindForTrack } from "../../lossyKind.js";
 import Icon from "../icons/Icon.js";
+import LossyMark from "../lossy/LossyMark.js";
 import NowPlayingFull from "./NowPlayingFull.js";
 
 const DESKTOP_BREAKPOINT = "(min-width: 900px)";
@@ -33,7 +35,7 @@ function isDesktop() {
 
 export default defineComponent({
   name: "PlayerBar",
-  components: { Icon, NowPlayingFull },
+  components: { Icon, NowPlayingFull, LossyMark },
   setup() {
     const root = ref(null);
     const fullRef = ref(null);
@@ -48,6 +50,7 @@ export default defineComponent({
     const visible = computed(() => Boolean(pl.current) || pl.length > 0);
     const track = computed(() => pl.current);
     const title = computed(() => (track.value ? track.value.title : "—"));
+    const lossyKind = computed(() => kindForTrack(track.value));
     const subtitle = computed(() => {
       const t = track.value;
       if (!t) return "No track";
@@ -137,6 +140,7 @@ export default defineComponent({
       player,
       visible,
       title,
+      lossyKind,
       subtitle,
       coverThumb,
       coverFull,
@@ -178,6 +182,7 @@ export default defineComponent({
           <span class="np-title">{{ title }}</span>
           <span class="np-artist">{{ subtitle }}</span>
         </button>
+        <LossyMark :kind="lossyKind" />
         <button
           type="button"
           class="icon-btn"

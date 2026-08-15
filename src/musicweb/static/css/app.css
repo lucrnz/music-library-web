@@ -322,6 +322,50 @@ main {
   white-space: nowrap;
 }
 
+.row-title-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.row-title-line .row-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.lossy-mark {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -10px -8px -10px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.lossy-mark .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.media-card-wrap {
+  position: relative;
+}
+
+.media-card-lossy {
+  position: absolute;
+  top: auto;
+  bottom: 22px;
+  right: 0;
+}
+
 .row-sub {
   font-size: 13px;
   color: var(--text-dim);

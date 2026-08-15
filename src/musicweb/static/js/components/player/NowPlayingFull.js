@@ -3,7 +3,7 @@
  * Parent owns expand/collapse and mini bar.
  * Delivery status lives in PlaybackStatusLine.
  */
-import { defineComponent, nextTick, ref, watch } from "vue";
+import { computed, defineComponent, nextTick, ref, watch } from "vue";
 import { pl } from "../../stores/playlist.js";
 import {
   player,
@@ -17,7 +17,9 @@ import {
 } from "../../stores/player.js";
 import { openSettings } from "../../stores/settings.js";
 import { formatTime, setRangeFill } from "../../util.js";
+import { kindForTrack } from "../../lossyKind.js";
 import Icon from "../icons/Icon.js";
+import LossyMark from "../lossy/LossyMark.js";
 import LyricsOverlay from "./LyricsOverlay.js";
 import PlaybackStatusLine from "./PlaybackStatusLine.js";
 
@@ -32,7 +34,7 @@ function isDesktop() {
 
 export default defineComponent({
   name: "NowPlayingFull",
-  components: { Icon, LyricsOverlay, PlaybackStatusLine },
+  components: { Icon, LyricsOverlay, PlaybackStatusLine, LossyMark },
   props: {
     title: { type: String, default: "—" },
     subtitle: { type: String, default: "" },
@@ -51,6 +53,8 @@ export default defineComponent({
     const volEl = ref(null);
     const closeBtn = ref(null);
     const sheetDragY = ref(null);
+
+    const lossyKind = computed(() => kindForTrack(pl.current));
 
     function collapse() {
       emit("collapse");
@@ -150,6 +154,7 @@ export default defineComponent({
       onSheetMove,
       onSheetUp,
       onSeekDown,
+      lossyKind,
       onSeekUp,
       onSeekInput,
       onVolInput,
@@ -221,7 +226,10 @@ export default defineComponent({
         @click="onCoverOrMetaOpen"
         @keydown.enter.space.prevent="onCoverOrMetaOpen"
       >
-        <div class="np-title">{{ title }}</div>
+        <div class="np-title-line">
+          <div class="np-title">{{ title }}</div>
+          <LossyMark :kind="lossyKind" />
+        </div>
         <div class="np-artist">{{ subtitle }}</div>
       </div>
 

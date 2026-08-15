@@ -8,12 +8,13 @@ import {
   ref,
   watch,
 } from "vue";
+import LossyMark from "../lossy/LossyMark.js";
 import Icon from "../icons/Icon.js";
 import { flattenVisible } from "./flattenVisible.js";
 
 export default defineComponent({
   name: "TreeView",
-  components: { Icon },
+  components: { Icon, LossyMark },
   props: {
     roots: { type: Array, default: () => [] },
     /** createTreeSession() instance */
@@ -316,6 +317,7 @@ export default defineComponent({
                 <span v-if="vn.node.subtitle" class="row-sub">{{ vn.node.subtitle }}</span>
               </span>
             </button>
+            <LossyMark :kind="vn.node.lossyKind" />
             <span class="tree-actions" @click.stop>
               <slot name="group-actions" :node="vn.node" />
             </span>
@@ -325,7 +327,10 @@ export default defineComponent({
             <div class="tree-leaf">
               <slot name="leaf" :node="vn.node">
                 <span class="row-meta">
-                  <span class="row-title">{{ vn.node.title }}</span>
+                  <span class="row-title-line">
+                    <span class="row-title">{{ vn.node.title }}</span>
+                    <LossyMark :kind="vn.node.lossyKind" />
+                  </span>
                   <span v-if="vn.node.subtitle" class="row-sub">{{ vn.node.subtitle }}</span>
                 </span>
               </slot>

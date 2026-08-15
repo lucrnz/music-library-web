@@ -43,6 +43,19 @@
   text-align: left;
 }
 
+.np-title-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.np-title-line .np-title {
+  flex: 1;
+  min-width: 0;
+}
+
 .np-title {
   font-size: 14px;
   font-weight: 600;
@@ -50,6 +63,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.player-mini .lossy-mark {
+  flex-shrink: 0;
 }
 
 .np-artist {

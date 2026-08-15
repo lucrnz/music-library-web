@@ -22,7 +22,9 @@ import { downloads } from "../../downloads/state.js";
 import { downloadTracks } from "../../downloads/ui.js";
 import { confirmDialog, promptDialog } from "../../stores/dialog.js";
 import { showToast } from "../../stores/ui.js";
+import { kindForTrack } from "../../lossyKind.js";
 import Icon from "../icons/Icon.js";
+import LossyMark from "../lossy/LossyMark.js";
 import ActionMenu from "../menu/ActionMenu.js";
 import {
   buildQueueMenuItems,
@@ -32,7 +34,7 @@ import {
 
 export default defineComponent({
   name: "PlaylistView",
-  components: { Icon, ActionMenu },
+  components: { Icon, ActionMenu, LossyMark },
   setup() {
     const route = useRoute();
     const desktop = useDesktopViewport();
@@ -114,7 +116,8 @@ export default defineComponent({
       if (
         e.target.closest(".row-delete") ||
         e.target.closest(".row-drag") ||
-        e.target.closest(".row-menu")
+        e.target.closest(".row-menu") ||
+        e.target.closest(".lossy-mark")
       ) {
         return;
       }
@@ -265,6 +268,7 @@ export default defineComponent({
       menuRestoreEl,
       menuIndex,
       formatTime,
+      kindForTrack,
       toggleEdit,
       onClear,
       onRowClick,
@@ -371,7 +375,10 @@ export default defineComponent({
             ><span></span><span></span><span></span></span>
           </span>
           <span class="row-meta">
-            <span class="row-title">{{ track.title }}</span>
+            <span class="row-title-line">
+              <span class="row-title">{{ track.title }}</span>
+              <LossyMark :kind="kindForTrack(track)" />
+            </span>
             <span class="row-sub">{{ trackSub(track) }}</span>
           </span>
           <span class="row-dur">{{ formatTime(track.duration) }}</span>

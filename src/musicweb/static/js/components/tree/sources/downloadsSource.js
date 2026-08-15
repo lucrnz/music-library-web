@@ -7,6 +7,7 @@ import {
 } from "../../../downloads/catalog.js";
 import { buildDownloadsHierarchy } from "../../../downloads/hierarchy.js";
 import { resolveDownloadsFocusPath } from "../treeNavigation.js";
+import { kindForTrack, kindForTracks } from "../../../lossyKind.js";
 
 /**
  * @typedef {import('./artistsSource.js').TreeNode} TreeNode
@@ -47,6 +48,7 @@ export async function loadDownloadsTree() {
         cover: artUrls[`al:${al.albumId}`] || "",
         /** Catalog record; project with fromCatalogRecord for play/UI Track. */
         data: tr,
+        lossyKind: kindForTrack(tr),
         /** @type {TreeNode[]|undefined} */
         children: undefined,
       }));
@@ -59,6 +61,7 @@ export async function loadDownloadsTree() {
         cover: artUrls[`al:${al.albumId}`] || "/static/img/placeholder.svg",
         data: al,
         children: trackNodes,
+        lossyKind: kindForTracks(al.tracks),
       };
     });
     return {

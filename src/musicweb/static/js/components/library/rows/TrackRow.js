@@ -6,11 +6,13 @@ import { coverUrl } from "../../../api.js";
 import { formatTrackLabel } from "../../../util.js";
 import DownloadIcon from "../../downloads/DownloadIcon.js";
 import Icon from "../../icons/Icon.js";
+import LossyMark from "../../lossy/LossyMark.js";
+import { kindForTrack } from "../../../lossyKind.js";
 import { playOrQueueTrack, queueOnly } from "../rows.js";
 
 export default defineComponent({
   name: "TrackRow",
-  components: { Icon, DownloadIcon },
+  components: { Icon, DownloadIcon, LossyMark },
   props: {
     track: { type: Object, required: true },
     /** Override cover URL (e.g. local OPFS blob). */
@@ -42,8 +44,14 @@ export default defineComponent({
       return t.artist || "";
     });
 
+    const lossyKind = computed(() => kindForTrack(props.track));
+
     async function onPlay(e) {
-      if (e.target.closest(".row-add") || e.target.closest(".row-download")) {
+      if (
+        e.target.closest(".row-add") ||
+        e.target.closest(".row-download") ||
+        e.target.closest(".lossy-mark")
+      ) {
         return;
       }
       emit("play", props.track);
@@ -56,7 +64,7 @@ export default defineComponent({
       await queueOnly(props.track);
     }
 
-    return { cover, title, subtitle, onPlay, onQueue };
+    return { cover, title, subtitle, lossyKind, onPlay, onQueue };
   },
   template: `
     <div class="row" @click="onPlay">
@@ -64,7 +72,10 @@ export default defineComponent({
         <img class="row-cover" :src="cover" alt="" loading="lazy" />
       </span>
       <span class="row-meta">
-        <span class="row-title">{{ title }}</span>
+        <span class="row-title-line">
+          <span class="row-title">{{ title }}</span>
+          <LossyMark :kind="lossyKind" />
+        </span>
         <span v-if="subtitle" class="row-sub">{{ subtitle }}</span>
       </span>
       <DownloadIcon v-if="showDownload" :track="track" />

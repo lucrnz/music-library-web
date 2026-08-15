@@ -3,13 +3,15 @@
  * FileRowModel = { path, name, id, track: Track|null, displayName, cover }
  */
 import { computed, defineComponent } from "vue";
+import { kindForTrack } from "../../../lossyKind.js";
 import DownloadIcon from "../../downloads/DownloadIcon.js";
 import Icon from "../../icons/Icon.js";
+import LossyMark from "../../lossy/LossyMark.js";
 import { playOrQueueTrack, queueOnly } from "../rows.js";
 
 export default defineComponent({
   name: "FileRow",
-  components: { Icon, DownloadIcon },
+  components: { Icon, DownloadIcon, LossyMark },
   props: {
     file: { type: Object, required: true },
     selected: { type: Boolean, default: false },
@@ -34,7 +36,10 @@ export default defineComponent({
       return null;
     }
 
+    const lossyKind = computed(() => kindForTrack(track.value));
+
     async function onClick(e) {
+      if (e.target.closest(".lossy-mark")) return;
       if (e.metaKey || e.ctrlKey) {
         emit("select", props.file, e);
         return;
@@ -51,7 +56,7 @@ export default defineComponent({
       await queueOnly(entry);
     }
 
-    return { cover, title, track, onClick, onAdd };
+    return { cover, title, track, lossyKind, onClick, onAdd };
   },
   template: `
     <div
@@ -63,7 +68,10 @@ export default defineComponent({
         <img class="row-cover" :src="cover" alt="" loading="lazy" />
       </span>
       <span class="row-meta">
-        <span class="row-title">{{ title }}</span>
+        <span class="row-title-line">
+          <span class="row-title">{{ title }}</span>
+          <LossyMark :kind="lossyKind" />
+        </span>
       </span>
       <DownloadIcon v-if="track" :track="track" />
       <button

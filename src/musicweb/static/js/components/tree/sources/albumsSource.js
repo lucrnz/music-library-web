@@ -2,6 +2,7 @@
  * Albums tree: album → tracks.
  */
 import { apiGet, coverUrl, fetchAlbumTracks } from "../../../api.js";
+import { kindForAlbum, kindForTrack } from "../../../lossyKind.js";
 
 /**
  * @typedef {import('./artistsSource.js').TreeNode} TreeNode
@@ -18,6 +19,7 @@ export async function listAlbumRoots() {
       title: al.title || "Unknown album",
       subtitle: al.artist_name || al.artist || "",
       cover: coverUrl({ albumId: al.id }, "thumb", false),
+      lossyKind: kindForAlbum(al),
       data: al,
     })
   );
@@ -37,6 +39,7 @@ export async function loadAlbumChildren(node) {
     title: t.title || "",
     subtitle: t.artist || "",
     cover: coverUrl(t, "thumb", false),
+    lossyKind: kindForTrack(t),
     data: t,
   }));
 }

@@ -1,11 +1,13 @@
 /** Album row (list, not grid card) — Search + library list layout. */
 import { computed, defineComponent } from "vue";
 import { coverUrl } from "../../../api.js";
+import { kindForAlbum } from "../../../lossyKind.js";
 import Icon from "../../icons/Icon.js";
+import LossyMark from "../../lossy/LossyMark.js";
 
 export default defineComponent({
   name: "AlbumListRow",
-  components: { Icon },
+  components: { Icon, LossyMark },
   props: {
     album: { type: Object, required: true },
     /** Override cover (local OPFS). */
@@ -23,10 +25,12 @@ export default defineComponent({
       const year = a.year ? ` · ${a.year}` : "";
       return `${a.artist || ""}${year} · ${a.track_count} tracks`;
     });
-    function onClick() {
+    const lossyKind = computed(() => kindForAlbum(props.album));
+    function onClick(e) {
+      if (e.target.closest(".lossy-mark")) return;
       emit("open", props.album);
     }
-    return { cover, sub, onClick };
+    return { cover, sub, lossyKind, onClick };
   },
   template: `
     <div class="row" @click="onClick">
@@ -34,7 +38,10 @@ export default defineComponent({
         <img class="row-cover" :src="cover" alt="" loading="lazy" />
       </span>
       <span class="row-meta">
-        <span class="row-title">{{ album.title }}</span>
+        <span class="row-title-line">
+          <span class="row-title">{{ album.title }}</span>
+          <LossyMark :kind="lossyKind" />
+        </span>
         <span class="row-sub">{{ sub }}</span>
       </span>
       <span class="row-chevron"><Icon name="chevron-right" /></span>
