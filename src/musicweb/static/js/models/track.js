@@ -24,6 +24,9 @@
  * @property {boolean} isMissing
  * @property {number|null} sampleRateHz
  * @property {number|null} bitDepth
+ * @property {boolean} isLossy
+ * @property {string|null} sourceCodec
+ * @property {number|null} bitrateKbps
  */
 
 /**
@@ -45,6 +48,9 @@
  * @property {number|null} [year]
  * @property {string} [codec]
  * @property {string} [status]
+ * @property {boolean} [isLossy]
+ * @property {string} [sourceCodec]
+ * @property {number|null} [bitrateKbps]
  */
 
 /**
@@ -93,6 +99,9 @@ export function fromApiTrack(raw) {
     isMissing: !!(raw.isMissing ?? raw.is_missing),
     sampleRateHz: _nullableNumber(raw.sampleRateHz ?? raw.sample_rate_hz),
     bitDepth: _nullableNumber(raw.bitDepth ?? raw.bit_depth),
+    isLossy: !!(raw.isLossy ?? raw.is_lossy),
+    sourceCodec: raw.sourceCodec ?? raw.source_codec ?? null,
+    bitrateKbps: _nullableNumber(raw.bitrateKbps ?? raw.bitrate_kbps),
   };
 }
 
@@ -132,6 +141,9 @@ export function fromCatalogRecord(rec) {
     year: rec.year ?? null,
     duration: rec.duration ?? null,
     isMissing: false,
+    isLossy: rec.isLossy ?? rec.is_lossy,
+    sourceCodec: rec.sourceCodec ?? rec.source_codec ?? null,
+    bitrateKbps: rec.bitrateKbps ?? rec.bitrate_kbps,
   });
 }
 

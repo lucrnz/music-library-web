@@ -11,6 +11,8 @@ import { downloads } from "../downloads/state.js";
 import { createCompanionSink } from "../playback/sinks/companionSink.js";
 import { createHtmlAudioSink } from "../playback/sinks/htmlAudioSink.js";
 import { ensurePreferredDevice } from "../exclusive/companionClient.js";
+import { supportsCodecKind } from "../codecSupport.js";
+import { deliveryCodec } from "../lossyKind.js";
 import { PLAY_BLOCK_MESSAGES } from "../playBlock.js";
 import { showToast } from "./ui.js";
 import { PLACEHOLDER_COVER } from "../util.js";
@@ -440,6 +442,7 @@ function maybePrepareNext() {
  * @param {import("../models/track.js").Track} nextTrack
  */
 async function issueNearEndPrepare(nextTrack) {
+  if (nextTrack?.isLossy) return;
   if (isExclusiveEnabled()) {
     const tag = getExclusiveProfileTag(nextTrack);
     if (!tag) return;
@@ -486,6 +489,13 @@ function absoluteStreamUrl(track, tag) {
  * @param {import("../models/track.js").Track} track
  */
 async function playExclusive(gen, track) {
+  if (track?.isLossy) {
+    const notice = PLAY_BLOCK_MESSAGES.exclusive_lossy;
+    failPlayback(null, "exclusive_lossy", notice);
+    showToast(notice);
+    syncTransportFlags();
+    return;
+  }
   const gate = await ensurePreferredDevice({ timeoutMs: 1500 });
   if (!still(gen)) return;
   if (!gate.ok) {
@@ -556,7 +566,21 @@ async function playExclusive(gen, track) {
  */
 async function playHtml(gen, track) {
   selectSink("htmlAudio");
-  const activeCodec = getActiveStreamCodec();
+  if (track?.isLossy) {
+    const kind = (track.sourceCodec || "").toLowerCase();
+    const ok = kind ? await supportsCodecKind(kind) : false;
+    if (!still(gen)) return;
+    if (!ok) {
+      failPlayback(
+        "source",
+        "codec_unsupported",
+        PLAY_BLOCK_MESSAGES.codec_unsupported
+      );
+      syncTransportFlags();
+      return;
+    }
+  }
+  const activeCodec = deliveryCodec(track, getActiveStreamCodec());
   const source = await resolvePlaySource(track, {
     enabled: downloads.enabled,
     activeStreamCodec: activeCodec,
@@ -595,7 +619,7 @@ async function playHtml(gen, track) {
       syncTransportFlags();
       return;
     }
-    const streamCodec = getActiveStreamCodec();
+    const streamCodec = deliveryCodec(track, getActiveStreamCodec());
     const remote = streamUrl(track, streamCodec);
     if (remote) {
       setPlaySourceState("streaming", streamCodec || null, null);
@@ -603,17 +627,23 @@ async function playHtml(gen, track) {
       if (!still(gen)) return;
       if (!result.ok) {
         console.error("Playback failed", result.err);
-        failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
+        const reason = track?.isLossy ? "codec_unsupported" : "play_failed";
+        failPlayback(
+          streamCodec,
+          reason,
+          PLAY_BLOCK_MESSAGES[reason]
+        );
       }
     } else {
       failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
     }
   } else if (!result.ok) {
     console.error("Playback failed", result.err);
+    const reason = track?.isLossy ? "codec_unsupported" : "play_failed";
     failPlayback(
       player.playProfileId || activeCodec || null,
-      "play_failed",
-      PLAY_BLOCK_MESSAGES.play_failed
+      reason,
+      PLAY_BLOCK_MESSAGES[reason]
     );
   }
   syncTransportFlags();
@@ -634,9 +664,10 @@ export async function playIndex(index) {
   revokeLocalPlayUrl();
   setPlayNotice(null);
 
-  return isExclusiveEnabled()
-    ? playExclusive(gen, track)
-    : playHtml(gen, track);
+  if (isExclusiveEnabled()) {
+    return playExclusive(gen, track);
+  }
+  return playHtml(gen, track);
 }
 
 export function playNext() {

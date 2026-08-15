@@ -199,7 +199,7 @@ export async function resumeQueue() {
     if (it.state === QueueState.ACTIVE) {
       markPaused(it, "interrupted");
       try {
-        const ext = codecExt(it.codec);
+        const ext = codecExt(it.codec, it.snapshot?.sourceCodec);
         const fileName = audioFileName(it.trackId, it.codec, ext);
         const size = await partialByteSize(audioDirParts(), fileName);
         if (size > 0) {

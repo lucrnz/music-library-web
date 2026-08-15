@@ -322,7 +322,7 @@ function trackCodecKey(trackId, codec) {
  */
 export async function discardPartialForItem(item) {
   try {
-    const ext = codecExt(item.codec);
+    const ext = codecExt(item.codec, item.snapshot?.sourceCodec);
     const fileName = audioFileName(item.trackId, item.codec, ext);
     await removePartial(audioDirParts(), fileName);
   } catch {
@@ -354,6 +354,7 @@ export async function listQueue() {
 async function enqueueTrackCore(track, codec, ctx) {
   const n = normalizeTrack(track);
   if (n.isMissing) throw new Error("Track file is missing on server");
+  if (n.isLossy) codec = "source";
 
   const key = trackCodecKey(n.id, codec);
   const existing = await withStore("queue", "readonly", (s) =>
@@ -398,6 +399,9 @@ async function enqueueTrackCore(track, codec, ctx) {
       duration: n.duration,
       year: n.year,
       isMissing: false,
+      isLossy: !!n.isLossy,
+      sourceCodec: n.sourceCodec || null,
+      bitrateKbps: n.bitrateKbps ?? null,
     },
     state: QueueState.PENDING,
     error: null,

@@ -4,6 +4,11 @@
  */
 
 import { formatExclusiveFace } from "./exclusive/statusFace.js";
+import {
+  LOSSY_SOURCE_COPY,
+  formatLossyCodecText,
+  lossySourceParts,
+} from "./lossyKind.js";
 import { playBlockMessage } from "./playBlock.js";
 import { resolveProfileMeta } from "./qualityRank.js";
 
@@ -11,7 +16,7 @@ import { resolveProfileMeta } from "./qualityRank.js";
  * @typedef {import('./playBlock.js').PlaySourceState} PlaySourceState
  * @typedef {import('./playBlock.js').PlayBlockReason} PlayBlockReason
  * @typedef {{ id: string, label?: string, kind?: string, bitrate_kbps?: number, bit_depth?: number, sample_rate?: number, tag?: string }} ProfileMeta
- * @typedef {{ playSource: PlaySourceState, playProfileId?: string | null, playBlockReason?: PlayBlockReason | string | null }} PlayStatusState
+ * @typedef {{ playSource: PlaySourceState, playProfileId?: string | null, playBlockReason?: PlayBlockReason | string | null, track?: { isLossy?: boolean, sourceCodec?: string|null, bitrateKbps?: number|null } | null }} PlayStatusState
  * @typedef {{ key: string, label: string, value: string }} PlaybackDetailRow
  * @typedef {import('./exclusive/statusFace.js').ExclusiveFaceSnapshot} ExclusiveFaceSnapshot
  */
@@ -109,7 +114,9 @@ export function formatPrimaryStatus(state, catalog = [], exclusiveSnap = null) {
     return { interactive: true, text: "Unavailable", icon: null };
   }
   const word = formatSourceWord(playSource);
-  const codec = formatPrimaryCodecText(state.playProfileId, catalog);
+  const codec = state.track?.isLossy
+    ? formatLossyCodecText(state.track)
+    : formatPrimaryCodecText(state.playProfileId, catalog);
   const text =
     word && codec ? `${word} · ${codec}` : word || codec || "—";
   return {
@@ -274,6 +281,26 @@ export function buildPlaybackDetailsRows(state, catalog = [], opts = {}) {
   const sourceWord = formatSourceWord(playSource);
   if (sourceWord) {
     rows.push({ key: "source", label: "Source", value: sourceWord });
+  }
+
+  if (state.track?.isLossy) {
+    const parts = lossySourceParts(state.track);
+    if (parts.label) {
+      rows.push({ key: "codec", label: "Codec", value: parts.label });
+    }
+    if (parts.bitrateKbps > 0) {
+      rows.push({
+        key: "bitrate",
+        label: "Bitrate",
+        value: `${parts.bitrateKbps} kbps`,
+      });
+    }
+    rows.push({
+      key: "lossy",
+      label: "Source file",
+      value: LOSSY_SOURCE_COPY,
+    });
+    return rows;
   }
 
   if (!state.playProfileId) return rows;

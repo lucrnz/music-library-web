@@ -377,6 +377,7 @@ export function tracksNeedingPrepare(tracks, activeCodec) {
   const byTrack = catalogIndex.byTrack;
   for (const t of tracks || []) {
     if (!t?.id) continue;
+    if (t.isLossy) continue;
     const proj = byTrack[t.id];
     if (
       proj &&
@@ -398,6 +399,7 @@ export function tracksNeedingPrepare(tracks, activeCodec) {
  */
 export function trackNeedsStreamPrepare(track, activeCodec) {
   if (!track?.id) return false;
+  if (track.isLossy) return false;
   return tracksNeedingPrepare([track], activeCodec).length > 0;
 }
 

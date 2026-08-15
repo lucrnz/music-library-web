@@ -3,6 +3,7 @@
  */
 
 import { reactive } from "vue";
+import { SOURCE_TAG, sourceFileMedia } from "../lossyKind.js";
 import {
   artistIdsOf,
   normalizeTrack,
@@ -37,12 +38,14 @@ import { downloads } from "./state.js";
 // Codec helpers
 // ---------------------------------------------------------------------------
 
-export function codecExt(codec) {
+export function codecExt(codec, sourceCodec) {
+  if (codec === SOURCE_TAG) return sourceFileMedia(sourceCodec).ext;
   if (typeof codec === "string" && codec.startsWith("flac")) return "flac";
   return "opus";
 }
 
-export function codecMediaType(codec) {
+export function codecMediaType(codec, sourceCodec) {
+  if (codec === SOURCE_TAG) return sourceFileMedia(sourceCodec).mediaType;
   if (typeof codec === "string" && codec.startsWith("flac")) return "audio/flac";
   return "audio/ogg";
 }
@@ -76,6 +79,7 @@ export function catalogUiStatus(rec, preferredDownloadCodec) {
   if (!rec) return null;
   if (rec.status === "broken") return "failed";
   if (!rec.codec) return null;
+  if (rec.codec === "source") return "ready";
   if (rec.codec !== preferredDownloadCodec) return "other";
   return "ready";
 }
@@ -326,7 +330,7 @@ export async function getLocalAudioUrlForRecord(rec) {
   const name = audioFileName(
     rec.trackId,
     rec.codec,
-    rec.ext || codecExt(rec.codec)
+    rec.ext || codecExt(rec.codec, rec.sourceCodec)
   );
   const blob = await readBinary(audioDirParts(), name);
   if (!blob) return null;
@@ -382,7 +386,7 @@ export async function commitTrackDownload(track, codec, audioMeta) {
     const oldName = audioFileName(
       n.id,
       existing.codec,
-      existing.ext || codecExt(existing.codec)
+      existing.ext || codecExt(existing.codec, existing.sourceCodec)
     );
     await deleteBinary(audioDirParts(), oldName);
   }
@@ -404,8 +408,11 @@ export async function commitTrackDownload(track, codec, audioMeta) {
   const rec = {
     trackId: n.id,
     codec,
-    ext: audioMeta.ext || codecExt(codec),
-    mediaType: audioMeta.mediaType || codecMediaType(codec),
+    ext: audioMeta.ext || codecExt(codec, n.sourceCodec),
+    mediaType: audioMeta.mediaType || codecMediaType(codec, n.sourceCodec),
+    isLossy: !!n.isLossy,
+    sourceCodec: n.sourceCodec || null,
+    bitrateKbps: n.bitrateKbps ?? null,
     bytes: audioMeta.bytes || 0,
     albumId: n.albumId,
     artistIds: pinArtists,
@@ -485,7 +492,7 @@ export async function deleteTrackDownload(trackId) {
   const name = audioFileName(
     trackId,
     rec.codec,
-    rec.ext || codecExt(rec.codec)
+    rec.ext || codecExt(rec.codec, rec.sourceCodec)
   );
   await deleteBinary(audioDirParts(), name);
   try {

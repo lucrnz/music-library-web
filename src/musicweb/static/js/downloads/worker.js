@@ -218,7 +218,7 @@ async function applyJobOutcome(id, outcome, ctx = {}) {
 async function runJob(item) {
   const ac = new AbortController();
   controllers.set(item.id, ac);
-  const ext = codecExt(item.codec);
+  const ext = codecExt(item.codec, item.snapshot?.sourceCodec);
   const fileName = audioFileName(item.trackId, item.codec, ext);
   const dirParts = audioDirParts();
   const fileCtx = { dirParts, fileName };
@@ -241,7 +241,7 @@ async function runJob(item) {
  */
 async function executeDownloadJob(item, ac, fileCtx) {
   const { dirParts, fileName } = fileCtx;
-  const ext = codecExt(item.codec);
+  const ext = codecExt(item.codec, item.snapshot?.sourceCodec);
 
   let current = await getOne("queue", item.id);
   if (!current || current.state === QueueState.CANCELED) {
@@ -326,7 +326,11 @@ async function executeDownloadJob(item, ac, fileCtx) {
   }
 
   const mediaType =
-    res.headers.get("Content-Type") || codecMediaType(current.codec);
+    res.headers.get("Content-Type") ||
+    codecMediaType(
+      current.codec,
+      track.sourceCodec || current.snapshot?.sourceCodec
+    );
 
   try {
     const written = await writeResponseToFile(dirParts, fileName, res, {

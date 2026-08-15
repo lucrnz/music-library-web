@@ -22,6 +22,7 @@ import {
 } from "../../stores/exclusiveAudio.js";
 import { acquireModalLock, releaseModalLock } from "../../stores/modalLock.js";
 import { player } from "../../stores/player.js";
+import { pl } from "../../stores/playlist.js";
 import { settings } from "../../stores/settings.js";
 import Icon from "../icons/Icon.js";
 import PlaybackDetailsBody from "./PlaybackDetailsBody.js";
@@ -65,11 +66,16 @@ export default defineComponent({
       desktopViewport.value = e.matches;
     }
 
-    const statusSnapshot = computed(() => ({
-      playSource: player.playSource,
-      playProfileId: player.playProfileId,
-      playBlockReason: player.playBlockReason,
-    }));
+    const statusSnapshot = computed(() => {
+      void pl.index;
+      void pl.tracks;
+      return {
+        playSource: player.playSource,
+        playProfileId: player.playProfileId,
+        playBlockReason: player.playBlockReason,
+        track: pl.current,
+      };
+    });
 
     /** Read exclusive fields so face updates when companion state changes. */
     const exclusiveSnap = computed(() => {
