@@ -14,10 +14,11 @@ from typing import Annotated
 import typer
 
 from musicweb.config import load_settings
+from musicweb.diag.store import event_files
 
 app = typer.Typer(help="Read and purge diagnostic event files.")
 
-_EVENTS = re.compile(r"^events-(\d{4}-\d{2}-\d{2})\.jsonl$")
+_DAY_IN_NAME = re.compile(r"^events-(\d{4}-\d{2}-\d{2})\.jsonl$")
 
 
 def _diag_dir() -> Path:
@@ -34,20 +35,10 @@ def _diag_dir() -> Path:
 
 
 def _event_files(directory: Path, day: str | None = None) -> list[Path]:
-    if not directory.is_dir():
-        return []
-    found: list[Path] = []
-    for child in directory.iterdir():
-        if not child.is_file():
-            continue
-        match = _EVENTS.match(child.name)
-        if not match:
-            continue
-        if day and match.group(1) != day:
-            continue
-        found.append(child)
-    found.sort(key=lambda p: p.name)
-    return found
+    files = event_files(directory)
+    if day is None:
+        return files
+    return [path for path in files if path.name == f"events-{day}.jsonl"]
 
 
 def _iter_records(
@@ -122,7 +113,7 @@ def logs_list() -> None:
             sid = obj.get("session_id")
             if sid:
                 sessions.add(str(sid))
-        day = _EVENTS.match(path.name)
+        day = _DAY_IN_NAME.match(path.name)
         label = day.group(1) if day else path.name
         print(
             f"{label}  {size} bytes  {lines} lines  "
@@ -278,7 +269,7 @@ def logs_purge(
         assert older_than is not None
         cutoff = today - timedelta(days=older_than)
         for path in files:
-            match = _EVENTS.match(path.name)
+            match = _DAY_IN_NAME.match(path.name)
             if not match:
                 continue
             file_day = date.fromisoformat(match.group(1))
