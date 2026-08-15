@@ -40,4 +40,6 @@ def passthrough_media(source_codec: str | None) -> tuple[str, str]:
     kind = (source_codec or "").lower()
     if kind == "mp3":
         return "audio/mpeg", "mp3"
-    return "audio/mp4", "m4a"
+    if kind == "aac":
+        return "audio/mp4", "m4a"
+    raise ValueError("lossy source_codec must be mp3 or aac")

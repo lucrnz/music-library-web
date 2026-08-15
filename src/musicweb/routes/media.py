@@ -144,7 +144,10 @@ async def stream(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         if plan == "passthrough":
-            media_type, ext = passthrough_media(track.source_codec)
+            try:
+                media_type, ext = passthrough_media(track.source_codec)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
             media_path = resolved
             filename = f"{resolved.stem}.{resolved.suffix.lstrip('.') or ext}"
         else:

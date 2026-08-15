@@ -39,3 +39,9 @@ def test_unknown_tag_is_value_error():
 def test_passthrough_media_types():
     assert passthrough_media("mp3") == ("audio/mpeg", "mp3")
     assert passthrough_media("aac") == ("audio/mp4", "m4a")
+
+
+@pytest.mark.parametrize("codec", [None, "", "flac", "src"])
+def test_passthrough_media_unknown_raises(codec):
+    with pytest.raises(ValueError, match="mp3 or aac"):
+        passthrough_media(codec)

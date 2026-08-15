@@ -91,5 +91,5 @@ export function sourceFileMedia(sourceCodec) {
   const kind = (sourceCodec || "").toLowerCase();
   if (kind === "mp3") return { ext: "mp3", mediaType: "audio/mpeg" };
   if (kind === "aac") return { ext: "m4a", mediaType: "audio/mp4" };
-  return { ext: "bin", mediaType: "application/octet-stream" };
+  throw new Error("lossy sourceCodec must be mp3 or aac");
 }
