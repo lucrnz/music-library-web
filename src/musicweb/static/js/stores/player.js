@@ -153,24 +153,26 @@ function applyResolvedSource(source, activeCodec) {
       source.codec || activeCodec || null,
       /** @type {PlayBlockReason} */ (source.reason || "missing")
     );
+    emit(
+      "player.unavailable",
+      failCtx({ reason: source.reason || "missing" }),
+      "error"
+    );
     return;
   }
   if (source.type === "downloaded") {
     setPlaySourceState("downloaded", source.codec || null, null);
-    return;
-  }
-  if (source.type === "exclusive") {
+  } else {
     setPlaySourceState(
       "streaming",
       source.codec || activeCodec || null,
       null
     );
-    return;
   }
-  setPlaySourceState(
-    "streaming",
-    source.codec || activeCodec || null,
-    null
+  emit(
+    "player.resolve",
+    { type: source.type, profile: source.codec || activeCodec || null },
+    "info"
   );
 }
 
@@ -188,7 +190,6 @@ function failPlayback(profileId, reason, notice) {
     failCtx({ reason, message: notice || null }),
     "error"
   );
-  emit("player.unavailable", failCtx({ reason }), "error");
 }
 
 const msSupported = "mediaSession" in navigator;
@@ -634,20 +635,9 @@ async function playHtml(gen, track) {
   if (source.type === "unavailable") {
     const title = track?.title || "Track";
     setPlayNotice(source.message ? `${title}: ${source.message}` : source.message);
-    emit(
-      "player.unavailable",
-      failCtx({ reason: source.reason || "missing" }),
-      "error"
-    );
     syncTransportFlags();
     return;
   }
-
-  emit(
-    "player.resolve",
-    { type: source.type, profile: source.codec || activeCodec || null },
-    "info"
-  );
 
   if (source.type === "downloaded") {
     localPlayUrl = source.url;
@@ -683,12 +673,6 @@ async function playHtml(gen, track) {
           reason,
           PLAY_BLOCK_MESSAGES[reason]
         );
-      } else {
-        emit(
-          "player.load.ok",
-          { play_source: player.playSource, profile: player.playProfileId },
-          "info"
-        );
       }
     } else {
       failPlayback(streamCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
@@ -701,7 +685,8 @@ async function playHtml(gen, track) {
       reason,
       PLAY_BLOCK_MESSAGES[reason]
     );
-  } else {
+  }
+  if (still(gen) && result.ok) {
     emit(
       "player.load.ok",
       { play_source: player.playSource, profile: player.playProfileId },
