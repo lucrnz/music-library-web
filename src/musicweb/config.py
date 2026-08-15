@@ -38,6 +38,9 @@ LRCLIB_USER_AGENT = (
     "musicweb/0.1.0 (https://github.com/lucrnz/music-library-web)"
 )
 
+# Diagnostic JSONL store (source constant — not env).
+DIAG_DIR_MAX_BYTES = 64 * 1024 * 1024
+
 
 def _env_file() -> str | None:
     for candidate in _ENV_CANDIDATES:
@@ -221,6 +224,11 @@ class Settings(BaseSettings):
         """Parsed public origin (raw / origin / secure) for PWA and boot banner."""
         return PublicOrigin.parse(self.musicweb_public_origin)
 
+    @property
+    def diag_dir(self) -> Path:
+        """Durable JSONL event directory under the data dir."""
+        return self.musicweb_data_dir / "diag"
+
     def musicbrainz_user_agent(self) -> str | None:
         """MusicBrainz UA when contact email is configured; else None."""
         email = self.musicbrainz_contact_email
@@ -243,6 +251,7 @@ class Settings(BaseSettings):
         self.musicweb_data_dir.mkdir(parents=True, exist_ok=True)
         (self.musicweb_data_dir / "covers" / "albums").mkdir(parents=True, exist_ok=True)
         (self.musicweb_data_dir / "covers" / "artists").mkdir(parents=True, exist_ok=True)
+        self.diag_dir.mkdir(parents=True, exist_ok=True)
         return self.musicweb_data_dir
 
 
