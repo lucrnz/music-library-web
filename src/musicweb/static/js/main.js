@@ -21,7 +21,9 @@ import { bindConnectivityToasts } from "./connectivityUi.js";
 import { initDownloads } from "./downloads/index.js";
 import { bindConnectivityStore } from "./stores/connectivity.js";
 import { registerServiceWorker } from "./pwa.js";
+import { initDiag } from "./diag/log.js";
 
+initDiag();
 loadPlaylist();
 applyVolume();
 applyExpanded();

@@ -32,6 +32,11 @@ import { downloads } from "../../downloads/state.js";
 import { confirmDialog } from "../../stores/dialog.js";
 import { showToast } from "../../stores/ui.js";
 import {
+  DIAG_MODES,
+  diag,
+  setMode as setDiagMode,
+} from "../../diag/log.js";
+import {
   exclusiveAudio,
   shouldHideBrowserQualityControls,
 } from "../../stores/exclusiveAudio.js";
@@ -183,6 +188,21 @@ export default defineComponent({
       }
     }
 
+    function chooseDiagMode(id) {
+      setDiagMode(id);
+      openMenu.value = null;
+    }
+
+    async function copyDiagId(value) {
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+        showToast("Copied");
+      } catch {
+        showToast("Could not copy");
+      }
+    }
+
     function onKey(e) {
       if (e.key !== "Escape" || !settings.open) return;
       if (openMenu.value) {
@@ -242,6 +262,10 @@ export default defineComponent({
       onToggleDownloads,
       onOpenManager,
       onClearStoredDownloads,
+      diag,
+      diagModes: DIAG_MODES,
+      chooseDiagMode,
+      copyDiagId,
     };
   },
   template: `
@@ -400,6 +424,50 @@ export default defineComponent({
           :active="scanPanelActive"
           :library-reachable="libraryReachable"
         />
+
+        <div class="modal-section">
+          <div class="modal-section-title">Diagnostics</div>
+          <p class="modal-hint">
+            Errors only sends playback and other failures. Everything sends the
+            full diagnostic timeline and labels a session.
+          </p>
+          <SettingsSelect
+            menu-id="diag-mode"
+            label-id="diag-mode-label"
+            field-label="What to send"
+            :options="diagModes"
+            :selected-id="diag.mode"
+            :open-menu="openMenu"
+            @toggle="toggleMenu"
+            @choose="chooseDiagMode"
+          />
+          <p class="modal-hint" style="margin-top:10px">
+            Client
+            <button
+              type="button"
+              class="pill"
+              :disabled="!diag.clientId"
+              @click="copyDiagId(diag.clientId)"
+            >Copy</button>
+          </p>
+          <p class="modal-hint" style="margin-top:4px;word-break:break-all">
+            {{ diag.clientId || "—" }}
+          </p>
+          <template v-if="diag.mode === 'everything'">
+            <p class="modal-hint" style="margin-top:10px">
+              Session
+              <button
+                type="button"
+                class="pill"
+                :disabled="!diag.sessionId"
+                @click="copyDiagId(diag.sessionId)"
+              >Copy</button>
+            </p>
+            <p class="modal-hint" style="margin-top:4px;word-break:break-all">
+              {{ diag.sessionId || "—" }}
+            </p>
+          </template>
+        </div>
       </div>
     </div>
   `,

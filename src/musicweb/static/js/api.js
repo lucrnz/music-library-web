@@ -4,11 +4,16 @@
  * apiGet for track lists.
  */
 
+import { diagRequestHeaders } from "./diag/log.js";
 import { fromApiLyrics } from "./models/lyrics.js";
 import { fromApiTrack, mapTracks } from "./models/track.js";
 
+function jsonHeaders() {
+  return { "Content-Type": "application/json", ...diagRequestHeaders() };
+}
+
 export async function apiGet(url) {
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: diagRequestHeaders() });
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText);
     throw new Error(detail || res.statusText);
@@ -19,7 +24,7 @@ export async function apiGet(url) {
 export async function apiPost(url, body) {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonHeaders(),
     body: JSON.stringify(body ?? {}),
   });
   if (!res.ok) {
@@ -32,7 +37,7 @@ export async function apiPost(url, body) {
 export async function apiPut(url, body) {
   const res = await fetch(url, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonHeaders(),
     body: JSON.stringify(body ?? {}),
   });
   if (!res.ok) {
@@ -45,7 +50,7 @@ export async function apiPut(url, body) {
 export async function apiPatch(url, body) {
   const res = await fetch(url, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonHeaders(),
     body: JSON.stringify(body ?? {}),
   });
   if (!res.ok) {
@@ -56,7 +61,10 @@ export async function apiPatch(url, body) {
 }
 
 export async function apiDelete(url) {
-  const res = await fetch(url, { method: "DELETE" });
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: diagRequestHeaders(),
+  });
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText);
     throw new Error(detail || res.statusText);
