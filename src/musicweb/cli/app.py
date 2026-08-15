@@ -8,6 +8,7 @@ import typer
 
 from musicweb.cli import doctor as doctor_cmd
 from musicweb.cli import exclusive_audio as exclusive_audio_cmd
+from musicweb.cli import logs as logs_cmd
 from musicweb.cli import regen as regen_cmd
 from musicweb.cli import scan as scan_cmd
 from musicweb.cli import serve as serve_cmd
@@ -30,6 +31,7 @@ def _root(ctx: typer.Context) -> None:
 
 app.command("serve")(serve_cmd.serve)
 app.add_typer(scan_cmd.app, name="scan")
+app.add_typer(logs_cmd.app, name="logs")
 app.command("regen-covers")(regen_cmd.regen_covers)
 app.command("regen-artist-images")(regen_cmd.regen_artist_images)
 app.command("regen-lyrics")(regen_cmd.regen_lyrics)
