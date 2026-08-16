@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import socket
 from contextlib import asynccontextmanager
@@ -18,6 +19,11 @@ from musicweb.library import PathEscapeError
 from musicweb.routes import api, pages, pwa
 from musicweb.runtime.bootstrap import bootstrap_services
 from musicweb.transcode import Transcoder, check_dependencies
+from musicweb.transcode.idle import (
+    StreamCacheIdle,
+    StreamCacheIdleMiddleware,
+    idle_sweep_loop,
+)
 from musicweb.vendor_deps import ensure_vendor_assets
 
 logger = logging.getLogger(__name__)
@@ -41,6 +47,8 @@ async def lifespan(app: FastAPI):
     transcoder: Transcoder = app.state.transcoder
     jobs: LibraryJobRunner = app.state.jobs
     control = getattr(app.state, "control_server", None)
+    sweep_task = None
+    sweep_stop = asyncio.Event()
 
     settings.validate_library()
     settings.ensure_data_dir()
@@ -49,6 +57,12 @@ async def lifespan(app: FastAPI):
     vendor_lines = ensure_vendor_assets()
     process_cache.start()
     transcoder.start(process_cache.path(CACHE_STREAMS))
+    sweep_task = asyncio.create_task(
+        idle_sweep_loop(
+            app.state.stream_cache_idle, transcoder.clear_cache, sweep_stop
+        ),
+        name="stream-cache-idle",
+    )
 
     if control is not None:
         control.start()
@@ -82,6 +96,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("Shutting down")
+        sweep_stop.set()
+        if sweep_task is not None:
+            await sweep_task
         if control is not None:
             control.stop()
         jobs.shutdown()
@@ -124,6 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.scanner = rt.jobs
     app.state.process_cache = ProcessCache()
     app.state.transcoder = Transcoder()
+    app.state.stream_cache_idle = StreamCacheIdle()
     app.state.control_server = None  # set by serve after import to avoid cycle
 
     for exc_type, status_code in _EXCEPTION_STATUS:
@@ -138,6 +156,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(pwa.router)
     app.include_router(pages.router)
+    app.add_middleware(
+        StreamCacheIdleMiddleware, idle=app.state.stream_cache_idle
+    )
     return app
 
 

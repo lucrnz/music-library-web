@@ -270,7 +270,9 @@ async def cache_clear(
     scopes = set(scope)
     removed: dict[str, int] = {}
     if "streams" in scopes:
-        removed["streams"] = await run_in_threadpool(transcoder(request).clear_cache)
+        removed["streams"] = await request.app.state.stream_cache_idle.run_clear(
+            transcoder(request).clear_cache
+        )
     return {"removed": removed, "scopes": sorted(scopes)}
 
 

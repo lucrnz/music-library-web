@@ -1,4 +1,7 @@
-"""Process-scoped cache root for transcoded streams (wiped on shutdown).
+"""Process-scoped cache root for transcoded streams.
+
+The temp root is wiped on process shutdown. ``streams/`` contents are also
+emptied after about an hour with no HTTP client (see ``transcode.idle``).
 
 Layout::
 
@@ -23,7 +26,7 @@ CACHE_SUBDIRS = (CACHE_STREAMS,)
 
 
 class ProcessCache:
-    """One musicweb-* temp root with named subdirectories; wiped on shutdown."""
+    """One musicweb-* temp root with named subdirectories; rmtree on shutdown."""
 
     def __init__(self) -> None:
         self._root: Path | None = None

@@ -5,7 +5,9 @@ Encode argv fragments and aresample/dither *policy* live in ``profiles``
 (``StreamProfile``, ``plan_aresample``).
 
 Cache files live under the process cache ``streams/`` subdirectory and are
-wiped with the process root on shutdown (or via scoped ``/api/cache/clear``).
+wiped with the process root on shutdown, via scoped ``/api/cache/clear``,
+or by idle eviction (``Transcoder.clear_cache`` after about an hour with
+no HTTP client).
 
 All encodes run on a single background worker fed by a two-tier priority
 queue: play requests (urgent, newest first) ahead of playlist prewarm
