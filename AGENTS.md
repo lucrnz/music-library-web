@@ -5,8 +5,8 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (Vite + pnpm). Stre
 ## Essentials
 
 - Entrypoint: `uv run musicweb` (bare = serve; also `scan`, `regen-*`, `stats`, `doctor` — see `docs/development/commands.md`). Requires a built SPA: `pnpm --dir frontend build`.
-- Tooling: uv for Python; pnpm for the frontend (`pnpm --dir frontend {install,dev,build,test}`). No root `package.json`.
-- Browser frontend is plain ESM JavaScript (Vue 3 + Vue Router) under `frontend/`. No TypeScript.
+- Tooling: uv for Python; pnpm for the frontend (`pnpm --dir frontend {install,dev,build,typecheck,test}`). No root `package.json`.
+- Browser frontend is Vue 3 SFC (`<script setup lang="ts">`) plus TypeScript modules under `frontend/src/`. Typecheck with `pnpm --dir frontend typecheck` (`vue-tsc`).
 - Config: `.env` at project root (see `.env.example`); settings load via `musicweb/config.py`.
 - Schema migrations: Alembic under `src/musicweb/db/migrations/`; startup applies to head via `musicweb.db.engine`.
 - Frontend deps change only in `frontend/package.json`. Commit `frontend/pnpm-lock.yaml`. Do not commit `frontend/dist`.

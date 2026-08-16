@@ -4,17 +4,17 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 
 ## Source of truth
 
-- Player store: `frontend/js/stores/player.js` (loaders); `playerState.js`, `playerSession.js`, `playerPrefs.js`
-- Quality / network prefs: `frontend/js/stores/settings.js`
-- Session queue + prepare helpers: `frontend/js/stores/playlist.js`
-- Delivery tag / lossy kind: `frontend/js/lossyKind.js`
-- Play source resolution: `frontend/js/downloads/resolve.js`
-- Exclusive profile pick: `frontend/js/stores/exclusiveAudio.js`
-- Block reasons / copy: `frontend/js/playBlock.js`
-- Quality ranking: `frontend/js/qualityRank.js`
-- Status presentation: `frontend/js/playbackStatus.js`
-- Codec honesty (browser decode probes): `frontend/js/codecSupport.js`, `codecProbes.js`
-- HTTP stream / prepare: `frontend/js/api.js`, `src/musicweb/routes/media.py`
+- Player store: `frontend/src/stores/player.ts` (loaders); `playerState.ts`, `playerSession.ts`, `playerPrefs.ts`
+- Quality / network prefs: `frontend/src/stores/settings.ts`
+- Session queue + prepare helpers: `frontend/src/stores/playlist.ts`
+- Delivery tag / lossy kind: `frontend/src/lossyKind.ts`
+- Play source resolution: `frontend/src/downloads/resolve.ts`
+- Exclusive profile pick: `frontend/src/stores/exclusiveAudio.ts`
+- Block reasons / copy: `frontend/src/playBlock.ts`
+- Quality ranking: `frontend/src/qualityRank.ts`
+- Status presentation: `frontend/src/playbackStatus.ts`
+- Codec honesty (browser decode probes): `frontend/src/codecSupport.ts`, `codecProbes.ts`
+- HTTP stream / prepare: `frontend/src/api.ts`, `src/musicweb/routes/media.py`
 - Stream profiles (server): `src/musicweb/transcode/profiles.py`
 - Related: `docs/systems/transcoding.md`, `docs/systems/downloads.md`, `docs/systems/exclusive-audio.md`, `docs/product/core-guidelines.md`
 

@@ -30,11 +30,12 @@ pnpm --dir frontend exec playwright install chromium
 
 ## Test
 
-Pytest lives in the `dev` dependency group (not runtime deps). Group name and tool config: `pyproject.toml`. Frontend smoke is Vitest browser (Chromium).
+Pytest lives in the `dev` dependency group (not runtime deps). Group name and tool config: `pyproject.toml`. Frontend typecheck is `vue-tsc`. Frontend smoke is Vitest browser (Chromium). `pnpm --dir frontend build` runs `vue-tsc --noEmit` on the app tsconfig, then Vite.
 
 ```sh
 uv sync --group dev
 uv run --group dev pytest
+pnpm --dir frontend typecheck
 pnpm --dir frontend test
 ```
 

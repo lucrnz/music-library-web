@@ -57,9 +57,9 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **ORM models** live in `db/models.py`; query helpers in `db/repositories/`.
 - **Stream encode policy** (profiles, aresample/dither rules) lives under `transcode/`. Do not reimplement encode argv in routes.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
-- **Frontend** is Vite ESM under `frontend/js/`. Stores hold client state; components render; `api.js` talks to the server. FastAPI serves `frontend/dist`.
-- **Row action menus** live under `frontend/js/components/menu/`. Desktop media queries for new JS live in `frontend/js/layout.js`. See `docs/frontend/conventions.md`.
-- **Offline downloads** stay under `frontend/js/downloads/` and must not write the server index.
+- **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
+- **Row action menus** live under `frontend/src/components/menu/`. Desktop media queries for new client code live in `frontend/src/layout.ts`. See `docs/frontend/conventions.md`.
+- **Offline downloads** stay under `frontend/src/downloads/` and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.
 
 ## Documentation folders

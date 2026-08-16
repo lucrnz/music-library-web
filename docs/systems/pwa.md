@@ -12,7 +12,7 @@ Installable app shell and offline **bootstrap** for the Vue SPA. Offline **audio
 - SW logic template: `src/musicweb/sw.template.js` (not served directly)
 - Manifest + `/sw.js` routes: `src/musicweb/routes/pwa.py`
 - HTML shell: `frontend/index.html` (theme-color `#121212`; FastAPI replaces `#musicweb-config`)
-- Registration: `frontend/js/pwa.js` (skips when `import.meta.env.DEV`)
+- Registration: `frontend/src/pwa.ts` (skips when `import.meta.env.DEV`)
 - Icons: `frontend/public/static/img/icon-*.png` (URLs stay `/static/img/…`)
 
 ## Decisions

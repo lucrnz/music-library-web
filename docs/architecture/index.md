@@ -6,7 +6,7 @@ Architecture-specific docs map. For the full documentation map, see `docs/README
 
 - App composition / lifespan: `src/musicweb/main.py`
 - HTTP surface: `src/musicweb/routes/`
-- SPA entry: `frontend/js/main.js`
+- SPA entry: `frontend/src/main.ts`
 - Full documentation map: `docs/README.md`
 
 ## Overview
@@ -15,13 +15,13 @@ Musicweb is a single-process LAN server:
 
 1. **Filesystem library** — media files under a configured root; layout-agnostic discovery.
 2. **SQLite index** — artists, albums, tracks, playlists, FTS5 search; durable under the data directory.
-3. **HTTP API + SPA** — FastAPI JSON API and a Vue 3 ESM client built by Vite; FastAPI serves `frontend/dist`.
+3. **HTTP API + SPA** — FastAPI JSON API and a Vue 3 SFC + TypeScript client built by Vite; FastAPI serves `frontend/dist`.
 4. **On-demand transcoder** — ffmpeg worker produces Opus/FLAC stream profiles into a process-temp cache.
 5. **Client offline path** — optional OPFS downloads, connectivity, and play-source resolution in the browser.
 6. **Diagnostics** — structured client/server events as JSONL under the data dir; Settings cutoff + `musicweb logs`. See `docs/systems/diagnostics.md`.
 
 ```text
-Browser (Vue ESM SPA)
+Browser (Vue SFC + TypeScript SPA)
     │  REST + media GETs
     ├── Offline: OPFS + IndexedDB downloads (optional)
     └── Connectivity + quality prefs (client)
@@ -58,7 +58,7 @@ FastAPI (routes → services)
 | `scan/` | Walk, fingerprint, upsert, enrichment passes | Serving HTTP |
 | `db/` | Models, sessions, FTS, migrations, repositories | Filesystem media I/O |
 | `transcode/` | Profiles, probe, worker, dependency checks | Persistent media storage |
-| `frontend/js/` | UI state, playback, connectivity, offline downloads (OPFS) | Server-side index writes |
+| `frontend/src/` | UI state, playback, connectivity, offline downloads (OPFS) | Server-side index writes |
 
 Composition root is `main.create_app`: settings, database, library, stores, scanner, process cache, and transcoder are attached to `app.state` for route deps.
 

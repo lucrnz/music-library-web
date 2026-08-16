@@ -34,11 +34,11 @@ Browser-compatible delivery is produced by ffmpeg, not browser demux of arbitrar
 
 ### Vite + pnpm frontend, FastAPI serves dist
 
-Vue 3 and Vue Router versions live in `frontend/package.json`. `pnpm --dir frontend build` is required before `uv run musicweb` and before a green `musicweb doctor`. FastAPI serves `frontend/dist` (hashed `/assets/`, images at `/static/img/…`). The service worker stays Python-generated from a dist inventory; cache-first is precache membership. Source HTML has valid `{"publicOrigin":""}`; FastAPI replaces that `#musicweb-config` script body per request. Dev is `pnpm --dir frontend dev` (proxies `/api` to `:8765`) plus `uv run musicweb`.
+The SPA is Vue 3 SFC (`<script setup lang="ts">`) plus TypeScript modules under `frontend/src/`. Vue and Vue Router versions live in `frontend/package.json`. `pnpm --dir frontend typecheck` runs `vue-tsc --noEmit` on the app tsconfig. `pnpm --dir frontend build` typechecks then Vite-emits `frontend/dist`. That build is required before `uv run musicweb` and before a green `musicweb doctor`. FastAPI serves `frontend/dist` (hashed `/assets/`, images at `/static/img/…`). CSS stays in `frontend/css/`. Client stores stay custom reactive modules (not Pinia). Client types are hand-written from today’s shapes (existing JSDoc plus unmapped snake_case fields next to their owner; no OpenAPI codegen; no new runtime mappers). The service worker stays Python-generated from a dist inventory; cache-first is precache membership. Source HTML has valid `{"publicOrigin":""}`; FastAPI replaces that `#musicweb-config` script body per request. Dev is `pnpm --dir frontend dev` (proxies `/api` to `:8765`) plus `uv run musicweb`.
 
 ### Exclusive audio via optional companion (not Electron)
 
-Browser engines cannot hog Core Audio. Exclusive playback is an **optional** Mac loopback companion (`musicweb exclusive-audio` + mpv), not an Electron rewrite. The SPA stays plain JS; the companion does not take the library data-dir lock. See `docs/systems/exclusive-audio.md`.
+Browser engines cannot hog Core Audio. Exclusive playback is an **optional** Mac loopback companion (`musicweb exclusive-audio` + mpv), not an Electron rewrite. The SPA is Vue SFC + TypeScript; exclusive playback is still not an Electron rewrite. The companion does not take the library data-dir lock. See `docs/systems/exclusive-audio.md`.
 
 ### Shell-only PWA with configurable public origin
 

@@ -4,18 +4,18 @@ Optional client-side offline music: users can download stream-profile audio to t
 
 ## Source of truth
 
-- Package: `frontend/js/downloads/`
-  - Lifecycle / queue actions: `index.js`
-  - User download with confirm: `ui.js`
-  - Reactive fields: `state.js`
-  - Catalog / projection / art / codec helpers: `catalog.js`
-  - Queue store and pump side: `queue.js`, `queuePolicy.js`, `worker.js`
-  - OPFS binary storage: `opfs.js`
-  - IndexedDB metadata: `db.js`
-  - Play / cover resolution: `resolve.js`
-  - Hierarchy / storage formatters: `hierarchy.js`, `storageInfo.js`
-- Settings that affect downloads: `frontend/js/stores/settings.js` (download profile, only-on-Wi‑Fi)
-- Connectivity signals consumed by queue policy: `frontend/js/connectivity.js`, `networkConstraints.js`
+- Package: `frontend/src/downloads/`
+  - Lifecycle / queue actions: `index.ts`
+  - User download with confirm: `ui.ts`
+  - Reactive fields: `state.ts`
+  - Catalog / projection / art / codec helpers: `catalog.ts`
+  - Queue store and pump side: `queue.ts`, `queuePolicy.ts`, `worker.ts`
+  - OPFS binary storage: `opfs.ts`
+  - IndexedDB metadata: `db.ts`
+  - Play / cover resolution: `resolve.ts`
+  - Hierarchy / storage formatters: `hierarchy.ts`, `storageInfo.ts`
+- Settings that affect downloads: `frontend/src/stores/settings.ts` (download profile, only-on-Wi‑Fi)
+- Connectivity signals consumed by queue policy: `frontend/src/connectivity.ts`, `networkConstraints.ts`
 - PWA shell boundary: `docs/systems/pwa.md`
 - Playback resolution: `docs/systems/playback.md`
 

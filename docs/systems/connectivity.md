@@ -4,11 +4,11 @@ Client model for **reachability** (can we talk to this origin’s server?) and *
 
 ## Source of truth
 
-- Platform state and probes: `frontend/js/connectivity.js`
-- Reactive SPA mirror: `frontend/js/stores/connectivity.js`
-- Quiet transition toasts: `frontend/js/connectivityUi.js`
-- Connection type / Data Saver hints: `frontend/js/networkConstraints.js`
-- Consumers: `frontend/js/downloads/queuePolicy.js`, `frontend/js/stores/player.js`, `frontend/js/stores/settings.js`
+- Platform state and probes: `frontend/src/connectivity.ts`
+- Reactive SPA mirror: `frontend/src/stores/connectivity.ts`
+- Quiet transition toasts: `frontend/src/connectivityUi.ts`
+- Connection type / Data Saver hints: `frontend/src/networkConstraints.ts`
+- Consumers: `frontend/src/downloads/queuePolicy.ts`, `frontend/src/stores/player.ts`, `frontend/src/stores/settings.ts`
 - Related: `docs/systems/downloads.md`, `docs/systems/playback.md`, `docs/systems/pwa.md`
 
 ## Reachability states
