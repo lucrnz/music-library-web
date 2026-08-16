@@ -4,17 +4,17 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 
 ## Source of truth
 
-- Player store: `src/musicweb/static/js/stores/player.js` (loaders); `playerState.js`, `playerSession.js`, `playerPrefs.js`
-- Quality / network prefs: `src/musicweb/static/js/stores/settings.js`
-- Session queue + prepare helpers: `src/musicweb/static/js/stores/playlist.js`
-- Delivery tag / lossy kind: `src/musicweb/static/js/lossyKind.js`
-- Play source resolution: `src/musicweb/static/js/downloads/resolve.js`
-- Exclusive profile pick: `src/musicweb/static/js/stores/exclusiveAudio.js`
-- Block reasons / copy: `src/musicweb/static/js/playBlock.js`
-- Quality ranking: `src/musicweb/static/js/qualityRank.js`
-- Status presentation: `src/musicweb/static/js/playbackStatus.js`
-- Codec honesty (browser decode probes): `src/musicweb/static/js/codecSupport.js`, `codecProbes.js`
-- HTTP stream / prepare: `src/musicweb/static/js/api.js`, `src/musicweb/routes/media.py`
+- Player store: `frontend/js/stores/player.js` (loaders); `playerState.js`, `playerSession.js`, `playerPrefs.js`
+- Quality / network prefs: `frontend/js/stores/settings.js`
+- Session queue + prepare helpers: `frontend/js/stores/playlist.js`
+- Delivery tag / lossy kind: `frontend/js/lossyKind.js`
+- Play source resolution: `frontend/js/downloads/resolve.js`
+- Exclusive profile pick: `frontend/js/stores/exclusiveAudio.js`
+- Block reasons / copy: `frontend/js/playBlock.js`
+- Quality ranking: `frontend/js/qualityRank.js`
+- Status presentation: `frontend/js/playbackStatus.js`
+- Codec honesty (browser decode probes): `frontend/js/codecSupport.js`, `codecProbes.js`
+- HTTP stream / prepare: `frontend/js/api.js`, `src/musicweb/routes/media.py`
 - Stream profiles (server): `src/musicweb/transcode/profiles.py`
 - Related: `docs/systems/transcoding.md`, `docs/systems/downloads.md`, `docs/systems/exclusive-audio.md`, `docs/product/core-guidelines.md`
 

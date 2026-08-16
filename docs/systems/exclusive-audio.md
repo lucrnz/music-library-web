@@ -38,7 +38,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#ex
 - Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `mpv_player.py`, `coreaudio.py`)
 - Profile tags + catalog: `src/musicweb/transcode/profiles.py`
 - HTTP: `GET /api/exclusive-formats`, existing `GET /api/stream` + `POST /api/transcode/prepare` with tags
-- Client: `src/musicweb/static/js/exclusive/` (including `statusFace.js`, `companionClient.js`), `stores/exclusiveAudio.js`, `playback/sinks/`, `stores/player.js`, `playbackStatus.js`
+- Client: `frontend/js/exclusive/` (including `statusFace.js`, `companionClient.js`), `stores/exclusiveAudio.js`, `playback/sinks/`, `stores/player.js`, `playbackStatus.js`
 - Commands: `docs/development/commands.md`
 
 ## Architecture (prose)

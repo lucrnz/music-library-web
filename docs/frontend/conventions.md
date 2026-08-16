@@ -2,33 +2,33 @@
 
 ## Source of truth
 
-- Entry: `src/musicweb/static/js/main.js`
-- Router: `src/musicweb/static/js/router.js`
-- HTTP helpers: `src/musicweb/static/js/api.js`
-- App shell: `src/musicweb/static/js/components/App.js`
-- Client stores: `src/musicweb/static/js/stores/`
-- Vendor pin registry: `src/musicweb/vendor_deps.py`
-- HTML shell + import map: `src/musicweb/templates/index.html`
-- PWA registration: `src/musicweb/static/js/pwa.js`; SW generation: `src/musicweb/pwa_shell.py` + `routes/pwa.py` (see `docs/systems/pwa.md`)
+- Entry: `frontend/js/main.js`
+- Router: `frontend/js/router.js`
+- HTTP helpers: `frontend/js/api.js`
+- App shell: `frontend/js/components/App.js`
+- Client stores: `frontend/js/stores/`
+- Frontend package pins: `frontend/package.json`
+- HTML shell: `frontend/index.html`
+- PWA registration: `frontend/js/pwa.js`; SW generation: `src/musicweb/pwa_shell.py` + `routes/pwa.py` (see `docs/systems/pwa.md`)
 
 ## Architecture
 
-- **No bundler / no Node.** Browser loads Vue and Vue Router as ESM from `/static/vendor/` via import map.
+- **Vite ESM + pnpm.** Vue and Vue Router are package deps. Dev is `pnpm --dir frontend dev` (proxies `/api` to FastAPI `:8765`). Production is `pnpm --dir frontend build`; FastAPI serves `frontend/dist` and replaces the `#musicweb-config` script body. SW registration skips when `import.meta.env.DEV`.
 - **SPA fallback:** FastAPI serves the same shell for client routes so refresh works on `/folders`, `/artists/…`, etc.
 - **Stores** hold player, playlist/queue, settings, and UI chrome. Components should prefer store APIs over ad-hoc globals. The player store is a facade: `player` record in `playerState.js`, covers/Media Session metadata in `playerSession.js`, volume/expanded keys in `playerPrefs.js`. Loaders (`playHtml` / `playExclusive` / `playIndex`) stay in `player.js`, which re-exports `player` only.
 - **Library UI** lives under `components/library/`; player under `components/player/`; settings modal under `components/settings/`.
 - **Row action menus** live under `components/menu/` (`ActionCard`, `AnchoredMenu`, thin `ActionMenu` picker). Callers own open/anchor state and pass items with `run()`. Do not add `stores/actionMenu.js`. Do not add an `actions` mode to `dialog.js`. A second surface mounts its own picker; do not invent a second overlay system.
-- **Downloads** (`static/js/downloads/`) own client-side offline catalog (OPFS + IndexedDB). Keep offline concerns out of server index code. Design, storage split, queue policy, and import-surface rules: `docs/systems/downloads.md`.
+- **Downloads** (`frontend/js/downloads/`) own client-side offline catalog (OPFS + IndexedDB). Keep offline concerns out of server index code. Design, storage split, queue policy, and import-surface rules: `docs/systems/downloads.md`.
 - **Playback / quality** (play source, stream vs download policy, prepare): `docs/systems/playback.md`.
 - **Exclusive audio** (Mac PWA + companion sinks; optional): `docs/systems/exclusive-audio.md`. Player transport goes through sinks — do not re-export a shared `HTMLAudioElement` from `player.js`.
 - **Connectivity** (online / offline / server_down, network cost hints): `docs/systems/connectivity.md`.
-- **Diagnostics** (`static/js/diag/`): always-on emit with an Errors only / Everything cutoff in Settings. Same-origin `/api` fetches share the helper in `api.js`. Design: `docs/systems/diagnostics.md`.
+- **Diagnostics** (`frontend/js/diag/`): always-on emit with an Errors only / Everything cutoff in Settings. Same-origin `/api` fetches share the helper in `api.js`. Design: `docs/systems/diagnostics.md`.
 
-## Vendor assets
+## Frontend package
 
-Pinned package versions and CDN URLs live only in `vendor_deps.py`. On startup, missing or version-mismatched files are downloaded into `static/vendor/` and recorded in a local manifest. `static/vendor/**` is gitignored except a keep file.
+Pinned Vue/Router and toolchain versions live only in `frontend/package.json`. Commit `frontend/pnpm-lock.yaml`. Do not commit `frontend/dist`.
 
-To upgrade Vue/Router: change version + URL in `vendor_deps.py` and restart with network available.
+To upgrade Vue/Router: change the version in `frontend/package.json`, run `pnpm --dir frontend install`, and rebuild.
 
 ## UX conventions
 
@@ -44,7 +44,7 @@ To upgrade Vue/Router: change version + URL in `vendor_deps.py` and restart with
 
 ## Guardrails
 
-- Do not introduce a Vite/webpack/npm app shell without an explicit decision (see technical decisions).
+- Do not revert to a CDN import map without a new decision (see technical decisions).
 - Prefer stable track IDs in client state and playlist APIs over raw filesystem paths.
-- Keep CSS split by concern under `static/css/`; avoid inline sprawl for large features.
-- Do not commit downloaded vendor files; let startup fetch restore them.
+- Keep CSS split by concern under `frontend/css/`; avoid inline sprawl for large features.
+- Do not commit `frontend/dist`; hosts build it with `pnpm --dir frontend build`.

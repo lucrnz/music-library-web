@@ -9,21 +9,21 @@ Installable app shell and offline **bootstrap** for the Vue SPA. Offline **audio
 - Public origin setting: `src/musicweb/config.py` (`MUSICWEB_PUBLIC_ORIGIN` → `PublicOrigin`)
 - Env roles / secure context: `docs/development/environment.md`
 - Shell inventory + SW generation + theme/background chrome constants: `src/musicweb/pwa_shell.py`
-- SW logic template: `src/musicweb/static/sw.template.js` (not served directly)
+- SW logic template: `src/musicweb/sw.template.js` (not served directly)
 - Manifest + `/sw.js` routes: `src/musicweb/routes/pwa.py`
-- HTML shell: `src/musicweb/templates/index.html` (theme-color from shared `pwa_shell` constants)
-- Registration: `src/musicweb/static/js/pwa.js`
-- Icons: `src/musicweb/static/img/icon-*.png`
+- HTML shell: `frontend/index.html` (theme-color `#121212`; FastAPI replaces `#musicweb-config`)
+- Registration: `frontend/js/pwa.js` (skips when `import.meta.env.DEV`)
+- Icons: `frontend/public/static/img/icon-*.png` (URLs stay `/static/img/…`)
 
 ## Decisions
 
 ### Shell-only service worker
 
-The SW is **generated** on each `GET /sw.js`: Python walks `static/{css,js,img,vendor}` and injects a complete `PRECACHE_URLS` list plus a content-derived cache version. Install is **fail-closed**: any inventory miss aborts install so the previous complete cache stays controlling. The worker **never** caches `/api/*` (including streams). Offline music stays under explicit user Downloads.
+The SW is **generated** on each `GET /sw.js`: Python walks `frontend/dist` and injects a complete `PRECACHE_URLS` list plus a content-derived cache version (fingerprint path is `dist / url.lstrip("/")`). Install is **fail-closed**: any inventory miss aborts install so the previous complete cache stays controlling. The worker **never** caches `/api/*` (including streams). Offline music stays under explicit user Downloads.
 
 ### Server-derived inventory
 
-There is no hand-maintained module list. Adding a file under `static/js/` (etc.) is included on the next SW generation. Cache version changes when the template or asset mtimes/sizes change so clients quietly pick up a new shell.
+There is no hand-maintained module list. A new hashed file under `frontend/dist` is included on the next SW generation after `pnpm --dir frontend build`. Cache version changes when the template or asset mtimes/sizes change so clients quietly pick up a new shell. Cache-first is **precache membership** (`Set(PRECACHE_URLS)`), not a `/static/` or `/assets/` prefix.
 
 ### Admin-configured public origin
 
@@ -44,10 +44,10 @@ Connectivity UX is quiet: transition toasts via the shell binder (`connectivityU
 | Class | Intent |
 |-------|--------|
 | Navigations (`request.mode === "navigate"`) | Network first; offline → cached shell at `/` |
-| `/static/*` | Cache-first (full inventory; install aborts if any URL misses) |
+| Precache membership (`PRECACHE_URLS`) | Cache-first (hashed `/assets/…`, `/static/img/…`, `/`; install aborts if any URL misses) |
 | `/api/*` | Network only — never SW cache |
 | `/sw.js` | Network only (always fresh worker script) |
-| `/manifest.webmanifest` | Network first; offline cache or 503 Response |
+| `/manifest.webmanifest` | Network first; offline cache or 503 (`networkFirstManifest`). Not on the precache list. |
 
 ## Guardrails
 

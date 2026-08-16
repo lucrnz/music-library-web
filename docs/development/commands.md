@@ -17,17 +17,25 @@ Verify scripts and flags against those files when something looks wrong; this pa
 cp .env.example .env
 # Edit .env — set MUSIC_LIBRARY_PATH to your library root
 uv sync
+pnpm --dir frontend install
 ```
 
-Requires Python 3.11+ and [uv](https://github.com/astral-sh/uv). System dependency: `ffmpeg` on `PATH` built with **libsoxr**, **libopus**, and **flac**. The server refuses to start if those encoders/resampler are missing.
+Requires Python 3.11+ and [uv](https://github.com/astral-sh/uv), plus **Node 20+** and [pnpm](https://pnpm.io/) for the SPA. System dependency: `ffmpeg` on `PATH` built with **libsoxr**, **libopus**, and **flac**. The server refuses to start if those encoders/resampler are missing.
+
+Chromium for `pnpm --dir frontend test` is a one-time install (not committed):
+
+```sh
+pnpm --dir frontend exec playwright install chromium
+```
 
 ## Test
 
-Pytest lives in the `dev` dependency group (not runtime deps). Group name and tool config: `pyproject.toml`.
+Pytest lives in the `dev` dependency group (not runtime deps). Group name and tool config: `pyproject.toml`. Frontend smoke is Vitest browser (Chromium).
 
 ```sh
 uv sync --group dev
 uv run --group dev pytest
+pnpm --dir frontend test
 ```
 
 ## Run (HTTP server)
@@ -46,11 +54,26 @@ uv run python -m musicweb
 
 Bare `musicweb` and `musicweb serve` are the same. The process takes an **exclusive flock** on `$MUSICWEB_DATA_DIR/musicweb.lock` so only one server (or local write job) owns the data dir.
 
+Build the SPA before the first start (and after frontend changes). Missing `frontend/dist/index.html` fails `create_app` and `musicweb doctor`:
+
+```sh
+pnpm --dir frontend build
+uv run musicweb
+```
+
+Dev loop (HMR on `:5173`, API on `:8765`):
+
+```sh
+uv run musicweb
+pnpm --dir frontend dev
+# open http://localhost:5173/
+```
+
 On start the process:
 
 1. Validates the library path and data directory.
 2. Checks ffmpeg tool capabilities.
-3. Ensures Vue/Router vendor assets under `static/vendor/` (network only when the local manifest is stale).
+3. Requires a built SPA at `frontend/dist/index.html`.
 4. Applies Alembic migrations to head (or stamps a pre-Alembic DB).
 5. Starts the private control Unix socket (`$MUSICWEB_DATA_DIR/musicweb.sock`).
 6. Starts a non-blocking **quick** library scan.
@@ -71,7 +94,7 @@ Write jobs use the same multi-kind job runner as HTTP (`musicweb.jobs`). If the 
 | `musicweb regen-artist-images [--force]` | Artist portraits |
 | `musicweb regen-lyrics [--force]` | Lyrics fetch |
 | `musicweb stats` | Counts (artists/albums/tracks/missing) |
-| `musicweb doctor` | Hard checks (library path, data dir, ffmpeg, DB, lock info) |
+| `musicweb doctor` | Hard checks (library path, data dir, ffmpeg, DB, frontend dist, lock info) |
 | `musicweb logs list` | Diagnostic event files (sizes, line counts) |
 | `musicweb logs show` | Print matching JSONL (`--session`, `--level`, `--client`, …) |
 | `musicweb logs tail` | Last N matching lines; `--follow` |
@@ -127,6 +150,6 @@ alembic upgrade head
 
 `alembic.ini` points `script_location` at `src/musicweb/db/migrations` and uses `sqlite:///./data/library.db` by default. Prefer the running app’s data dir settings for production-like paths.
 
-## First-run network
+## First-run frontend
 
-The first start (or after a vendor version bump in `vendor_deps.py`) needs network access to download pinned Vue/Router builds from unpkg. After the local manifest matches, the server can start offline.
+`uv run musicweb` and a green `musicweb doctor` require `pnpm --dir frontend build` first. Missing `frontend/dist/index.html` is a fail (message names that command). After the dist exists, the server can start offline.

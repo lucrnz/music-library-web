@@ -1,15 +1,15 @@
 # AGENTS.md
 
-Music library web server: FastAPI + SQLite index + Vue 3 SPA (no bundler). Stream a lossless-first library with high-fidelity ffmpeg transcoding.
+Music library web server: FastAPI + SQLite index + Vue 3 SPA (Vite + pnpm). Stream a lossless-first library with high-fidelity ffmpeg transcoding.
 
 ## Essentials
 
-- Entrypoint: `uv run musicweb` (bare = serve; also `scan`, `regen-*`, `stats`, `doctor` — see `docs/development/commands.md`)
-- Package manager / tooling: uv only for Python. No Node/npm build step.
-- Browser frontend is plain ESM JavaScript (Vue 3 + Vue Router - no build step).
+- Entrypoint: `uv run musicweb` (bare = serve; also `scan`, `regen-*`, `stats`, `doctor` — see `docs/development/commands.md`). Requires a built SPA: `pnpm --dir frontend build`.
+- Tooling: uv for Python; pnpm for the frontend (`pnpm --dir frontend {install,dev,build,test}`). No root `package.json`.
+- Browser frontend is plain ESM JavaScript (Vue 3 + Vue Router) under `frontend/`. No TypeScript.
 - Config: `.env` at project root (see `.env.example`); settings load via `musicweb/config.py`.
 - Schema migrations: Alembic under `src/musicweb/db/migrations/`; startup applies to head via `musicweb.db.engine`.
-- Frontend vendor assets: pinned in `musicweb/vendor_deps.py`; downloaded into `static/vendor/` on startup when the local manifest is stale.
+- Frontend deps change only in `frontend/package.json`. Commit `frontend/pnpm-lock.yaml`. Do not commit `frontend/dist`.
 
 ## Hard rules
 
@@ -18,7 +18,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (no bundler). Strea
 - Stable track identity comes from content fingerprints, not paths. Renames should reattach when the fingerprint matches.
 - Process-temp stream cache is wiped on shutdown and after about an hour with no HTTP client; do not treat it as durable storage.
 - Migrations: add new Alembic revisions under `src/musicweb/db/migrations/versions/`; do not hand-edit applied history. Startup migrates; optional CLI is `alembic upgrade head`.
-- Vendor versions change only in `vendor_deps.py` (version + URL). No npm/webpack/vite.
+- Frontend versions change only in `frontend/package.json`. Do not add a second bundler or generate the service worker in Node without a new decision.
 
 ## Deep dives
 

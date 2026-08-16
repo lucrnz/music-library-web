@@ -44,7 +44,7 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 
 - `docs/database/overview.md`: SQLite index purpose and areas.
 - `docs/database/migrations.md`: Alembic workflow.
-- `docs/frontend/conventions.md`: Vue ESM SPA, stores, routing, vendor assets.
+- `docs/frontend/conventions.md`: Vue ESM SPA (Vite + pnpm), stores, routing.
 
 ## Strategy
 

@@ -4,7 +4,7 @@ Optional client-side offline music: users can download stream-profile audio to t
 
 ## Source of truth
 
-- Package: `src/musicweb/static/js/downloads/`
+- Package: `frontend/js/downloads/`
   - Lifecycle / queue actions: `index.js`
   - User download with confirm: `ui.js`
   - Reactive fields: `state.js`
@@ -14,8 +14,8 @@ Optional client-side offline music: users can download stream-profile audio to t
   - IndexedDB metadata: `db.js`
   - Play / cover resolution: `resolve.js`
   - Hierarchy / storage formatters: `hierarchy.js`, `storageInfo.js`
-- Settings that affect downloads: `src/musicweb/static/js/stores/settings.js` (download profile, only-on-Wi‑Fi)
-- Connectivity signals consumed by queue policy: `src/musicweb/static/js/connectivity.js`, `networkConstraints.js`
+- Settings that affect downloads: `frontend/js/stores/settings.js` (download profile, only-on-Wi‑Fi)
+- Connectivity signals consumed by queue policy: `frontend/js/connectivity.js`, `networkConstraints.js`
 - PWA shell boundary: `docs/systems/pwa.md`
 - Playback resolution: `docs/systems/playback.md`
 

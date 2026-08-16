@@ -7,8 +7,8 @@ Structured client and server events stored on the library host so an operator ca
 - Store, emit, join keys: `src/musicweb/diag/`
 - Ingest route: `src/musicweb/routes/diag.py`
 - Stream / prepare callsites: `src/musicweb/routes/media.py`
-- Client logger + outbox: `src/musicweb/static/js/diag/`
-- Settings cutoff: `src/musicweb/static/js/components/settings/SettingsModal.js`
+- Client logger + outbox: `frontend/js/diag/`
+- Settings cutoff: `frontend/js/components/settings/SettingsModal.js`
 - CLI: `src/musicweb/cli/logs.py`
 - Size cap constant: `src/musicweb/config.py`
 - Related: `docs/systems/playback.md`, `docs/systems/connectivity.md`, `docs/systems/pwa.md`

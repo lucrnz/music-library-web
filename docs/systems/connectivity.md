@@ -4,11 +4,11 @@ Client model for **reachability** (can we talk to this origin’s server?) and *
 
 ## Source of truth
 
-- Platform state and probes: `src/musicweb/static/js/connectivity.js`
-- Reactive SPA mirror: `src/musicweb/static/js/stores/connectivity.js`
-- Quiet transition toasts: `src/musicweb/static/js/connectivityUi.js`
-- Connection type / Data Saver hints: `src/musicweb/static/js/networkConstraints.js`
-- Consumers: `src/musicweb/static/js/downloads/queuePolicy.js`, `src/musicweb/static/js/stores/player.js`, `src/musicweb/static/js/stores/settings.js`
+- Platform state and probes: `frontend/js/connectivity.js`
+- Reactive SPA mirror: `frontend/js/stores/connectivity.js`
+- Quiet transition toasts: `frontend/js/connectivityUi.js`
+- Connection type / Data Saver hints: `frontend/js/networkConstraints.js`
+- Consumers: `frontend/js/downloads/queuePolicy.js`, `frontend/js/stores/player.js`, `frontend/js/stores/settings.js`
 - Related: `docs/systems/downloads.md`, `docs/systems/playback.md`, `docs/systems/pwa.md`
 
 ## Reachability states

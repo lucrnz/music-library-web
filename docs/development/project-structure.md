@@ -1,6 +1,6 @@
 # Project structure
 
-FastAPI server that indexes a lossless-first music tree into SQLite and serves a Vue 3 ESM SPA plus on-demand transcoded streams (lossy originals pass through when opted in).
+FastAPI server that indexes a lossless-first music tree into SQLite and serves a Vite-built Vue 3 ESM SPA plus on-demand transcoded streams (lossy originals pass through when opted in).
 
 ## Source of truth
 
@@ -20,13 +20,14 @@ This page describes **ownership boundaries** — where code lives and what each 
 - `docs/`: project documentation.
 - `AGENTS.md`: short agent/human operating rules.
 - `src/musicweb/`: application package.
-- `tests/`: automated tests (pytest); smoke coverage starts with package importability.
+- `frontend/`: Vite + pnpm Vue SPA (source); `frontend/dist/` is gitignored build output.
+- `tests/`: automated tests (pytest); smoke coverage starts with package importability. Frontend smoke: `pnpm --dir frontend test`.
 
 ## Package layout (`src/musicweb`)
 
 | Area | Responsibility |
 |------|----------------|
-| `main.py` | FastAPI app factory, lifespan, static mount, SPA shell wiring |
+| `main.py` | FastAPI app factory, lifespan, dist mounts, SPA shell wiring |
 | `cli/` | Typer entry (`serve`, `scan`, regen, `stats`, `doctor`, `exclusive-audio`, `logs`); argv only |
 | `diag/` | Diagnostic JSONL store, emit, join-key reader |
 | `exclusive/` | macOS exclusive-audio companion (loopback WS + mpv); no DB/lock |
@@ -39,7 +40,8 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `cache.py` | Process-scoped temp caches (streams) |
 | `cover.py` / `artist_image.py` | Persisted WebP cover and portrait stores under the data dir |
 | `http_client.py` | Shared HTTP client helpers for outbound fetch |
-| `vendor_deps.py` | Pinned frontend vendor registry + download-on-startup |
+| `pwa_shell.py` | Dist path, inventory walk, SW render, theme/manifest chrome constants |
+| `sw.template.js` | Service worker template (Python-injected precache list) |
 | `db/` | Engine, models, FTS helpers, repositories, Alembic migrations |
 | `scan/` | Walk, fingerprint, batch upsert, covers, artist images, lyrics, finalize (phases only) |
 | `transcode/` | Dependency check, profiles, probe, encode worker, idle stream-cache eviction |
@@ -47,12 +49,6 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
 | `images/` | WebP render/store helpers |
 | `routes/` | HTTP API routers (health, scan, discovery, folders, media, playlists, diag) + SPA pages |
-| `static/` | CSS, JS SPA, images; `vendor/` is gitignored (fetched at runtime) |
-| `static/js/downloads/` | Client offline catalog (OPFS + IndexedDB); see `docs/systems/downloads.md` |
-| `static/js/exclusive/` + `static/js/playback/sinks/` | Exclusive format policy, companion client, output sinks |
-| `static/js/connectivity.js` (+ store / UI binders) | Reachability and health signals; see `docs/systems/connectivity.md` |
-| `static/js/diag/` | Client diagnostic logger and outbox; see `docs/systems/diagnostics.md` |
-| `templates/` | Jinja shell (`index.html`) with import map |
 
 ## Ownership rules
 
@@ -61,9 +57,9 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **ORM models** live in `db/models.py`; query helpers in `db/repositories/`.
 - **Stream encode policy** (profiles, aresample/dither rules) lives under `transcode/`. Do not reimplement encode argv in routes.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
-- **Frontend** is no-bundler ESM under `static/js/`. Stores hold client state; components render; `api.js` talks to the server.
-- **Row action menus** live under `static/js/components/menu/`. Desktop media queries for new JS live in `static/js/layout.js`. See `docs/frontend/conventions.md`.
-- **Offline downloads** stay under `static/js/downloads/` and must not write the server index.
+- **Frontend** is Vite ESM under `frontend/js/`. Stores hold client state; components render; `api.js` talks to the server. FastAPI serves `frontend/dist`.
+- **Row action menus** live under `frontend/js/components/menu/`. Desktop media queries for new JS live in `frontend/js/layout.js`. See `docs/frontend/conventions.md`.
+- **Offline downloads** stay under `frontend/js/downloads/` and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.
 
 ## Documentation folders

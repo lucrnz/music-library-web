@@ -8,7 +8,7 @@ Guiding choices that should outlive individual refactors.
 - Settings: `src/musicweb/config.py`
 - Index models: `src/musicweb/db/models.py`
 - Stream profiles: `src/musicweb/transcode/profiles.py`
-- Vendor pins: `src/musicweb/vendor_deps.py`
+- Frontend package pins: `frontend/package.json`
 
 ## Decisions
 
@@ -32,9 +32,9 @@ Indexed formats are FLAC and ALAC-in-MP4 by default. MP3 and AAC-in-M4A/MP4 may 
 
 Browser-compatible delivery is produced by ffmpeg, not browser demux of arbitrary library codecs. Resampling uses libsoxr at very-high-quality settings; the server **fails startup** if required codecs/resampler are absent rather than silently degrading.
 
-### No frontend bundler
+### Vite + pnpm frontend, FastAPI serves dist
 
-Vue 3 and Vue Router ship as pinned browser ESM builds downloaded into `static/vendor/` on startup. Avoids Node toolchain drift for a small SPA and keeps `uv` as the only project package manager.
+Vue 3 and Vue Router versions live in `frontend/package.json`. `pnpm --dir frontend build` is required before `uv run musicweb` and before a green `musicweb doctor`. FastAPI serves `frontend/dist` (hashed `/assets/`, images at `/static/img/…`). The service worker stays Python-generated from a dist inventory; cache-first is precache membership. Source HTML has valid `{"publicOrigin":""}`; FastAPI replaces that `#musicweb-config` script body per request. Dev is `pnpm --dir frontend dev` (proxies `/api` to `:8765`) plus `uv run musicweb`.
 
 ### Exclusive audio via optional companion (not Electron)
 
@@ -42,7 +42,7 @@ Browser engines cannot hog Core Audio. Exclusive playback is an **optional** Mac
 
 ### Shell-only PWA with configurable public origin
 
-The app can be installed as a standalone PWA when clients open a **secure-context** origin (`https` or loopback `http`). A **generated** service worker (`GET /sw.js` from on-disk static inventory) caches the app shell only; offline audio stays in client Downloads (OPFS). Operators set `MUSICWEB_PUBLIC_ORIGIN` (parsed as `PublicOrigin`) so manifest/install identity matches their real entry URL — not hard-coded to one deployment recipe. Details: `docs/systems/pwa.md`, `docs/development/environment.md`.
+The app can be installed as a standalone PWA when clients open a **secure-context** origin (`https` or loopback `http`). A **generated** service worker (`GET /sw.js` from `frontend/dist` inventory) caches the app shell only; offline audio stays in client Downloads (OPFS). Operators set `MUSICWEB_PUBLIC_ORIGIN` (parsed as `PublicOrigin`) so manifest/install identity matches their real entry URL — not hard-coded to one deployment recipe. Details: `docs/systems/pwa.md`, `docs/development/environment.md`.
 
 ### Alembic for schema evolution
 
@@ -50,7 +50,7 @@ SQLAlchemy models define the intended schema; Alembic revisions under `db/migrat
 
 ## Guardrails
 
-- Do not introduce a Node build step without an explicit project decision.
+- Do not add a second bundler or generate the service worker in Node without a new decision.
 - Do not add public-internet auth as a soft optional — either design a real auth model or keep LAN-only explicit.
 - Do not store stream cache under the durable data directory as if it were permanent.
 - Do not key long-lived user data (playlists) solely on filesystem paths.
