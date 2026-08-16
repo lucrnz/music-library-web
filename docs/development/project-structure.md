@@ -75,4 +75,4 @@ This page describes **ownership boundaries** — where code lives and what each 
 - `docs/frontend/`: SPA conventions.
 - `docs/product/`: product and audio guidelines.
 - `docs/systems/`: cross-cutting design (scan, transcode, PWA, downloads, playback, connectivity).
-- `docs/plans/`: historical multi-stage implementation plans (not living design).
+- `docs/plans/`: in-flight multi-stage plans (`*-pending` only). Finished plans live in git history.

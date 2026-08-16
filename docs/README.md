@@ -52,7 +52,7 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 
 ## Historical plans
 
-`docs/plans/` holds multi-stage implementation plans (directories named `*-pending` or `*-done`). They are **not** living design docs. Durable decisions belong under `docs/systems/`, `docs/frontend/`, `docs/architecture/`, and related pages. Prefer those over reading old stage files when changing the product.
+`docs/plans/` holds in-flight multi-stage implementation plans. Directory names are `{YYYY-MM-DD}-{id}-{slug}-pending`. They are **not** living design docs. Finished plans are removed from the tree with `git rm` and remain in git history as `*-done`. Durable decisions belong under `docs/systems/`, `docs/frontend/`, `docs/architecture/`, and related pages. Prefer those over reading old stage files when changing the product.
 
 ## Upkeep
 
