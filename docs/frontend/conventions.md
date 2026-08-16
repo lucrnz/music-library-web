@@ -15,7 +15,7 @@
 
 - **No bundler / no Node.** Browser loads Vue and Vue Router as ESM from `/static/vendor/` via import map.
 - **SPA fallback:** FastAPI serves the same shell for client routes so refresh works on `/folders`, `/artists/…`, etc.
-- **Stores** hold player, playlist/queue, settings, and UI chrome. Components should prefer store APIs over ad-hoc globals.
+- **Stores** hold player, playlist/queue, settings, and UI chrome. Components should prefer store APIs over ad-hoc globals. The player store is a facade: `player` record in `playerState.js`, covers/Media Session metadata in `playerSession.js`, volume/expanded keys in `playerPrefs.js`. Loaders (`playHtml` / `playExclusive` / `playIndex`) stay in `player.js`, which re-exports `player` only.
 - **Library UI** lives under `components/library/`; player under `components/player/`; settings modal under `components/settings/`.
 - **Row action menus** live under `components/menu/` (`ActionCard`, `AnchoredMenu`, thin `ActionMenu` picker). Callers own open/anchor state and pass items with `run()`. Do not add `stores/actionMenu.js`. Do not add an `actions` mode to `dialog.js`. A second surface mounts its own picker; do not invent a second overlay system.
 - **Downloads** (`static/js/downloads/`) own client-side offline catalog (OPFS + IndexedDB). Keep offline concerns out of server index code. Design, storage split, queue policy, and import-surface rules: `docs/systems/downloads.md`.
