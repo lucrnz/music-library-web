@@ -1,0 +1,312 @@
+/**
+ * HTTP helpers + named track/library fetchers.
+ * Track-bearing responses are normalized here — leaves do not call bare
+ * apiGet for track lists.
+ */
+
+import { diagRequestHeaders } from "@/diag/log";
+import { fromApiAlbum, mapAlbums, type Album } from "@/models/album";
+import { fromApiLyrics, type Lyrics } from "@/models/lyrics";
+import { fromApiTrack, mapTracks, type Track } from "@/models/track";
+
+/** Today's GET /api/artists item (snake_case). */
+export interface ArtistListItem {
+  id: string;
+  name: string;
+  sort_name?: string | null;
+  album_count: number;
+  track_count: number;
+  has_image?: boolean;
+}
+
+/** Today's GET /api/browse directory row. */
+export interface BrowseDir {
+  name: string;
+  path: string;
+}
+
+/** Today's GET /api/browse file row (id is joined after the walk). */
+export interface BrowseFile {
+  name: string;
+  path: string;
+  id?: string | null;
+}
+
+export interface BrowseResponse {
+  path: string;
+  dirs: BrowseDir[];
+  files: BrowseFile[];
+}
+
+export interface CollectResponse {
+  path: string;
+  files: Array<{ path: string; id?: string | null }>;
+}
+
+export interface ItemsResponse<T> {
+  items?: T[];
+  results?: T[];
+  artists?: T[];
+  albums?: unknown[];
+  tracks?: unknown[];
+}
+
+function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers = { ...diagRequestHeaders(), ...(init.headers || {}) };
+  return fetch(url, { ...init, headers });
+}
+
+export async function apiGet<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const res = await apiFetch(url, init);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(detail || res.statusText);
+  }
+  return (await res.json()) as T;
+}
+
+export async function apiPost<T>(url: string, body?: unknown): Promise<T> {
+  const res = await apiFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(detail || res.statusText);
+  }
+  return (await res.json()) as T;
+}
+
+export async function apiPut<T>(url: string, body?: unknown): Promise<T> {
+  const res = await apiFetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(detail || res.statusText);
+  }
+  return (await res.json()) as T;
+}
+
+export async function apiPatch<T>(url: string, body?: unknown): Promise<T> {
+  const res = await apiFetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(detail || res.statusText);
+  }
+  return (await res.json()) as T;
+}
+
+export async function apiDelete<T = Record<string, never>>(url: string): Promise<T> {
+  const res = await apiFetch(url, { method: "DELETE" });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(detail || res.statusText);
+  }
+  return (await res.json().catch(() => ({}))) as T;
+}
+
+/**
+ * Cover URL for a Track (or album-only ref).
+ * Query params stay snake_case for the HTTP API.
+ */
+export function coverUrl(
+  ref: { albumId?: string | null; id?: string | null } | null | undefined,
+  size: "full" | "thumb",
+  bust = true,
+): string {
+  if (!ref || typeof ref !== "object") {
+    return "/static/img/placeholder.svg";
+  }
+  const albumId = ref.albumId || null;
+  const trackId = ref.id || null;
+  let base: string;
+  if (albumId) {
+    base = `/api/cover?album_id=${encodeURIComponent(albumId)}&size=${size}`;
+  } else if (trackId) {
+    base = `/api/cover?track_id=${encodeURIComponent(trackId)}&size=${size}`;
+  } else {
+    return "/static/img/placeholder.svg";
+  }
+  return bust ? `${base}&t=${Date.now()}` : base;
+}
+
+/**
+ * Artist profile image URL by artist id.
+ */
+export function artistImageUrl(
+  artistOrId: string | { id?: string } | null | undefined,
+  size: "full" | "thumb" = "thumb",
+  bust = false,
+): string {
+  const id =
+    typeof artistOrId === "string"
+      ? artistOrId
+      : artistOrId && typeof artistOrId === "object"
+        ? artistOrId.id
+        : null;
+  if (!id) return "/static/img/placeholder.svg";
+  const base = `/api/artist-image?artist_id=${encodeURIComponent(id)}&size=${size}`;
+  return bust ? `${base}&t=${Date.now()}` : base;
+}
+
+/** Stream URL — track id required. */
+export function streamUrl(
+  track: { id?: string } | null | undefined,
+  codec: string,
+): string | null {
+  if (!track?.id) return null;
+  return `/api/stream?id=${encodeURIComponent(track.id)}&codec=${encodeURIComponent(codec)}`;
+}
+
+/** GET /api/tracks/{id} → Track */
+export async function fetchTrack(id: string): Promise<Track> {
+  const raw = await apiGet<unknown>(`/api/tracks/${encodeURIComponent(id)}`);
+  return fromApiTrack(raw);
+}
+
+/** GET /api/tracks/{id}/lyrics — normalized camelCase Lyrics. */
+export async function fetchLyrics(trackId: string): Promise<Lyrics> {
+  const raw = await apiGet<unknown>(
+    `/api/tracks/${encodeURIComponent(trackId)}/lyrics`,
+  );
+  return fromApiLyrics(raw);
+}
+
+/** POST /api/tracks/meta → Track[] */
+export async function fetchTracksMeta(ids: string[]): Promise<Track[]> {
+  if (!ids?.length) return [];
+  const data = await apiPost<ItemsResponse<unknown>>("/api/tracks/meta", { ids });
+  return mapTracks(data.results || []);
+}
+
+/** GET /api/albums/{id}/tracks → Track[] */
+export async function fetchAlbumTracks(albumId: string): Promise<Track[]> {
+  const data = await apiGet<ItemsResponse<unknown>>(
+    `/api/albums/${encodeURIComponent(albumId)}/tracks`,
+  );
+  return mapTracks(data.items || []);
+}
+
+/** GET /api/playlists/{id}/tracks → Track[] */
+export async function fetchPlaylistTracks(playlistId: string): Promise<Track[]> {
+  const data = await apiGet<ItemsResponse<unknown>>(
+    `/api/playlists/${encodeURIComponent(playlistId)}/tracks`,
+  );
+  return mapTracks(data.items || []);
+}
+
+export interface SearchResult {
+  artists: ArtistListItem[];
+  albums: Album[];
+  tracks: Track[];
+}
+
+/** GET /api/search — maps tracks and albums; artists stay server shape. */
+export async function fetchSearch(q: string, limit = 50): Promise<SearchResult> {
+  const data = await apiGet<ItemsResponse<ArtistListItem>>(
+    `/api/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+  );
+  return {
+    artists: data.artists || [],
+    albums: mapAlbums(data.albums || []),
+    tracks: mapTracks(data.tracks || []),
+  };
+}
+
+/**
+ * Collect file ids under path, then resolve full Track[] via meta.
+ */
+export async function collectTracks(path: string): Promise<Track[]> {
+  const data = await apiGet<CollectResponse>(
+    `/api/collect?path=${encodeURIComponent(path || "")}`,
+  );
+  const ids = (data.files || []).map((f) => f.id).filter((id): id is string => !!id);
+  return fetchTracksMeta(ids);
+}
+
+/** GET /api/artists/{id}/albums → album list (not tracks). */
+export async function fetchArtistAlbums(artistId: string): Promise<Album[]> {
+  const data = await apiGet<ItemsResponse<unknown>>(
+    `/api/artists/${encodeURIComponent(artistId)}/albums`,
+  );
+  return mapAlbums(data.items || []);
+}
+
+/** GET /api/albums — album list (not tracks). */
+export async function fetchAlbums(
+  query = "limit=500&sort=title",
+): Promise<Album[]> {
+  const data = await apiGet<ItemsResponse<unknown>>(`/api/albums?${query}`);
+  return mapAlbums(data.items || []);
+}
+
+/** GET /api/artists/{id} */
+export async function fetchArtist(artistId: string): Promise<ArtistListItem> {
+  return apiGet<ArtistListItem>(`/api/artists/${encodeURIComponent(artistId)}`);
+}
+
+/** GET /api/albums/{id} */
+export async function fetchAlbum(albumId: string): Promise<Album> {
+  return fromApiAlbum(
+    await apiGet<unknown>(`/api/albums/${encodeURIComponent(albumId)}`),
+  );
+}
+
+export function clearCache(...scopes: string[]): void {
+  const only = scopes.filter((s) => s === "streams");
+  if (!only.length) return;
+  const q = only.map((s) => `scope=${encodeURIComponent(s)}`).join("&");
+  void apiFetch(`/api/cache/clear?${q}`, { method: "POST" }).catch(() => {});
+}
+
+/** Keys already prepared: "id|codec" */
+export const preparedKeys = new Set<string>();
+
+/**
+ * Prewarm by track ids (or track objects with .id).
+ * urgent: near-end / play-priority prepare. Always POSTs (even if already
+ * in preparedKeys) so a pending prewarm job can be promoted server-side.
+ */
+export function requestPrepare(
+  tracksOrIds: Array<string | { id?: string }> | null | undefined,
+  codec: string,
+  { replace = false, urgent = false }: { replace?: boolean; urgent?: boolean } = {},
+): void {
+  const ids: string[] = [];
+  for (const item of tracksOrIds || []) {
+    if (typeof item === "string") ids.push(item);
+    else if (item?.id) ids.push(item.id);
+  }
+  let use: string[];
+  if (urgent) {
+    use = ids;
+  } else {
+    const fresh = ids.filter((id) => !preparedKeys.has(`${id}|${codec}`));
+    if (!fresh.length && !replace) return;
+    use = replace ? ids : fresh;
+  }
+  if (!use.length) return;
+  use.forEach((id) => preparedKeys.add(`${id}|${codec}`));
+  void apiFetch("/api/transcode/prepare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: use, codec, replace, urgent: !!urgent }),
+  }).catch(() => {});
+}
+
+export { fromApiAlbum, mapAlbums } from "@/models/album";
+export {
+  fromApiTrack,
+  fromCatalogRecord,
+  mapTracks,
+  isTrack,
+  coerceTrack,
+} from "@/models/track";
