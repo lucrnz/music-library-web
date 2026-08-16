@@ -6,7 +6,6 @@ import asyncio
 import logging
 import socket
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +15,7 @@ from musicweb.cache import CACHE_STREAMS, ProcessCache
 from musicweb.config import Settings, load_settings
 from musicweb.jobs import LibraryJobRunner
 from musicweb.library import PathEscapeError
+from musicweb.pwa_shell import require_frontend_dist
 from musicweb.routes import api, pages, pwa
 from musicweb.runtime.bootstrap import bootstrap_services
 from musicweb.transcode import Transcoder, check_dependencies
@@ -24,11 +24,8 @@ from musicweb.transcode.idle import (
     StreamCacheIdleMiddleware,
     idle_sweep_loop,
 )
-from musicweb.vendor_deps import ensure_vendor_assets
 
 logger = logging.getLogger(__name__)
-
-PACKAGE_DIR = Path(__file__).resolve().parent
 
 
 def _guess_lan_ip() -> str | None:
@@ -53,8 +50,6 @@ async def lifespan(app: FastAPI):
     settings.validate_library()
     settings.ensure_data_dir()
     report = check_dependencies()
-    # Fail hard before serving if Vue/etc. cannot be fetched or cached.
-    vendor_lines = ensure_vendor_assets()
     process_cache.start()
     transcoder.start(process_cache.path(CACHE_STREAMS))
     sweep_task = asyncio.create_task(
@@ -84,9 +79,7 @@ async def lifespan(app: FastAPI):
     print("  Tools   :")
     for name, ver in report.tools.items():
         print(f"    - {name}: {ver[:72]}")
-    print("  Frontend:")
-    for line in vendor_lines:
-        print(f"    - {line}")
+    print("  Frontend: dist")
     print("=" * 60)
     print("  Press Ctrl+C for clean shutdown (stream cache deleted)")
     print("=" * 60)
@@ -147,13 +140,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     for exc_type, status_code in _EXCEPTION_STATUS:
         app.add_exception_handler(exc_type, _make_exception_handler(status_code))
 
-    # API + static + PWA before SPA catch-all (pages.router includes /{path}).
+    # Fail before StaticFiles(check_dir=True) raises a generic missing-dir error.
+    dist = require_frontend_dist()
+
+    # API + hashed assets + public static + PWA before SPA catch-all.
     app.include_router(api.router)
-    app.mount(
-        "/static",
-        StaticFiles(directory=str(PACKAGE_DIR / "static")),
-        name="static",
-    )
+    assets_dir = dist / "assets"
+    static_dir = dist / "static"
+    if assets_dir.is_dir():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(assets_dir), html=False),
+            name="assets",
+        )
+    if static_dir.is_dir():
+        app.mount(
+            "/static",
+            StaticFiles(directory=str(static_dir), html=False),
+            name="static",
+        )
     app.include_router(pwa.router)
     app.include_router(pages.router)
     app.add_middleware(

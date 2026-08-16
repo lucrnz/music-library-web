@@ -8,6 +8,7 @@
 const SHELL_CACHE_VERSION = __SHELL_CACHE_VERSION__;
 const SHELL_CACHE = `musicweb-${SHELL_CACHE_VERSION}`;
 const PRECACHE_URLS = __PRECACHE_URLS__;
+const PRECACHE = new Set(PRECACHE_URLS);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -149,7 +150,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/static/")) {
+  if (PRECACHE.has(url.pathname)) {
     event.respondWith(cacheFirstStatic(request));
   }
 });

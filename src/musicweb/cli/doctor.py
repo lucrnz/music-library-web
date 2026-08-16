@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 from musicweb.config import load_settings
+from musicweb.pwa_shell import frontend_dist_dir
 from musicweb.runtime.bootstrap import bootstrap_services
 from musicweb.runtime.lock import is_data_dir_locked
 from musicweb.transcode import check_dependencies
@@ -58,6 +59,12 @@ def doctor() -> None:
     except Exception as exc:
         print(f"FAIL database: {exc}")
         ok = False
+
+    if not (frontend_dist_dir() / "index.html").is_file():
+        print("FAIL frontend dist missing; run: pnpm --dir frontend build")
+        ok = False
+    else:
+        print("OK   frontend dist")
 
     if not ok:
         raise SystemExit(1)

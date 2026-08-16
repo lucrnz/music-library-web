@@ -10,18 +10,16 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = PACKAGE_DIR / "static"
-SW_TEMPLATE_PATH = STATIC_DIR / "sw.template.js"
+SW_TEMPLATE_PATH = PACKAGE_DIR / "sw.template.js"
+
+FRONTEND_DIST_MISSING = "frontend dist missing; run: pnpm --dir frontend build"
 
 # Chrome colors shared by HTML theme-color meta and web app manifest.
-# Aligned with static/css/app.css (--bg).
+# Aligned with frontend/css/app.css (--bg).
 THEME_COLOR = "#121212"
 BACKGROUND_COLOR = "#121212"
 
-# Subtrees under static/ that form the offline app shell (not library media).
-_SHELL_SUBDIRS = ("css", "js", "img", "vendor")
-
-# Skip non-runtime artifacts if present under static/.
+# Skip non-runtime artifacts if present under dist/.
 _SKIP_NAME_PARTS = (
     ".template.",
     ".map",
@@ -29,44 +27,63 @@ _SKIP_NAME_PARTS = (
 )
 
 
-def list_shell_static_urls(static_dir: Path | None = None) -> list[str]:
-    """Return sorted `/static/...` paths for shell assets on disk."""
-    root = static_dir or STATIC_DIR
+def frontend_dist_dir() -> Path:
+    """Checkout-root `frontend/dist` (PACKAGE_DIR is src/musicweb)."""
+    return PACKAGE_DIR.parent.parent / "frontend" / "dist"
+
+
+def require_frontend_dist() -> Path:
+    """Return the dist dir, or raise if `index.html` is missing."""
+    dist = frontend_dist_dir()
+    if not (dist / "index.html").is_file():
+        raise RuntimeError(FRONTEND_DIST_MISSING)
+    return dist
+
+
+def _should_skip_dist_file(path: Path, root: Path) -> bool:
+    rel = path.relative_to(root)
+    if any(part.startswith(".") for part in rel.parts):
+        return True
+    name = path.name
+    if name == "index.html":
+        return True
+    if any(part in name for part in _SKIP_NAME_PARTS):
+        return True
+    if name.endswith("~"):
+        return True
+    return False
+
+
+def list_dist_urls(dist_dir: Path | None = None) -> list[str]:
+    """Return sorted public URLs for runtime files under frontend/dist."""
+    root = dist_dir or frontend_dist_dir()
     urls: list[str] = []
-    for sub in _SHELL_SUBDIRS:
-        base = root / sub
-        if not base.is_dir():
+    if not root.is_dir():
+        return urls
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
             continue
-        for path in sorted(base.rglob("*")):
-            if not path.is_file():
-                continue
-            name = path.name
-            if any(part in name for part in _SKIP_NAME_PARTS):
-                continue
-            if name.endswith("~") or name.startswith("."):
-                continue
-            rel = path.relative_to(root).as_posix()
-            urls.append(f"/static/{rel}")
+        if _should_skip_dist_file(path, root):
+            continue
+        rel = path.relative_to(root).as_posix()
+        urls.append(f"/{rel}")
     return urls
 
 
-def shell_precache_urls(static_dir: Path | None = None) -> list[str]:
-    """Full precache list: shell document + static inventory."""
-    return ["/"] + list_shell_static_urls(static_dir)
+def shell_precache_urls(dist_dir: Path | None = None) -> list[str]:
+    """Full precache list: shell document + dist inventory."""
+    return ["/"] + list_dist_urls(dist_dir)
 
 
-def _inventory_fingerprint(urls: list[str], static_dir: Path, template: str) -> str:
+def _inventory_fingerprint(urls: list[str], dist_dir: Path, template: str) -> str:
     """Stable short hash so SW cache name changes when shell assets change."""
     h = hashlib.sha256()
     h.update(template.encode("utf-8"))
-    root = static_dir
     for url in urls:
         h.update(url.encode("utf-8"))
         if url == "/":
             continue
-        if not url.startswith("/static/"):
-            continue
-        path = root / url[len("/static/") :]
+        path = dist_dir / url.lstrip("/")
         try:
             st = path.stat()
             h.update(f"{st.st_mtime_ns}:{st.st_size}".encode("ascii"))
@@ -77,11 +94,11 @@ def _inventory_fingerprint(urls: list[str], static_dir: Path, template: str) -> 
 
 def render_service_worker(
     *,
-    static_dir: Path | None = None,
+    dist_dir: Path | None = None,
     template_path: Path | None = None,
 ) -> str:
     """Render the service worker script with injected precache list and version."""
-    root = static_dir or STATIC_DIR
+    root = dist_dir or frontend_dist_dir()
     tpl_path = template_path or SW_TEMPLATE_PATH
     template = tpl_path.read_text(encoding="utf-8")
     urls = shell_precache_urls(root)
