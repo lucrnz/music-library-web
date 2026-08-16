@@ -2,16 +2,16 @@
  * Playback control + Media Session. Transport goes through the active sink
  * (htmlAudio or exclusive companion) — HTMLAudioElement is not exported.
  */
-import { reactive } from "vue";
-import { coverUrl, requestPrepare, streamUrl } from "../api.js";
+import { requestPrepare, streamUrl } from "../api.js";
 import {
   canReachServer,
+  canUseRemoteMedia,
   getConnectivityState,
-  hasConfirmedReachability,
 } from "../connectivity.js";
 import { beginPlay, emit } from "../diag/log.js";
+import { isLocallyPlayableDownload } from "../downloads/catalog.js";
 import { markDownloadBroken } from "../downloads/index.js";
-import { resolveCoverUrl, resolvePlaySource } from "../downloads/resolve.js";
+import { resolvePlaySource } from "../downloads/resolve.js";
 import { downloads } from "../downloads/state.js";
 import { createCompanionSink } from "../playback/sinks/companionSink.js";
 import { createHtmlAudioSink } from "../playback/sinks/htmlAudioSink.js";
@@ -20,17 +20,27 @@ import { supportsCodecKind } from "../codecSupport.js";
 import { SOURCE_TAG, deliveryCodec } from "../lossyKind.js";
 import { PLAY_BLOCK_MESSAGES } from "../playBlock.js";
 import { showToast } from "./ui.js";
-import { PLACEHOLDER_COVER } from "../util.js";
 import {
   consumeMissingTechToast,
   getExclusiveProfileTag,
   isExclusiveEnabled,
 } from "./exclusiveAudio.js";
 import { pl, commit, trackNeedsStreamPrepare } from "./playlist.js";
+import { readVolume, writeVolume } from "./playerPrefs.js";
+import {
+  invalidateCoverCache,
+  updateMediaSession,
+} from "./playerSession.js";
+import {
+  clearPlaySourceState,
+  player,
+  setPlayNotice,
+  setPlaySourceState,
+} from "./playerState.js";
 import { getActiveStreamCodec, openSettings, settings } from "./settings.js";
 
-const VOLUME_STORAGE_KEY = "musicweb.volume";
-const EXPANDED_STORAGE_KEY = "musicweb.nowPlayingExpanded.v1";
+export { player };
+
 /** Seconds before end to urgent-prepare the next queue track (once per load). */
 const PREPARE_LEAD_SECONDS = 15;
 
@@ -43,12 +53,6 @@ let activeSink = htmlSink;
 /** @type {string | null} blob: URL we must revoke */
 let localPlayUrl = null;
 
-/** Bumps when current track / cover resolve context changes (stale-await guard). */
-let coverResolveGen = 0;
-
-/** Track id we last resolved covers for (skip redundant resolve on play/pause). */
-let lastCoverTrackId = null;
-
 /**
  * Near-end prepare already fired (or permanently no next) for this playIndex
  * load. Not reset on seek/scrub. Offline does not latch — reconnect can still
@@ -59,57 +63,8 @@ let nearEndPrepareSent = false;
 /** Current playIndex / stopPlayback load generation (stale-await guard). */
 let playGen = 0;
 
-/**
- * @typedef {import('../playBlock.js').PlaySourceState} PlaySourceState
- * @typedef {import('../playBlock.js').PlayBlockReason} PlayBlockReason
- */
-
-export const player = reactive({
-  seeking: false,
-  /** Full now-playing open (mobile sheet / desktop right panel) */
-  expanded: false,
-  sheetOffset: 0,
-  draggingSheet: false,
-  volume: 1,
-  currentTime: 0,
-  duration: 0,
-  paused: true,
-  /**
-   * Delivery source for the current load (not library path).
-   * @type {PlaySourceState}
-   */
-  playSource: "none",
-  /** Delivery profile tag actually used or intended (null when none). */
-  playProfileId: null,
-  /**
-   * Machine reason when playSource is unavailable.
-   * @type {PlayBlockReason | null}
-   */
-  playBlockReason: null,
-  /** User-visible play block message (null when clear) */
-  playNotice: null,
-  /** Resolved cover URLs for PlayerBar (local OPFS or remote / placeholder). */
-  coverThumb: PLACEHOLDER_COVER,
-  coverFull: PLACEHOLDER_COVER,
-  /** Expanded now-playing: lyrics overlay open */
-  lyricsOpen: false,
-});
-
-/**
- * Atomic writer for the play-source triple (never leave a field stale).
- * @param {PlaySourceState} playSource
- * @param {string | null} playProfileId
- * @param {PlayBlockReason | null} playBlockReason
- */
-function setPlaySourceState(playSource, playProfileId, playBlockReason) {
-  player.playSource = playSource;
-  player.playProfileId = playProfileId || null;
-  player.playBlockReason = playBlockReason || null;
-}
-
-function clearPlaySourceState() {
-  setPlaySourceState("none", null, null);
-}
+/** @typedef {import('../playBlock.js').PlaySourceState} PlaySourceState */
+/** @typedef {import('../playBlock.js').PlayBlockReason} PlayBlockReason */
 
 function failCtx(extra) {
   return {
@@ -205,15 +160,6 @@ function revokeLocalPlayUrl() {
   }
 }
 
-function setPlayNotice(msg) {
-  player.playNotice = msg || null;
-}
-
-function clearCovers() {
-  player.coverThumb = PLACEHOLDER_COVER;
-  player.coverFull = PLACEHOLDER_COVER;
-}
-
 /**
  * @param {'htmlAudio' | 'companion'} kind
  */
@@ -227,59 +173,6 @@ function selectSink(kind) {
   }
   activeSink = next;
   activeSink.setVolume(player.volume);
-}
-
-/**
- * Resolve local/remote covers into player state + Media Session.
- */
-async function updateMediaSession() {
-  const t = pl.current;
-  if (!t) {
-    coverResolveGen += 1;
-    lastCoverTrackId = null;
-    clearCovers();
-    if (msSupported) navigator.mediaSession.metadata = null;
-    return;
-  }
-
-  const trackKey = t.id || t.path || null;
-  if (trackKey != null && trackKey === lastCoverTrackId) {
-    return;
-  }
-
-  const gen = ++coverResolveGen;
-  clearCovers();
-
-  const albumId = t.albumId || null;
-  if (gen !== coverResolveGen) return;
-
-  const allowRemote = canReachServer() && hasConfirmedReachability();
-  const opts = { offline: !allowRemote };
-  const remoteThumb = allowRemote ? coverUrl(t, "thumb", false) : null;
-  const remoteFull = allowRemote ? coverUrl(t, "full", false) : null;
-
-  const [thumb, full] = await Promise.all([
-    resolveCoverUrl(albumId, "thumb", remoteThumb, downloads.enabled, opts),
-    resolveCoverUrl(albumId, "full", remoteFull, downloads.enabled, opts),
-  ]);
-
-  if (gen !== coverResolveGen) return;
-  if (pl.current?.id !== t.id) return;
-
-  lastCoverTrackId = trackKey;
-  player.coverThumb = thumb || PLACEHOLDER_COVER;
-  player.coverFull = full || PLACEHOLDER_COVER;
-
-  if (!msSupported) return;
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: t.title,
-    artist: t.artist,
-    album: t.album,
-    artwork: [
-      { src: player.coverThumb, sizes: "200x200", type: "image/webp" },
-      { src: player.coverFull, sizes: "1000x1000", type: "image/webp" },
-    ],
-  });
 }
 
 function updatePositionState() {
@@ -438,9 +331,7 @@ export function stopPlayback() {
   }
   revokeLocalPlayUrl();
   setPlayNotice(null);
-  lastCoverTrackId = null;
   nearEndPrepareSent = false;
-  clearCovers();
   pl.index = -1;
   player.currentTime = 0;
   player.duration = 0;
@@ -630,7 +521,7 @@ async function playHtml(gen, track) {
     activeStreamCodec: activeCodec,
     playbackPolicy: settings.playbackPolicy,
     catalog: settings.options,
-    offline: !(canReachServer() && hasConfirmedReachability()),
+    offline: !canUseRemoteMedia(),
   });
   if (!still(gen)) return;
 
@@ -654,7 +545,7 @@ async function playHtml(gen, track) {
     if (track?.id) markDownloadBroken(track.id).catch(() => {});
     revokeLocalPlayUrl();
 
-    if (!canReachServer()) {
+    if (!canUseRemoteMedia()) {
       failPlayback(
         source.codec || null,
         "broken",
@@ -712,7 +603,7 @@ export async function playIndex(index) {
   );
   commit();
   nearEndPrepareSent = false;
-  lastCoverTrackId = null;
+  invalidateCoverCache();
   updateMediaSession();
   revokeLocalPlayUrl();
   setPlayNotice(null);
@@ -723,27 +614,43 @@ export async function playIndex(index) {
   return playHtml(gen, track);
 }
 
+function shouldSkipUnplayableQueue() {
+  return downloads.enabled && !canUseRemoteMedia();
+}
+
+function stopAtQueueEnd() {
+  try {
+    activeSink.pause();
+  } catch {
+    /* ignore */
+  }
+  syncTransportFlags();
+}
+
 export function playNext() {
-  const idx = pl.nextIndex();
+  const idx = shouldSkipUnplayableQueue()
+    ? pl.advanceToPlayable("next", (t) => isLocallyPlayableDownload(t?.id))
+    : pl.nextIndex();
   if (idx < 0) {
-    try {
-      activeSink.pause();
-    } catch {
-      /* ignore */
-    }
-    syncTransportFlags();
+    stopAtQueueEnd();
     return;
   }
   playIndex(idx);
 }
 
 export function playPrev() {
-  const result = pl.prevIndex(activeSink.currentTime);
-  if (result && typeof result === "object" && result.restart) {
+  if (activeSink.currentTime > 3) {
     activeSink.seek(0);
     return;
   }
-  if (typeof result === "number" && result >= 0) playIndex(result);
+  const idx = shouldSkipUnplayableQueue()
+    ? pl.advanceToPlayable("prev", (t) => isLocallyPlayableDownload(t?.id))
+    : pl.prevIndex(0);
+  if (typeof idx !== "number" || idx < 0) {
+    stopAtQueueEnd();
+    return;
+  }
+  playIndex(idx);
 }
 
 function ensureAudible() {
@@ -795,63 +702,13 @@ export function setVolume(v) {
   const n = Math.min(1, Math.max(0, Number(v)));
   player.volume = n;
   activeSink.setVolume(n);
-  try {
-    localStorage.setItem(VOLUME_STORAGE_KEY, String(n));
-  } catch {
-    /* ignore */
-  }
+  writeVolume(n);
 }
 
 export function applyVolume() {
-  try {
-    const raw = localStorage.getItem(VOLUME_STORAGE_KEY);
-    if (raw != null) {
-      const v = Number(raw);
-      if (Number.isFinite(v) && v >= 0 && v <= 1) player.volume = v;
-    }
-  } catch {
-    /* ignore */
-  }
+  const stored = readVolume();
+  if (stored != null) player.volume = stored;
   activeSink.setVolume(player.volume);
-}
-
-/** Open/close full now-playing and persist the preference. */
-export function setExpanded(open) {
-  const next = !!open;
-  player.expanded = next;
-  if (!next) {
-    player.sheetOffset = 0;
-    player.draggingSheet = false;
-    player.lyricsOpen = false;
-  }
-  try {
-    localStorage.setItem(EXPANDED_STORAGE_KEY, next ? "1" : "0");
-  } catch {
-    /* ignore */
-  }
-}
-
-/**
- * Restore now-playing expanded flag from localStorage.
- * Call after loadPlaylist(); stays collapsed when the queue is empty.
- */
-export function applyExpanded() {
-  let want = false;
-  try {
-    want = localStorage.getItem(EXPANDED_STORAGE_KEY) === "1";
-  } catch {
-    /* ignore */
-  }
-  if (want && pl.length > 0) {
-    player.expanded = true;
-  } else {
-    player.expanded = false;
-  }
-}
-
-/** Resolve covers for the current playlist track (e.g. after session restore). */
-export function refreshPlayerCovers() {
-  return updateMediaSession();
 }
 
 export function initAudioListeners() {

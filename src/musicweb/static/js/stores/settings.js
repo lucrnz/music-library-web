@@ -320,7 +320,10 @@ export async function loadCodecs() {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 4000);
   try {
-    const data = await apiGet("/api/codecs", { signal: ctrl.signal });
+    const data = await apiGet("/api/codecs", {
+      signal: ctrl.signal,
+      cache: "no-store",
+    });
     reportSuccess();
     if (Array.isArray(data.codecs) && data.codecs.length) {
       writeCachedCatalog({

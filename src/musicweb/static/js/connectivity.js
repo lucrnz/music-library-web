@@ -39,20 +39,29 @@ function browserOffline() {
 }
 
 /**
- * @param {ConnectivityState} next
+ * Snapshot changed (state and/or confirmed). from/to may be equal.
+ * @param {ConnectivityState} prevState
  */
-function setState(next) {
-  if (state === next) return;
-  const prev = state;
-  state = next;
-  emit("connectivity.state", { from: prev, to: state }, "info");
+function notify(prevState) {
+  emit("connectivity.state", { from: prevState, to: state }, "info");
   for (const fn of listeners) {
     try {
-      fn(state, prev);
+      fn(state, prevState);
     } catch (err) {
       console.error(err);
     }
   }
+}
+
+/**
+ * @param {ConnectivityState} next
+ * @returns {boolean} whether the enum changed
+ */
+function setState(next) {
+  if (state === next) return false;
+  const prev = state;
+  state = next;
+  notify(prev);
   if (prev !== "online" && next === "online") {
     for (const fn of recoveredListeners) {
       try {
@@ -63,6 +72,7 @@ function setState(next) {
     }
   }
   syncHealthLoop();
+  return true;
 }
 
 export function getConnectivityState() {
@@ -79,6 +89,11 @@ export function canReachServer() {
 
 export function hasConfirmedReachability() {
   return reachabilityConfirmed;
+}
+
+/** Play/queue-offline gate: reachable and this page has confirmed the origin. */
+export function canUseRemoteMedia() {
+  return canReachServer() && reachabilityConfirmed;
 }
 
 /**
@@ -224,8 +239,13 @@ export function reportSuccess() {
   }
   backoffMs = BACKOFF_START_MS;
   probeRequested = false;
+  const wasConfirmed = reachabilityConfirmed;
   reachabilityConfirmed = true;
-  setState("online");
+  const prev = state;
+  const enumChanged = setState("online");
+  if (!wasConfirmed && !enumChanged) {
+    notify(prev);
+  }
 }
 
 /**

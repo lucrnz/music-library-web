@@ -61,6 +61,92 @@ function computeNextIndex(state) {
   return -1;
 }
 
+/**
+ * @param {{
+ *   tracks: Track[],
+ *   index: number,
+ *   shuffleOrder: number[],
+ *   shufflePos: number,
+ * }} cursor
+ */
+function rebuildShuffleOn(cursor) {
+  const n = cursor.tracks.length;
+  cursor.shuffleOrder = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cursor.shuffleOrder[i], cursor.shuffleOrder[j]] = [
+      cursor.shuffleOrder[j],
+      cursor.shuffleOrder[i],
+    ];
+  }
+  cursor.shufflePos =
+    cursor.index >= 0 ? cursor.shuffleOrder.indexOf(cursor.index) : -1;
+}
+
+/**
+ * @param {{
+ *   tracks: Track[],
+ *   index: number,
+ *   shuffle: boolean,
+ *   shuffleOrder: number[],
+ *   shufflePos: number,
+ *   repeat: 'off'|'one'|'all',
+ * }} cursor
+ * @returns {number}
+ */
+function stepNext(cursor) {
+  if (!cursor.tracks.length) return -1;
+  if (cursor.repeat === "one") return cursor.index;
+  if (cursor.shuffle) {
+    if (!cursor.shuffleOrder.length) {
+      rebuildShuffleOn(cursor);
+      cursor.shufflePos = 0;
+      return cursor.shuffleOrder[0];
+    }
+    const peeked = computeNextIndex(cursor);
+    if (peeked < 0) {
+      if (cursor.repeat === "all") {
+        rebuildShuffleOn(cursor);
+        cursor.shufflePos = 0;
+        return cursor.shuffleOrder[0];
+      }
+      return -1;
+    }
+    cursor.shufflePos += 1;
+    return peeked;
+  }
+  return computeNextIndex(cursor);
+}
+
+/**
+ * @param {{
+ *   tracks: Track[],
+ *   index: number,
+ *   shuffle: boolean,
+ *   shuffleOrder: number[],
+ *   shufflePos: number,
+ *   repeat: 'off'|'one'|'all',
+ * }} cursor
+ * @returns {number}
+ */
+function stepPrev(cursor) {
+  if (!cursor.tracks.length) return -1;
+  if (cursor.shuffle) {
+    if (cursor.shufflePos > 0) {
+      cursor.shufflePos -= 1;
+      return cursor.shuffleOrder[cursor.shufflePos];
+    }
+    if (cursor.repeat === "all" && cursor.shuffleOrder.length > 1) {
+      cursor.shufflePos = cursor.shuffleOrder.length - 1;
+      return cursor.shuffleOrder[cursor.shufflePos];
+    }
+    return cursor.index;
+  }
+  if (cursor.index > 0) return cursor.index - 1;
+  if (cursor.repeat === "all") return cursor.tracks.length - 1;
+  return cursor.index;
+}
+
 export const pl = reactive({
   /** @type {Track[]} */
   tracks: [],
@@ -122,17 +208,7 @@ export const pl = reactive({
    * order from position 0.
    */
   rebuildShuffle() {
-    const n = this.tracks.length;
-    this.shuffleOrder = Array.from({ length: n }, (_, i) => i);
-    for (let i = n - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [this.shuffleOrder[i], this.shuffleOrder[j]] = [
-        this.shuffleOrder[j],
-        this.shuffleOrder[i],
-      ];
-    }
-    this.shufflePos =
-      this.index >= 0 ? this.shuffleOrder.indexOf(this.index) : -1;
+    rebuildShuffleOn(this);
   },
 
   /**
@@ -141,29 +217,7 @@ export const pl = reactive({
    * @returns {number}
    */
   nextIndex() {
-    if (!this.tracks.length) return -1;
-    if (this.repeat === "one") return this.index;
-    if (this.shuffle) {
-      // Empty order: rebuild on advance (peek cannot invent a random order).
-      if (!this.shuffleOrder.length) {
-        this.rebuildShuffle();
-        this.shufflePos = 0;
-        return this.shuffleOrder[0];
-      }
-      const peeked = computeNextIndex(this);
-      if (peeked < 0) {
-        // Past end of shuffle order: reshape only when advancing under repeat-all.
-        if (this.repeat === "all") {
-          this.rebuildShuffle();
-          this.shufflePos = 0;
-          return this.shuffleOrder[0];
-        }
-        return -1;
-      }
-      this.shufflePos += 1;
-      return peeked;
-    }
-    return computeNextIndex(this);
+    return stepNext(this);
   },
 
   /**
@@ -184,20 +238,41 @@ export const pl = reactive({
     if (currentTime > 3) {
       return { restart: true, index: this.index };
     }
-    if (this.shuffle) {
-      if (this.shufflePos > 0) {
-        this.shufflePos -= 1;
-        return this.shuffleOrder[this.shufflePos];
+    return stepPrev(this);
+  },
+
+  /**
+   * Step a cursor copy until isPlayable; commit landing or write nothing.
+   * @param {'next'|'prev'} dir
+   * @param {(track: Track|undefined) => boolean} isPlayable
+   * @returns {number}
+   */
+  advanceToPlayable(dir, isPlayable) {
+    const clone = {
+      tracks: this.tracks,
+      index: this.index,
+      shuffle: this.shuffle,
+      shuffleOrder: this.shuffleOrder.slice(),
+      shufflePos: this.shufflePos,
+      repeat: this.repeat,
+    };
+    const step = dir === "prev" ? stepPrev : stepNext;
+    const seen = new Set();
+    let idx = step(clone);
+    while (idx >= 0 && !isPlayable(clone.tracks[idx])) {
+      if (seen.has(idx)) {
+        idx = -1;
+        break;
       }
-      if (this.repeat === "all" && this.shuffleOrder.length > 1) {
-        this.shufflePos = this.shuffleOrder.length - 1;
-        return this.shuffleOrder[this.shufflePos];
-      }
-      return this.index;
+      seen.add(idx);
+      clone.index = idx;
+      idx = step(clone);
     }
-    if (this.index > 0) return this.index - 1;
-    if (this.repeat === "all") return this.tracks.length - 1;
-    return this.index;
+    if (idx < 0) return -1;
+    this.index = idx;
+    this.shufflePos = clone.shufflePos;
+    this.shuffleOrder = clone.shuffleOrder;
+    return idx;
   },
 });
 

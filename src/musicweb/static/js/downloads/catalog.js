@@ -174,6 +174,12 @@ export function trackDownloadState(trackId) {
   });
 }
 
+/** True when the catalog has a playable local file (ready or other quality). */
+export function isLocallyPlayableDownload(trackId) {
+  const st = trackDownloadState(trackId);
+  return st === "ready" || st === "other";
+}
+
 // ---------------------------------------------------------------------------
 // Local album/artist art
 // ---------------------------------------------------------------------------

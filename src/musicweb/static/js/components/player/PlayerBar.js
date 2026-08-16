@@ -11,12 +11,8 @@ import {
   watch,
 } from "vue";
 import { pl } from "../../stores/playlist.js";
-import {
-  player,
-  playNext,
-  togglePlay,
-  setExpanded,
-} from "../../stores/player.js";
+import { setExpanded } from "../../stores/playerPrefs.js";
+import { player, playNext, togglePlay } from "../../stores/player.js";
 import { settings } from "../../stores/settings.js";
 import { downloads } from "../../downloads/state.js";
 import { kindForTrack } from "../../lossyKind.js";

@@ -1,6 +1,8 @@
 import { computed, defineComponent, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { coverUrl, fetchPlaylistTracks } from "../../api.js";
+import { isLocallyPlayableDownload } from "../../downloads/catalog.js";
+import { connectivity } from "../../stores/connectivity.js";
 import { isDesktopViewport, useDesktopViewport } from "../../layout.js";
 import { formatTime } from "../../util.js";
 import {
@@ -229,6 +231,14 @@ export default defineComponent({
       return coverUrl(track, "thumb", false);
     }
 
+    function rowUnavailable(track) {
+      return (
+        downloads.enabled &&
+        !connectivity.canUseRemote &&
+        !isLocallyPlayableDownload(track?.id)
+      );
+    }
+
     function trackSub(track) {
       return [track.artist, track.album].filter(Boolean).join(" — ");
     }
@@ -284,6 +294,7 @@ export default defineComponent({
       onDownloadQueue,
       trackCover,
       trackSub,
+      rowUnavailable,
       refreshSaved,
       downloads,
     };
@@ -352,6 +363,7 @@ export default defineComponent({
           class="row"
           :class="{
             playing: index === pl.index,
+            unavailable: rowUnavailable(track),
             dragging: draggingFrom === index,
             'drop-target': dropTarget === index && draggingFrom !== index,
           }"

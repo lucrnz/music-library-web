@@ -5,12 +5,9 @@ import { createApp } from "vue";
 import { router } from "./router.js";
 import App from "./components/App.js";
 import { loadPlaylist } from "./stores/playlist.js";
-import {
-  applyExpanded,
-  applyVolume,
-  initAudioListeners,
-  refreshPlayerCovers,
-} from "./stores/player.js";
+import { applyExpanded } from "./stores/playerPrefs.js";
+import { refreshPlayerCovers } from "./stores/playerSession.js";
+import { applyVolume, initAudioListeners } from "./stores/player.js";
 import {
   bindNetworkConstraintEffects,
   loadCodecs,

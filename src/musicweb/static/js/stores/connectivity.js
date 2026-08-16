@@ -5,7 +5,9 @@
 import { reactive } from "vue";
 import {
   bindWindowConnectivity,
+  canUseRemoteMedia,
   getConnectivityState,
+  hasConfirmedReachability,
   onConnectivityChange,
   reportFailure,
   reportSuccess,
@@ -16,12 +18,16 @@ import {
 export const connectivity = reactive({
   /** @type {ConnectivityState} */
   state: /** @type {ConnectivityState} */ (getConnectivityState()),
+  confirmed: false,
+  canUseRemote: false,
 });
 
 let bound = false;
 
 function syncFromPlatform() {
   connectivity.state = getConnectivityState();
+  connectivity.confirmed = hasConfirmedReachability();
+  connectivity.canUseRemote = canUseRemoteMedia();
 }
 
 /**

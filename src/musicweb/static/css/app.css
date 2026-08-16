@@ -463,6 +463,13 @@ main {
   -webkit-touch-callout: none;
 }
 
+#view-playlist .row.unavailable .row-cover,
+#view-playlist .row.unavailable .row-title,
+#view-playlist .row.unavailable .row-sub,
+#view-playlist .row.unavailable .row-dur {
+  opacity: 0.4;
+}
+
 .row-list.editing .row .row-dur,
 .row-list.editing .row .eq {
   display: none;
