@@ -34,7 +34,7 @@ FastAPI (routes → services)
     └── Transcoder (ffmpeg worker)
             │
             ▼
-      Process-temp streams/ (deleted on exit)
+      Process-temp streams/ (deleted on exit and after about an hour idle)
 ```
 
 ## Core docs

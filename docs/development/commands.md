@@ -56,7 +56,7 @@ On start the process:
 6. Starts a non-blocking **quick** library scan.
 7. Prints listen address, LAN URL (when bound to all interfaces), and tool lines.
 
-Press **Ctrl+C** for a clean shutdown. Process-temp stream caches are deleted on exit; the control socket is unlinked.
+Press **Ctrl+C** for a clean shutdown. Process-temp stream caches are deleted on exit and also emptied after about an hour with no HTTP client; the control socket is unlinked.
 
 ## Library CLI
 

@@ -16,7 +16,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (no bundler). Strea
 - Lossless-first library — index packed lossless by default. MP3/AAC are opt-in (`MUSICWEB_INDEX_LOSSY`), always marked, and streamed/downloaded as stored. Do not add other lossy formats or a lossy transcode path without a new product decision.
 - High-fidelity transcoding is a primary goal. Prefer transparent encode settings (libsoxr VHQ, correct dither policy) over “good enough” shortcuts. See product audio guidelines.
 - Stable track identity comes from content fingerprints, not paths. Renames should reattach when the fingerprint matches.
-- Process-temp stream cache is wiped on shutdown; do not treat it as durable storage.
+- Process-temp stream cache is wiped on shutdown and after about an hour with no HTTP client; do not treat it as durable storage.
 - Migrations: add new Alembic revisions under `src/musicweb/db/migrations/versions/`; do not hand-edit applied history. Startup migrates; optional CLI is `alembic upgrade head`.
 - Vendor versions change only in `vendor_deps.py` (version + URL). No npm/webpack/vite.
 

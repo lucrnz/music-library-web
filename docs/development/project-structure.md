@@ -42,7 +42,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `vendor_deps.py` | Pinned frontend vendor registry + download-on-startup |
 | `db/` | Engine, models, FTS helpers, repositories, Alembic migrations |
 | `scan/` | Walk, fingerprint, batch upsert, covers, artist images, lyrics, finalize (phases only) |
-| `transcode/` | Dependency check, profiles, probe, encode worker |
+| `transcode/` | Dependency check, profiles, probe, encode worker, idle stream-cache eviction |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
 | `images/` | WebP render/store helpers |

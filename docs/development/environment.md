@@ -76,7 +76,7 @@ $MUSICWEB_DATA_DIR/
   diag/events-YYYY-MM-DD.jsonl
 ```
 
-Stream encode cache is **not** under the data dir; it lives in a process temp directory and is wiped on shutdown.
+Stream encode cache is **not** under the data dir; it lives in a process temp directory and is wiped on shutdown and after about an hour with no HTTP client.
 
 ## Guardrails
 

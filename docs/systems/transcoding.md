@@ -8,6 +8,7 @@
 - Probe helpers: `src/musicweb/transcode/probe.py`
 - HTTP stream / prepare / cache clear: `src/musicweb/routes/media.py`
 - Reserved `source` passthrough: `src/musicweb/transcode/passthrough.py`
+- Idle eviction (last HTTP + in-flight): `src/musicweb/transcode/idle.py`
 - Process cache lifecycle: `src/musicweb/cache.py`
 
 ## Purpose
@@ -30,7 +31,7 @@ Exact argv fragments and profile tags live in `profiles.py`.
 ## Cache and concurrency
 
 - Completed (and in-flight) encodes live under a **process-temp** `streams/` directory, not the durable data dir.
-- Shutdown always deletes this cache.
+- Shutdown always deletes this cache. After about an hour with no in-flight HTTP and no recent request, the server also runs `Transcoder.clear_cache()` (same path as `POST /api/cache/clear`). Intervals are source constants in `idle.py`. Any HTTP to the library process counts; the control socket and exclusive companion WebSocket do not.
 - Concurrent requests for the same track+profile share one encode.
 - A single worker model applies: interactive play may preempt prewarm; partial files are never served as complete.
 - Seeking uses HTTP Range on completed cache files.
