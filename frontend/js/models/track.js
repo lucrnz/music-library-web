@@ -1,0 +1,239 @@
+/**
+ * Canonical client Track type.
+ *
+ * API responses are snake_case; normalize once at the boundary with
+ * fromApiTrack / mapTracks / fromCatalogRecord. Leaf code uses camelCase only.
+ */
+
+/**
+ * @typedef {object} Track
+ * @property {string} id
+ * @property {string|null} path
+ * @property {string} title
+ * @property {string} artist
+ * @property {string} album
+ * @property {string|null} albumId
+ * @property {string|null} artistId
+ * @property {string} albumArtist
+ * @property {string|null} albumArtistId
+ * @property {number|null} track
+ * @property {number|null} disc
+ * @property {number|null} year
+ * @property {number|null} duration  seconds
+ * @property {number|null} durationMs
+ * @property {boolean} isMissing
+ * @property {number|null} sampleRateHz
+ * @property {number|null} bitDepth
+ * @property {boolean} isLossy
+ * @property {string|null} sourceCodec
+ * @property {number|null} bitrateKbps
+ */
+
+/**
+ * IDB catalog track record (denormalized for offline). Project to Track via
+ * fromCatalogRecord before UI / playlist / player / enqueue.
+ *
+ * @typedef {object} CatalogTrackRecord
+ * @property {string} trackId
+ * @property {string} [title]
+ * @property {string} [artist]
+ * @property {string} [album]
+ * @property {string|null} [albumId]
+ * @property {string[]} [artistIds]
+ * @property {string} [primaryArtistId]
+ * @property {string} [primaryArtistName]
+ * @property {number|null} [trackNum]
+ * @property {number|null} [disc]
+ * @property {number|null} [duration]
+ * @property {number|null} [year]
+ * @property {string} [codec]
+ * @property {string} [status]
+ * @property {boolean} [isLossy]
+ * @property {string} [sourceCodec]
+ * @property {number|null} [bitrateKbps]
+ */
+
+/**
+ * Coerce any API / storage / partial track-like object into a Track.
+ * Accepts snake_case, camelCase, and download-catalog fields.
+ *
+ * @param {object} raw
+ * @returns {Track}
+ */
+export function fromApiTrack(raw) {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Track required");
+  }
+  const id = raw.id || raw.trackId;
+  if (!id) throw new Error("Track id required");
+
+  const albumArtistId = raw.albumArtistId ?? raw.album_artist_id ?? null;
+  const artistId = raw.artistId ?? raw.artist_id ?? null;
+  const albumArtist =
+    raw.albumArtist ?? raw.album_artist ?? raw.artist ?? "";
+
+  let duration = raw.duration ?? null;
+  let durationMs = raw.durationMs ?? raw.duration_ms ?? null;
+  if (durationMs == null && duration != null && Number.isFinite(Number(duration))) {
+    durationMs = Math.round(Number(duration) * 1000);
+  }
+  if (duration == null && durationMs != null && Number.isFinite(Number(durationMs))) {
+    duration = Number(durationMs) / 1000;
+  }
+
+  return {
+    id: String(id),
+    path: raw.path ?? raw.rel_path ?? null,
+    title: raw.title || "",
+    artist: raw.artist || "",
+    album: raw.album || "",
+    albumId: raw.albumId ?? raw.album_id ?? null,
+    artistId: artistId != null ? String(artistId) : null,
+    albumArtistId: albumArtistId != null ? String(albumArtistId) : null,
+    albumArtist: albumArtist || "",
+    track: raw.track ?? raw.track_no ?? raw.trackNum ?? null,
+    disc: raw.disc ?? raw.disc_no ?? null,
+    year: raw.year ?? null,
+    duration: duration != null ? Number(duration) : null,
+    durationMs: durationMs != null ? Number(durationMs) : null,
+    isMissing: !!(raw.isMissing ?? raw.is_missing),
+    sampleRateHz: _nullableNumber(raw.sampleRateHz ?? raw.sample_rate_hz),
+    bitDepth: _nullableNumber(raw.bitDepth ?? raw.bit_depth),
+    isLossy: !!(raw.isLossy ?? raw.is_lossy),
+    sourceCodec: raw.sourceCodec ?? raw.source_codec ?? null,
+    bitrateKbps: _nullableNumber(raw.bitrateKbps ?? raw.bitrate_kbps),
+  };
+}
+
+/**
+ * @param {unknown} v
+ * @returns {number|null}
+ */
+function _nullableNumber(v) {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Project an IDB catalog track record to the client Track type.
+ * Catalog keeps trackId / trackNum / primaryArtist* for offline storage.
+ *
+ * @param {CatalogTrackRecord|object} rec
+ * @returns {Track}
+ */
+export function fromCatalogRecord(rec) {
+  if (!rec || typeof rec !== "object") {
+    throw new Error("Catalog track record required");
+  }
+  const artistIds = Array.isArray(rec.artistIds) ? rec.artistIds : [];
+  return fromApiTrack({
+    id: rec.trackId || rec.id,
+    title: rec.title,
+    artist: rec.artist,
+    album: rec.album,
+    albumId: rec.albumId ?? null,
+    artistId: artistIds[0] || rec.primaryArtistId || rec.artistId || null,
+    albumArtistId: rec.primaryArtistId || rec.albumArtistId || null,
+    albumArtist: rec.primaryArtistName || rec.albumArtist || rec.artist || "",
+    track: rec.trackNum ?? rec.track ?? null,
+    disc: rec.disc ?? null,
+    year: rec.year ?? null,
+    duration: rec.duration ?? null,
+    isMissing: false,
+    isLossy: rec.isLossy ?? rec.is_lossy,
+    sourceCodec: rec.sourceCodec ?? rec.source_codec ?? null,
+    bitrateKbps: rec.bitrateKbps ?? rec.bitrate_kbps,
+  });
+}
+
+/**
+ * Project offline catalog track records to client Tracks.
+ * Skips rows that fail fromCatalogRecord; preserves input order.
+ *
+ * @param {CatalogTrackRecord[]|object[]|null|undefined} records
+ * @returns {Track[]}
+ */
+export function tracksFromCatalogRecords(records) {
+  if (!records?.length) return [];
+  /** @type {Track[]} */
+  const out = [];
+  for (const rec of records) {
+    try {
+      out.push(fromCatalogRecord(rec));
+    } catch {
+      /* skip unmappable row */
+    }
+  }
+  return out;
+}
+
+/**
+ * True when value is already a full client Track (not a bare id ref).
+ * Bare `{ id }` / collect file rows fail this and must go through meta fetch.
+ *
+ * @param {unknown} obj
+ * @returns {obj is Track}
+ */
+export function isTrack(obj) {
+  if (!obj || typeof obj !== "object") return false;
+  const t = /** @type {Record<string, unknown>} */ (obj);
+  return (
+    typeof t.id === "string" &&
+    t.id.length > 0 &&
+    typeof t.title === "string" &&
+    typeof t.artist === "string" &&
+    typeof t.album === "string" &&
+    "albumId" in t &&
+    typeof t.albumArtist === "string" &&
+    typeof t.isMissing === "boolean"
+  );
+}
+
+/**
+ * Like fromApiTrack but returns null instead of throwing.
+ * @param {unknown} raw
+ * @returns {Track|null}
+ */
+export function coerceTrack(raw) {
+  try {
+    return fromApiTrack(/** @type {object} */ (raw));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {unknown[]} list
+ * @returns {Track[]}
+ */
+export function mapTracks(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const item of list) {
+    const t = coerceTrack(item);
+    if (t) out.push(t);
+  }
+  return out;
+}
+
+/** Alias used by downloads enqueue/commit — same as fromApiTrack. */
+export function normalizeTrack(track) {
+  return fromApiTrack(track);
+}
+
+/** Artist ids to pin art for (album artist + track artist, unique). */
+export function artistIdsOf(/** @type {Track} */ n) {
+  const ids = [];
+  if (n.albumArtistId) ids.push(n.albumArtistId);
+  if (n.artistId && n.artistId !== n.albumArtistId) ids.push(n.artistId);
+  return ids;
+}
+
+export function primaryArtistIdOf(/** @type {Track} */ n) {
+  return n.albumArtistId || n.artistId || "_unknown";
+}
+
+export function primaryArtistNameOf(/** @type {Track} */ n) {
+  return n.albumArtist || n.artist || "Unknown artist";
+}

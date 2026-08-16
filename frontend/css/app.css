@@ -1,0 +1,541 @@
+/* Modern streaming-app UI — mobile-first, Spotify/YT-Music inspired.
+   Base styles target phones; min-width queries enhance for larger screens. */
+
+:root {
+  --bg: #121212;
+  --surface: #1a1a1a;
+  --surface-2: #242424;
+  --elevated: #282828;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #ffffff;
+  --text-dim: #b3b3b3;
+  --accent: #a855f7;
+  --accent-bright: #c084fc;
+  --danger: #f87171;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mini-h: 64px;
+  --tabbar-h: 56px;
+  --viewbar-h: 56px;
+  --row-thumb: 40px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────── */
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s, transform 0.1s;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.icon-btn:active {
+  transform: scale(0.94);
+}
+
+.icon-btn.primary {
+  width: 56px;
+  height: 56px;
+  background: var(--accent);
+  color: #000;
+}
+
+.icon-btn.primary .icon {
+  width: 28px;
+  height: 28px;
+}
+
+.icon-btn.primary:hover {
+  background: var(--accent-bright);
+  color: #000;
+  transform: scale(1.04);
+}
+
+.icon-btn.toggle {
+  position: relative;
+}
+
+.icon-btn.toggle[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.icon-btn.toggle[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.pill .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.pill:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.pill:active {
+  transform: scale(0.96);
+}
+
+.pill.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+
+.pill.danger:hover {
+  border-color: var(--danger);
+}
+
+.pill.primary {
+  color: var(--accent-bright, var(--accent));
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.pill.primary:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ── App toast (connectivity transitions, etc.) ──────────────────── */
+
+.app-toast {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 130;
+  max-width: min(90vw, 320px);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--text);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+/* ── Views ───────────────────────────────────────────────────────── */
+
+main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.view {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.view-bar {
+  height: var(--viewbar-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  flex-shrink: 0;
+}
+
+.view-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.view-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Themed scrollbars (lists, player sheet, modal) ─────────────── */
+
+.row-list,
+#player.expanded,
+.modal-sheet {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.row-list::-webkit-scrollbar,
+#player.expanded::-webkit-scrollbar,
+.modal-sheet::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.row-list::-webkit-scrollbar-track,
+#player.expanded::-webkit-scrollbar-track,
+.modal-sheet::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.row-list::-webkit-scrollbar-thumb,
+#player.expanded::-webkit-scrollbar-thumb,
+.modal-sheet::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.row-list::-webkit-scrollbar-thumb:hover,
+#player.expanded::-webkit-scrollbar-thumb:hover,
+.modal-sheet::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* ── Rows (library + playlist) ───────────────────────────────────── */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  user-select: none;
+}
+
+.row:hover {
+  background: var(--surface);
+}
+
+.row.selected {
+  background: var(--surface-2);
+}
+
+.row-icon {
+  width: var(--row-thumb);
+  height: var(--row-thumb);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.row-icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.row-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row-title {
+  font-size: 15px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-title-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.row-title-line .row-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.lossy-mark {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -10px -8px -10px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.lossy-mark .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.media-card-wrap {
+  position: relative;
+}
+
+.media-card-lossy {
+  position: absolute;
+  top: auto;
+  bottom: 22px;
+  right: 0;
+}
+
+.row-sub {
+  font-size: 13px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-dur {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.row-chevron {
+  color: var(--text-dim);
+  flex-shrink: 0;
+  display: flex;
+}
+
+/* Playing state */
+.row.playing .row-title {
+  color: var(--accent);
+}
+
+.row.playing .eq {
+  display: inline-flex;
+}
+
+.row-cover-wrap {
+  position: relative;
+  width: var(--row-thumb);
+  height: var(--row-thumb);
+  flex-shrink: 0;
+}
+
+.row-cover {
+  width: var(--row-thumb);
+  height: var(--row-thumb);
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--surface-2);
+  display: block;
+}
+
+.eq {
+  display: none;
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.eq span {
+  width: 3px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: eq-bounce 1s ease-in-out infinite;
+}
+
+.eq span:nth-child(1) { height: 9px; animation-delay: 0s; }
+.eq span:nth-child(2) { height: 14px; animation-delay: 0.25s; }
+.eq span:nth-child(3) { height: 7px; animation-delay: 0.5s; }
+
+.eq.paused span {
+  animation-play-state: paused;
+  transform: scaleY(0.4);
+}
+
+@keyframes eq-bounce {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+/* Edit mode (playlist) */
+.row .row-delete,
+.row .row-drag {
+  display: none;
+}
+
+.row-list.editing .row .row-delete,
+.row-list.editing .row .row-drag {
+  display: flex;
+}
+
+.row-list.editing .row .row-menu {
+  display: none;
+}
+
+#view-playlist .row {
+  -webkit-touch-callout: none;
+}
+
+#view-playlist .row.unavailable .row-cover,
+#view-playlist .row.unavailable .row-title,
+#view-playlist .row.unavailable .row-sub,
+#view-playlist .row.unavailable .row-dur {
+  opacity: 0.4;
+}
+
+.row-list.editing .row .row-dur,
+.row-list.editing .row .eq {
+  display: none;
+}
+
+.row-delete {
+  color: var(--danger);
+}
+
+.row-delete .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.row-drag {
+  color: var(--text-dim);
+  cursor: grab;
+  touch-action: none;
+}
+
+.row.dragging {
+  background: var(--elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 10;
+}
+
+.row.drop-target {
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+.list-empty {
+  padding: 32px 16px;
+  color: var(--text-dim);
+  text-align: center;
+  font-size: 14px;
+}
+
+
+#tab-bar {
+  flex-shrink: 0;
+  display: flex;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab {
+  flex: 1;
+  height: var(--tabbar-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tab .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.tab.active {
+  color: var(--text);
+}
+

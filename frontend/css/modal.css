@@ -1,0 +1,690 @@
+/* Settings modal + codec list */
+/* ── Settings modal (bottom sheet on mobile, card on desktop) ────── */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.modal-sheet {
+  position: relative;
+  width: 100%;
+  background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-head {
+  height: var(--viewbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 0 20px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.modal-section {
+  padding: 4px 20px 20px;
+}
+
+.modal-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.modal-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.scan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.scan-progress-wrap {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.scan-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.settings-field {
+  margin-top: 14px;
+}
+
+.settings-field:first-of-type {
+  margin-top: 0;
+}
+
+.settings-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+/* Themed settings dropdown (native <select> cannot match theme) */
+.settings-select {
+  position: relative;
+}
+
+.settings-select-trigger {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.settings-select-trigger:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--elevated, #2a2a2a));
+}
+
+.settings-select-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-select.open .settings-select-trigger {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.settings-select.disabled .settings-select-trigger,
+.settings-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.settings-select-trigger-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-select-trigger .icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  transition: transform 0.15s ease, color 0.15s;
+}
+
+.settings-select.open .settings-select-trigger .icon {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+
+.settings-select-menu {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+  max-height: min(280px, 40vh);
+  overflow-y: auto;
+}
+
+.settings-select-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.settings-select-option:hover,
+.settings-select-option:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.settings-select-option.selected {
+  color: var(--accent-bright, var(--accent));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.settings-select-option.selected:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.settings-select-option-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-select-option .icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+
+/* Downloads settings toggle */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 4px 0;
+}
+
+.toggle-label {
+  font-weight: 600;
+}
+
+.toggle-input {
+  width: 44px;
+  height: 24px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Settings text fields (exclusive audio panel, etc.) */
+.text-input {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-height: 40px;
+}
+
+.text-input-block {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.text-input-narrow {
+  width: 8rem;
+}
+
+.text-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 1px;
+}
+
+.modal-hint.warn {
+  color: var(--danger);
+}
+
+/* App confirm / prompt (above settings + download manager) */
+.app-dialog {
+  z-index: 120;
+}
+
+.app-dialog .dialog-sheet {
+  max-height: min(70vh, 420px);
+  padding: 20px 20px calc(16px + env(safe-area-inset-bottom));
+}
+
+.app-dialog .dialog-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  line-height: 1.3;
+}
+
+.app-dialog .dialog-message {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+
+.app-dialog .dialog-title + .dialog-message {
+  margin-top: 0;
+}
+
+.app-dialog .dialog-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+}
+
+.app-dialog .dialog-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.app-dialog .dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Action menu (centered card + anchored dropdown) */
+.action-card {
+  position: fixed;
+  inset: 0;
+  z-index: 105;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-card-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.action-card-sheet {
+  position: relative;
+  width: min(calc(100% - 32px), 360px);
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.action-menu-list {
+  position: fixed;
+  z-index: 105;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 16px));
+  margin: 0;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-menu-item .icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.action-menu-item-label {
+  flex: 1;
+}
+
+.action-menu-item:hover,
+.action-menu-item.is-active {
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+
+.action-menu-item.is-danger {
+  color: var(--danger);
+}
+
+.action-menu-item.is-danger .icon {
+  color: var(--danger);
+}
+
+.action-menu-item.is-disabled,
+.action-menu-item:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Download manager */
+.downloads-modal {
+  z-index: 110;
+}
+
+.downloads-sheet {
+  max-height: 90vh;
+}
+
+.dl-pause-banner {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warn, #e6a23c) 18%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.dl-queue-summary {
+  margin: 0 0 8px;
+}
+
+.dl-queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dl-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.dl-queue-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.dl-queue-title {
+  display: block;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dl-queue-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.dl-queue-meta .scan-progress-wrap {
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.dl-queue-meta .scan-progress-wrap.is-indeterminate .scan-progress-bar {
+  width: 30%;
+  animation: dl-progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes dl-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+.dl-artist {
+  margin-bottom: 16px;
+}
+
+.dl-artist-head,
+.dl-album-head,
+.dl-track-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 0;
+}
+
+.dl-tree-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.dl-tree-toggle:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+  color: var(--text);
+}
+
+.dl-tree-toggle .icon {
+  transition: transform 0.15s ease;
+}
+
+.dl-tree-toggle.collapsed .icon {
+  transform: rotate(-90deg);
+}
+
+.dl-tree-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.dl-tree-label:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.08));
+}
+
+.dl-album {
+  margin-left: 12px;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+  margin-top: 4px;
+}
+
+.dl-track-row {
+  margin-left: 8px;
+}
+
+.dl-track-num {
+  width: 28px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: right;
+}
+
+.row-download {
+  color: var(--text-dim);
+}
+
+.row-download.is-ready {
+  color: var(--accent);
+}
+
+.row-download.is-other {
+  color: var(--accent-bright);
+}
+
+.row-download.is-failed {
+  color: var(--danger);
+}
+
+.row-download.is-busy {
+  opacity: 0.7;
+}
+
+.dl-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: dl-spin 0.7s linear infinite;
+}
+
+@keyframes dl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.offline-banner {
+  padding: 8px 16px;
+  font-size: 13px;
+  line-height: 1.35;
+  background: color-mix(in srgb, var(--surface-2) 85%, var(--accent) 15%);
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Range inputs — track fill via --range-fill (set from JS) */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 24px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+  --range-fill: 0%;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0,
+    var(--accent) var(--range-fill),
+    var(--surface-2) var(--range-fill),
+    var(--surface-2) 100%
+  );
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text);
+  margin-top: -6px;
+  border: none;
+  transition: background 0.15s;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb,
+input[type="range"]:active::-webkit-slider-thumb {
+  background: var(--accent-bright);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+}
+
+input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text);
+  border: none;
+}
+
+input[type="range"]:hover::-moz-range-thumb,
+input[type="range"]:active::-moz-range-thumb {
+  background: var(--accent-bright);
+}
+
+/* ── Tab bar (mobile only) ───────────────────────────────────────── */
