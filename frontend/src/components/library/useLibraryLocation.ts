@@ -3,6 +3,7 @@
  */
 import { computed } from "vue";
 import { useRoute } from "vue-router";
+import { effectiveLibraryMode } from "@/components/library/browseMode";
 import { ui } from "@/stores/ui";
 
 function firstParam(params: unknown, key: string): string | undefined {
@@ -27,7 +28,9 @@ export function useLibraryLocation() {
     };
   });
 
-  const mode = computed(() => String(libLoc.value.meta?.mode || "folders"));
+  const mode = computed(() =>
+    effectiveLibraryMode(route.meta, ui.lastLibrary.meta?.mode),
+  );
   const isSearch = computed(() => mode.value === "search");
   const folderPath = computed(() => {
     const q = libLoc.value.query || {};
