@@ -68,5 +68,6 @@ function onBack() {
       <slot name="after-bar" />
 
       <slot />
+      <slot name="overlay" />
     </section>
 </template>

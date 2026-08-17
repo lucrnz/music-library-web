@@ -491,12 +491,14 @@ const router = useRouter();
         @select-folder="onFolderSelect"
         @select-file="onFileSelect"
       />
+      <template #overlay>
+        <ActionMenu
+          :open="menuOpen"
+          :items="menuItems"
+          :anchor="menuAnchor"
+          :restore-el="menuRestoreEl"
+          @close="closeArtistMenu"
+        />
+      </template>
     </LibraryChrome>
-    <ActionMenu
-      :open="menuOpen"
-      :items="menuItems"
-      :anchor="menuAnchor"
-      :restore-el="menuRestoreEl"
-      @close="closeArtistMenu"
-    />
 </template>
