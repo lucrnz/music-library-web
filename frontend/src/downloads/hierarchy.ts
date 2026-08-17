@@ -27,12 +27,11 @@ export interface DownloadsHierarchy {
   artists: DownloadsHierarchyArtist[];
 }
 
-export async function buildDownloadsHierarchy(): Promise<DownloadsHierarchy> {
-  const [tracks, albums, artists] = await Promise.all([
-    listTrackRecords(),
-    listAlbumRecords(),
-    listArtistRecords(),
-  ]);
+export function assembleDownloadsHierarchy(
+  tracks: CatalogTrackRecord[],
+  albums: { albumId: string; title?: string; hasThumb?: boolean }[],
+  artists: { artistId: string; name?: string; hasThumb?: boolean }[],
+): DownloadsHierarchy {
   const albumMap = new Map(albums.map((a) => [a.albumId, a]));
   const artistMap = new Map(artists.map((a) => [a.artistId, a]));
 
@@ -84,4 +83,13 @@ export async function buildDownloadsHierarchy(): Promise<DownloadsHierarchy> {
   }
   result.sort((a, b) => a.name.localeCompare(b.name));
   return { artists: result };
+}
+
+export async function buildDownloadsHierarchy(): Promise<DownloadsHierarchy> {
+  const [tracks, albums, artists] = await Promise.all([
+    listTrackRecords(),
+    listAlbumRecords(),
+    listArtistRecords(),
+  ]);
+  return assembleDownloadsHierarchy(tracks, albums, artists);
 }
