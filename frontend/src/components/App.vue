@@ -9,6 +9,7 @@ import SettingsModal from "@/components/settings/SettingsModal.vue";
 import DownloadsModal from "@/components/downloads/DownloadsModal.vue";
 import DownloadsLibraryView from "@/components/downloads/DownloadsLibraryView.vue";
 import AppDialog from "@/components/dialog/AppDialog.vue";
+import ImageCropper from "@/components/artistArt/ImageCropper.vue";
 import TabBar from "@/components/layout/TabBar.vue";
 
 /**
@@ -30,6 +31,7 @@ const route = useRoute();
     <SettingsModal />
     <DownloadsModal />
     <AppDialog />
+    <ImageCropper />
     <TabBar />
     <div
       v-if="ui.toast"

@@ -1,0 +1,94 @@
+/* 1:1 artist-photo cropper. Mobile: full-screen. Desktop: large center modal. */
+
+.image-cropper {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.image-cropper-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.image-cropper-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--bg);
+}
+
+.image-cropper-head,
+.image-cropper-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--viewbar-h);
+  padding: 8px 16px;
+  flex-shrink: 0;
+}
+
+.image-cropper-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.image-cropper-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 8px 16px;
+}
+
+.image-cropper-canvas {
+  width: min(100%, 100%);
+  height: auto;
+  aspect-ratio: 1;
+  max-width: min(100%, calc(100dvh - 180px));
+  max-height: min(100%, calc(100dvh - 180px));
+  background: #000;
+  touch-action: none;
+  cursor: grab;
+  border-radius: 4px;
+}
+
+.image-cropper-actions {
+  justify-content: flex-end;
+}
+
+@media (min-width: 900px) {
+  .image-cropper {
+    align-items: center;
+    justify-content: center;
+  }
+
+  .image-cropper-panel {
+    width: min(80vw, 80vh, 560px);
+    height: auto;
+    max-height: 90vh;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 0;
+  }
+
+  .image-cropper-canvas {
+    width: min(80vw, 80vh, 560px);
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+  }
+}
