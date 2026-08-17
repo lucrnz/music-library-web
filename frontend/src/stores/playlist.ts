@@ -67,7 +67,7 @@ export type QueueEntry = string | Track | { id?: string };
  * Returns -1 when there is no next track, or when the next id is unknown
  * (shuffle wrap that would require a fresh random order).
  */
-function computeNextIndex(state: PlaylistCursor): number {
+export function computeNextIndex(state: PlaylistCursor): number {
   const { tracks, index, shuffle, shuffleOrder, shufflePos, repeat } = state;
   if (!tracks.length) return -1;
   if (repeat === "one") return index;
