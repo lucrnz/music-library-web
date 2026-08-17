@@ -2,8 +2,19 @@
 /**
  * Online library pane: location → loaders → chrome + entity list / tree.
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { openCropFromFile } from "@/artistArt/pickFile";
+import { coverSrc } from "@/artistArt/state";
+import { submitPreferredCrop } from "@/artistArt/submit";
+import { buildArtistMenuItems } from "@/components/library/artistMenuItems";
+import ActionMenu from "@/components/menu/ActionMenu.vue";
+import {
+  isDesktopContextMenu,
+  nextOpenKey,
+} from "@/components/menu/rowActionMenu";
+import { useRowActionMenu } from "@/components/menu/useRowActionMenu";
+import type { ArtistListItem } from "@/api";
 import {
   connectivityBanner,
   connectivityLoadError,
@@ -324,6 +335,98 @@ const router = useRouter();
     const offlineBanner = computed(() =>
       connectivityBanner(connectivity.state, downloads.enabled)
     );
+
+    const menusEnabled = computed(
+      () =>
+        mode.value === "artists" &&
+        routeName.value !== "artist" &&
+        !isSearch.value &&
+        !showTree.value,
+    );
+
+    const {
+      menuAnchor,
+      menuRestoreEl,
+      closeMenu,
+      openMenu,
+    } = useRowActionMenu();
+    const menuKey = ref("");
+    const menuArtist = ref<ArtistListItem | null>(null);
+    const menuOpen = computed(() => !!menuKey.value);
+    const menuItems = computed(() => {
+      if (!menuArtist.value) return [];
+      return buildArtistMenuItems({
+        artist: menuArtist.value,
+        downloadsEnabled: downloads.enabled,
+      });
+    });
+
+    function artistCover(artist: ArtistListItem) {
+      return coverSrc(artist);
+    }
+
+    function closeArtistMenu() {
+      menuKey.value = "";
+      menuArtist.value = null;
+      closeMenu();
+    }
+
+    function openArtistMenu(
+      artist: ArtistListItem,
+      anchor: { kind: "el"; el: HTMLElement } | { kind: "point"; x: number; y: number },
+      restoreEl?: HTMLElement | null,
+    ) {
+      const next = nextOpenKey(menuKey.value, artist.id);
+      if (!next) {
+        closeArtistMenu();
+        return;
+      }
+      menuKey.value = next;
+      menuArtist.value = artist;
+      openMenu(anchor, restoreEl);
+    }
+
+    function onArtistMenuClick(artist: ArtistListItem, e: MouseEvent) {
+      const el = e.currentTarget;
+      if (!(el instanceof HTMLElement)) return;
+      openArtistMenu(artist, { kind: "el", el }, el);
+    }
+
+    function onArtistRowContext(artist: ArtistListItem, e: MouseEvent) {
+      if (!isDesktopContextMenu()) return;
+      e.preventDefault();
+      const current = e.currentTarget;
+      const btn =
+        current instanceof HTMLElement
+          ? current.querySelector(".row-menu")
+          : null;
+      openArtistMenu(
+        artist,
+        { kind: "point", x: e.clientX, y: e.clientY },
+        btn instanceof HTMLElement ? btn : null,
+      );
+    }
+
+    async function onArtistThumbDrop(artist: ArtistListItem, file: File) {
+      const blob = await openCropFromFile(file);
+      if (!blob) return;
+      await submitPreferredCrop(artist, blob);
+    }
+
+    const artistRowActions = computed(() =>
+      menusEnabled.value
+        ? {
+            onMenuClick: onArtistMenuClick,
+            onRowContextMenu: onArtistRowContext,
+            onThumbDrop: onArtistThumbDrop,
+          }
+        : null,
+    );
+
+    watch(
+      () => [route.fullPath, ui.libraryLayout, showTree.value] as const,
+      () => closeArtistMenu(),
+    );
 </script>
 
 <template>
@@ -380,6 +483,8 @@ const router = useRouter();
         :is-grid="isGrid"
         :grid-host="gridHost"
         :is-selected="isSelected"
+        :artist-cover="artistCover"
+        :artist-row-actions="artistRowActions"
         @open-artist="openArtist"
         @open-album="openAlbum"
         @open-folder="openFolder"
@@ -387,4 +492,11 @@ const router = useRouter();
         @select-file="onFileSelect"
       />
     </LibraryChrome>
+    <ActionMenu
+      :open="menuOpen"
+      :items="menuItems"
+      :anchor="menuAnchor"
+      :restore-el="menuRestoreEl"
+      @close="closeArtistMenu"
+    />
 </template>

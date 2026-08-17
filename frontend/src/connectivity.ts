@@ -18,8 +18,14 @@ let windowBound = false;
 let healthTimer: ReturnType<typeof setTimeout> | null = null;
 let healthInFlight = false;
 let backoffMs = BACKOFF_START_MS;
-let healthEnabled = false;
-let healthQueueHasWork = false;
+export type HealthWorkSource = "downloads" | "artist-art";
+
+const healthWork: Record<HealthWorkSource, boolean> = {
+  downloads: false,
+  "artist-art": false,
+};
+let downloadsHealthEnabled = false;
+let downloadsHealthQueueHasWork = false;
 /**
  * Private: schedule/run a health probe without advertising server_down.
  * Not part of ConnectivityState; never emitted to listeners.
@@ -270,13 +276,25 @@ export function onConnectivityRecovered(fn: () => void) {
   return () => recoveredListeners.delete(fn);
 }
 
+export function hasHealthWork(): boolean {
+  return healthWork.downloads || healthWork["artist-art"];
+}
+
+export function setHealthWork(source: HealthWorkSource, hasWork: boolean) {
+  healthWork[source] = !!hasWork;
+  syncHealthLoop();
+}
+
 export function setHealthContext(ctx: {
   enabled?: boolean;
   queueHasWork?: boolean;
 }) {
-  if (ctx.enabled != null) healthEnabled = !!ctx.enabled;
-  if (ctx.queueHasWork != null) healthQueueHasWork = !!ctx.queueHasWork;
-  syncHealthLoop();
+  if (ctx.enabled != null) downloadsHealthEnabled = !!ctx.enabled;
+  if (ctx.queueHasWork != null) downloadsHealthQueueHasWork = !!ctx.queueHasWork;
+  setHealthWork(
+    "downloads",
+    !!(downloadsHealthEnabled && downloadsHealthQueueHasWork),
+  );
 }
 
 function stopHealthLoop() {
@@ -298,7 +316,7 @@ function scheduleHealthProbe(delayMs: number) {
 }
 
 function needsHealthProbe() {
-  if (!healthEnabled || !healthQueueHasWork) return false;
+  if (!hasHealthWork()) return false;
   if (browserOffline() || state === "offline") return false;
   // Probe on real server_down, or while a recovery/confirmation probe was requested
   // without flipping public state to server_down.
@@ -306,7 +324,7 @@ function needsHealthProbe() {
 }
 
 function syncHealthLoop() {
-  if (!healthEnabled || !healthQueueHasWork) {
+  if (!hasHealthWork()) {
     probeRequested = false;
     stopHealthLoop();
     return;
@@ -327,7 +345,7 @@ function syncHealthLoop() {
 
 async function runHealthProbe() {
   if (healthInFlight) return;
-  if (!healthEnabled || !healthQueueHasWork) {
+  if (!hasHealthWork()) {
     probeRequested = false;
     stopHealthLoop();
     return;
@@ -356,7 +374,7 @@ async function runHealthProbe() {
       BACKOFF_CAP_MS,
       Math.max(BACKOFF_START_MS, backoffMs * 2)
     );
-    if (healthEnabled && healthQueueHasWork && !browserOffline()) {
+    if (hasHealthWork() && !browserOffline()) {
       scheduleHealthProbe(backoffMs);
     }
   } finally {
@@ -369,7 +387,7 @@ async function runHealthProbe() {
  * server_down is set only if the probe (or other reportFailure) proves the server is down.
  */
 export function requestHealthProbe(delayMs = 0) {
-  if (!healthEnabled || !healthQueueHasWork) return;
+  if (!hasHealthWork()) return;
   if (browserOffline()) {
     probeRequested = false;
     setState("offline");
@@ -390,7 +408,7 @@ export function bindWindowConnectivity() {
     // Optimistic online — do not advertise server_down just to start a probe.
     // If the server is still down, the probe (or the next request) sets server_down.
     setState("online");
-    if (healthEnabled && healthQueueHasWork) {
+    if (hasHealthWork()) {
       probeRequested = true;
       scheduleHealthProbe(0);
     }

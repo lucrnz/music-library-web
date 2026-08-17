@@ -25,6 +25,7 @@ import EntityListHost from "@/components/library/EntityListHost.vue";
 import LibraryChrome from "@/components/library/LibraryChrome.vue";
 import { useBrowseLayout } from "@/components/library/useBrowseLayout";
 import LibraryTreePane from "@/components/tree/LibraryTreePane.vue";
+import { artUrlCache } from "@/downloads/catalog";
 import type { ArtistListItem } from "@/api";
 import type { LibraryAlbum, LibraryBody } from "@/components/library/loaders";
 import type { Track } from "@/models/track";
@@ -106,7 +107,11 @@ const gridHost = computed(() =>
 );
 
 function artistCover(artist: ArtistListItem) {
-  return localArt.value[`a:${artist.id}`] || "";
+  return (
+    artUrlCache.urls[`artist:${artist.id}:thumb`] ||
+    localArt.value[`a:${artist.id}`] ||
+    ""
+  );
 }
 function albumCover(album: LibraryAlbum) {
   return localArt.value[`al:${album.id}`] || "";

@@ -20,17 +20,23 @@ const props = withDefaults(
     loading?: boolean;
     error?: string;
     emptyMessage?: string;
+    resolveCover?: ((node: TreeNode) => string) | null;
+    thumbDropEnabled?: boolean;
   }>(),
   {
     roots: () => [],
     loading: false,
     error: "",
     emptyMessage: "Nothing here",
+    resolveCover: null,
+    thumbDropEnabled: false,
   },
 );
 const emit = defineEmits<{
   "activate-leaf": [node: TreeNode];
   toggle: [node: TreeNode, willExpand: boolean];
+  "row-contextmenu": [node: TreeNode, e: MouseEvent];
+  "thumb-drop": [node: TreeNode, file: File];
 }>();
 
 export type TreeViewExpose = {
@@ -140,6 +146,40 @@ async function expandPath(
 
 function activateLeaf(node: TreeNode) {
   emit("activate-leaf", node);
+}
+
+function coverFor(node: TreeNode): string {
+  if (props.resolveCover) return props.resolveCover(node) || "";
+  return node.cover || "";
+}
+
+function showCover(node: TreeNode): boolean {
+  return props.resolveCover != null || node.cover !== undefined;
+}
+
+function onRowContext(node: TreeNode, e: MouseEvent) {
+  emit("row-contextmenu", node, e);
+}
+
+function onThumbDragOver(e: DragEvent) {
+  if (!props.thumbDropEnabled) return;
+  if (!e.dataTransfer?.types.includes("Files")) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+  (e.currentTarget as HTMLElement).classList.add("thumb-drop-over");
+}
+
+function onThumbDragLeave(e: DragEvent) {
+  (e.currentTarget as HTMLElement).classList.remove("thumb-drop-over");
+}
+
+function onThumbDrop(node: TreeNode, e: DragEvent) {
+  (e.currentTarget as HTMLElement).classList.remove("thumb-drop-over");
+  if (!props.thumbDropEnabled) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const file = e.dataTransfer?.files?.[0];
+  if (file) emit("thumb-drop", node, file);
 }
 
 function onRowClick(vn: VisibleNode, e: MouseEvent) {
@@ -279,6 +319,7 @@ defineExpose({ expandPath, bump, visible });
           :data-tree-key="vn.key"
           tabindex="-1"
           @click="onRowClick(vn, $event)"
+          @contextmenu="onRowContext(vn.node, $event)"
           @focus="focusIndex = i"
         >
           <template v-if="!vn.isLeaf">
@@ -294,11 +335,17 @@ defineExpose({ expandPath, bump, visible });
               <Icon name="chevron-down" />
             </button>
             <button type="button" class="tree-label" tabindex="-1">
-              <span v-if="vn.node.cover !== undefined" class="row-cover-wrap">
+              <span
+                v-if="showCover(vn.node)"
+                class="row-cover-wrap"
+                @dragover="onThumbDragOver"
+                @dragleave="onThumbDragLeave"
+                @drop="onThumbDrop(vn.node, $event)"
+              >
                 <img
-                  v-if="vn.node.cover"
+                  v-if="coverFor(vn.node)"
                   class="row-cover"
-                  :src="vn.node.cover"
+                  :src="coverFor(vn.node)"
                   alt=""
                   loading="lazy"
                 />

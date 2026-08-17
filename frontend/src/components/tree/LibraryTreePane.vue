@@ -3,7 +3,20 @@
  * Library tree pane: mode adapter + TreeView + group actions.
  */
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
+import { openCropFromFile } from "@/artistArt/pickFile";
+import { coverSrc } from "@/artistArt/state";
+import { submitPreferredCrop } from "@/artistArt/submit";
+import { buildArtistMenuItems } from "@/components/library/artistMenuItems";
+import ActionMenu from "@/components/menu/ActionMenu.vue";
+import {
+  isDesktopContextMenu,
+  nextOpenKey,
+} from "@/components/menu/rowActionMenu";
+import { useRowActionMenu } from "@/components/menu/useRowActionMenu";
+import { artUrlCache } from "@/downloads/catalog";
 import { downloads } from "@/downloads/state";
+import type { ArtistListItem } from "@/api";
 import {
   clearLibSelection,
   showToast,
@@ -58,6 +71,110 @@ import type { CatalogTrackRecord } from "@/models/track";
 const props = defineProps<{
   mode: string;
 }>();
+
+const route = useRoute();
+const artistsMode = computed(() => props.mode === "artists");
+const {
+  menuAnchor,
+  menuRestoreEl,
+  closeMenu,
+  openMenu,
+} = useRowActionMenu();
+const menuKey = ref("");
+const menuArtist = ref<ArtistListItem | null>(null);
+const menuOpen = computed(() => !!menuKey.value);
+const menuItems = computed(() => {
+  if (!menuArtist.value) return [];
+  return buildArtistMenuItems({
+    artist: menuArtist.value,
+    downloadsEnabled: downloads.enabled,
+  });
+});
+
+function artistFromNode(node: TreeNode): ArtistListItem | null {
+  if (node.kind !== "artist") return null;
+  const data = node.data;
+  if (!data || typeof data !== "object" || !("id" in data)) return null;
+  return data as ArtistListItem;
+}
+
+function resolveCover(node: TreeNode): string {
+  if (props.mode === "artists" && node.kind === "artist") {
+    const artist = artistFromNode(node);
+    return artist ? coverSrc(artist) : node.cover || "";
+  }
+  if (props.mode === "downloads" && node.kind === "artist") {
+    const id = treeNodeId(node);
+    return artUrlCache.urls[`artist:${id}:thumb`] || node.cover || "";
+  }
+  return node.cover || "";
+}
+
+function closeArtistMenu() {
+  menuKey.value = "";
+  menuArtist.value = null;
+  closeMenu();
+}
+
+function openArtistMenu(
+  artist: ArtistListItem,
+  anchor: { kind: "el"; el: HTMLElement } | { kind: "point"; x: number; y: number },
+  restoreEl?: HTMLElement | null,
+) {
+  const next = nextOpenKey(menuKey.value, artist.id);
+  if (!next) {
+    closeArtistMenu();
+    return;
+  }
+  menuKey.value = next;
+  menuArtist.value = artist;
+  openMenu(anchor, restoreEl);
+}
+
+function onArtistMenuClick(artist: ArtistListItem, e: MouseEvent) {
+  e.stopPropagation();
+  const el = e.currentTarget;
+  if (!(el instanceof HTMLElement)) return;
+  openArtistMenu(artist, { kind: "el", el }, el);
+}
+
+function onRowContextMenu(node: TreeNode, e: MouseEvent) {
+  if (!artistsMode.value) return;
+  const artist = artistFromNode(node);
+  if (!artist || !isDesktopContextMenu()) return;
+  e.preventDefault();
+  const btn =
+    e.currentTarget instanceof HTMLElement
+      ? e.currentTarget.querySelector(".row-menu")
+      : null;
+  openArtistMenu(
+    artist,
+    { kind: "point", x: e.clientX, y: e.clientY },
+    btn instanceof HTMLElement ? btn : null,
+  );
+}
+
+async function onThumbDrop(node: TreeNode, file: File) {
+  const artist = artistFromNode(node);
+  if (!artist) return;
+  const blob = await openCropFromFile(file);
+  if (!blob) return;
+  await submitPreferredCrop(artist, blob);
+}
+
+const artistTreeListeners = computed(() =>
+  artistsMode.value
+    ? {
+        "row-contextmenu": onRowContextMenu,
+        "thumb-drop": onThumbDrop,
+      }
+    : {},
+);
+
+watch(
+  () => [route.fullPath, ui.libraryLayout, props.mode] as const,
+  () => closeArtistMenu(),
+);
 
 const roots = ref<TreeNode[]>([]);
 const loading = ref(false);
@@ -287,6 +404,9 @@ onMounted(loadRoots);
       :loading="loading"
       :error="error"
       :empty-message="emptyMessage"
+      :resolve-cover="props.mode === 'artists' || props.mode === 'downloads' ? resolveCover : null"
+      :thumb-drop-enabled="artistsMode"
+      v-on="artistTreeListeners"
       @activate-leaf="onActivateLeaf"
     >
       <template #group-actions="{ node }">
@@ -315,6 +435,14 @@ onMounted(loadRoots);
           aria-label="Download album"
           @click="onDownloadAlbum(node)"
         ><Icon name="download" /></button>
+        <button
+          v-if="artistsMode && node.kind === 'artist'"
+          type="button"
+          class="icon-btn row-menu"
+          title="Artist actions"
+          aria-label="Artist actions"
+          @click="(e) => { const a = artistFromNode(node); if (a) onArtistMenuClick(a, e); }"
+        ><Icon name="more-vert" /></button>
       </template>
       <template #leaf="{ node }">
         <TrackRow
@@ -336,4 +464,11 @@ onMounted(loadRoots);
         />
       </template>
     </TreeView>
+    <ActionMenu
+      :open="menuOpen"
+      :items="menuItems"
+      :anchor="menuAnchor"
+      :restore-el="menuRestoreEl"
+      @close="closeArtistMenu"
+    />
 </template>

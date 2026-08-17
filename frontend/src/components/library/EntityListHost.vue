@@ -20,6 +20,13 @@ import type {
 } from "@/components/library/loaders";
 import type { ArtistListItem, BrowseDir } from "@/api";
 import type { Track } from "@/models/track";
+
+export interface ArtistRowActions {
+  onMenuClick: (artist: ArtistListItem, e: MouseEvent) => void;
+  onRowContextMenu: (artist: ArtistListItem, e: MouseEvent) => void;
+  onThumbDrop: (artist: ArtistListItem, file: File) => void;
+}
+
 const props = withDefaults(defineProps<{
   body: LibraryBody;
   error?: string;
@@ -31,7 +38,8 @@ const props = withDefaults(defineProps<{
   albumCover?: ((item: LibraryAlbum) => string) | null;
   trackCover?: ((item: Track) => string) | null;
   isSelected?: ((path: string) => boolean) | null;
-}>(), { error: "", loading: false, isGrid: false, gridHost: false, showTrackDownload: true, artistCover: null, albumCover: null, trackCover: null, isSelected: null });
+  artistRowActions?: ArtistRowActions | null;
+}>(), { error: "", loading: false, isGrid: false, gridHost: false, showTrackDownload: true, artistCover: null, albumCover: null, trackCover: null, isSelected: null, artistRowActions: null });
 const emit = defineEmits<{
   "open-artist": [artist: ArtistListItem];
   "open-album": [album: LibraryAlbum];
@@ -118,7 +126,10 @@ function artistSrc(artist: ArtistListItem) {
             :key="artist.id"
             :artist="artist"
             :cover-src="artistSrc(artist)"
+            :menu-enabled="!!artistRowActions"
             @open="openArtist"
+            @row-contextmenu="(a, e) => artistRowActions?.onRowContextMenu(a, e)"
+            @thumb-drop="(a, f) => artistRowActions?.onThumbDrop(a, f)"
           />
         </div>
         <template v-else>
@@ -127,7 +138,11 @@ function artistSrc(artist: ArtistListItem) {
             :key="artist.id"
             :artist="artist"
             :cover-src="artistSrc(artist)"
+            :show-menu="!!artistRowActions"
             @open="openArtist"
+            @menu-click="(a, e) => artistRowActions?.onMenuClick(a, e)"
+            @row-contextmenu="(a, e) => artistRowActions?.onRowContextMenu(a, e)"
+            @thumb-drop="(a, f) => artistRowActions?.onThumbDrop(a, f)"
           />
         </template>
       </template>

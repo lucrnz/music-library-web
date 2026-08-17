@@ -15,6 +15,7 @@ import {
 import { initExclusiveAudio } from "@/stores/exclusiveAudio";
 import { pl } from "@/stores/playlist";
 import { bindConnectivityToasts } from "@/connectivityUi";
+import { initArtistArtPending } from "@/artistArt/pending";
 import { initDownloads } from "@/downloads/index";
 import { bindConnectivityStore } from "@/stores/connectivity";
 import { registerServiceWorker } from "@/pwa";
@@ -33,6 +34,7 @@ bindNetworkConstraintEffects(() => pl.tracks);
 bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.
 initDownloads().then(() => refreshPlayerCovers());
+initArtistArtPending();
 registerServiceWorker();
 
 const app = createApp(App);

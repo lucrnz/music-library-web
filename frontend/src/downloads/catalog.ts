@@ -3,6 +3,7 @@
  */
 
 import { reactive } from "vue";
+import { artistImageUrl, type ArtistListItem } from "@/api";
 import { SOURCE_TAG, sourceFileMedia } from "@/lossyKind";
 import {
   artistIdsOf,
@@ -233,18 +234,23 @@ export function isLocallyPlayableDownload(trackId: string) {
 // Local album/artist art
 // ---------------------------------------------------------------------------
 
-const urlCache = new Map<string, string>();
+/** Vue-readable object-URL cache (same keys as blobUrlFor). */
+export const artUrlCache = reactive({
+  urls: {} as Record<string, string>,
+});
 
 export function revokeArtCached(key: string) {
-  const u = urlCache.get(key);
+  const u = artUrlCache.urls[key];
   if (u) {
     URL.revokeObjectURL(u);
-    urlCache.delete(key);
+    const next = { ...artUrlCache.urls };
+    delete next[key];
+    artUrlCache.urls = next;
   }
 }
 
 export function wipeArtUrlCache() {
-  for (const key of [...urlCache.keys()]) revokeArtCached(key);
+  for (const key of Object.keys(artUrlCache.urls)) revokeArtCached(key);
 }
 
 async function blobUrlFor(
@@ -252,13 +258,44 @@ async function blobUrlFor(
   dirParts: string[],
   fileName: string,
 ): Promise<string | null> {
-  const cached = urlCache.get(cacheKey);
+  const cached = artUrlCache.urls[cacheKey];
   if (cached) return cached;
   const blob = await readBinary(dirParts, fileName);
   if (!blob) return null;
   const url = URL.createObjectURL(blob);
-  urlCache.set(cacheKey, url);
+  artUrlCache.urls = { ...artUrlCache.urls, [cacheKey]: url };
   return url;
+}
+
+/** Overwrite OPFS + publish a new blob URL when this artist is in Downloads. */
+export async function refreshArtistArtFile(
+  id: string,
+  artistDict: ArtistListItem,
+) {
+  if (!id || id === "_unknown") return;
+  const existing = await getOne<CatalogArtistRecord>("artists", id);
+  if (!existing) return;
+  try {
+    const res = await fetch(artistImageUrl(artistDict, "thumb"));
+    if (!res.ok) return;
+    await writeFromResponse(
+      artistCoverDirParts(),
+      artistCoverFileName(id, "thumb"),
+      res,
+    );
+    const blob = await readBinary(
+      artistCoverDirParts(),
+      artistCoverFileName(id, "thumb"),
+    );
+    if (!blob) return;
+    const key = `artist:${id}:thumb`;
+    const prev = artUrlCache.urls[key];
+    const nextUrl = URL.createObjectURL(blob);
+    artUrlCache.urls = { ...artUrlCache.urls, [key]: nextUrl };
+    if (prev) URL.revokeObjectURL(prev);
+  } catch (err: unknown) {
+    console.warn("Artist art refresh failed", err);
+  }
 }
 
 /**

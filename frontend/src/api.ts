@@ -17,6 +17,8 @@ export interface ArtistListItem {
   album_count: number;
   track_count: number;
   has_image?: boolean;
+  has_preferred_image?: boolean;
+  preferred_rev?: number;
 }
 
 /** Today's GET /api/browse directory row. */
@@ -51,7 +53,7 @@ export interface ItemsResponse<T> {
   tracks?: unknown[];
 }
 
-function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+export function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const headers = { ...diagRequestHeaders(), ...(init.headers || {}) };
   return fetch(url, { ...init, headers });
 }
@@ -142,7 +144,11 @@ export function coverUrl(
  * Artist profile image URL by artist id.
  */
 export function artistImageUrl(
-  artistOrId: string | { id?: string } | null | undefined,
+  artistOrId:
+    | string
+    | { id?: string; preferred_rev?: number; has_preferred_image?: boolean }
+    | null
+    | undefined,
   size: "full" | "thumb" = "thumb",
   bust = false,
 ): string {
@@ -153,8 +159,17 @@ export function artistImageUrl(
         ? artistOrId.id
         : null;
   if (!id) return "/static/img/placeholder.svg";
-  const base = `/api/artist-image?artist_id=${encodeURIComponent(id)}&size=${size}`;
-  return bust ? `${base}&t=${Date.now()}` : base;
+  const rev =
+    typeof artistOrId === "object" &&
+    artistOrId &&
+    typeof artistOrId.preferred_rev === "number" &&
+    artistOrId.preferred_rev !== 0
+      ? artistOrId.preferred_rev
+      : 0;
+  let url = `/api/artist-image?artist_id=${encodeURIComponent(id)}&size=${size}`;
+  if (rev) url += `&rev=${rev}`;
+  if (bust) url += `&t=${Date.now()}`;
+  return url;
 }
 
 /** Stream URL — track id required. */

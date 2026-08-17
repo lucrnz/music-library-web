@@ -7,6 +7,7 @@ import {
   fetchAlbumTracks,
   fetchArtistAlbums,
 } from "@/api";
+import { isLocallyPlayableDownload } from "@/downloads/catalog";
 import { downloadTracks } from "@/downloads/ui";
 import { downloads } from "@/downloads/state";
 import { addToQueue } from "@/stores/playlist";
@@ -15,6 +16,27 @@ import type { Track } from "@/models/track";
 
 export async function addAllForFolder(path: string): Promise<void> {
   await addToQueue(await collectTracks(path || ""));
+}
+
+export async function collectArtistDownloadTracks(
+  artistId: string,
+): Promise<{ remaining: Track[]; playableCount: number }> {
+  if (!artistId) return { remaining: [], playableCount: 0 };
+  const albumList = await fetchArtistAlbums(artistId);
+  const trackLists = await Promise.all(
+    albumList.map((album) => fetchAlbumTracks(album.id)),
+  );
+  let playableCount = 0;
+  const remaining: Track[] = [];
+  for (const track of trackLists.flat()) {
+    if (!track.id || track.isMissing) continue;
+    if (isLocallyPlayableDownload(track.id)) {
+      playableCount += 1;
+      continue;
+    }
+    remaining.push(track);
+  }
+  return { remaining, playableCount };
 }
 
 export async function addAllForArtist(artistId: string): Promise<void> {
