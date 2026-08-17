@@ -9,6 +9,7 @@ from musicweb.artist_image import ArtistImageStore
 from musicweb.config import Settings, load_settings
 from musicweb.cover import CoverStore
 from musicweb.db.engine import Database, init_database
+from musicweb.images import WebpAssetStore
 from musicweb.jobs import LibraryJobRunner
 from musicweb.library import Library
 from musicweb.runtime.lock import is_data_dir_locked
@@ -21,6 +22,7 @@ class RuntimeServices:
     library: Library
     cover_store: CoverStore
     artist_image_store: ArtistImageStore
+    preferred_artist_image_store: WebpAssetStore
     jobs: LibraryJobRunner
 
     def close(self) -> None:
@@ -55,6 +57,9 @@ def bootstrap_services(
     )
     cover_store = CoverStore(settings.musicweb_data_dir)
     artist_image_store = ArtistImageStore(settings.musicweb_data_dir)
+    preferred_artist_image_store = WebpAssetStore(
+        settings.musicweb_data_dir / "covers" / "artists-preferred"
+    )
     jobs = LibraryJobRunner(
         database, library, cover_store, artist_image_store, settings
     )
@@ -64,5 +69,6 @@ def bootstrap_services(
         library=library,
         cover_store=cover_store,
         artist_image_store=artist_image_store,
+        preferred_artist_image_store=preferred_artist_image_store,
         jobs=jobs,
     )

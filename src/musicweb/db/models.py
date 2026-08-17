@@ -28,6 +28,10 @@ class Artist(Base):
     album_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     track_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     has_image: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    has_preferred_image: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    preferred_rev: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     mbid: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     image_source: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     image_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)

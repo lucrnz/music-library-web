@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
@@ -16,7 +16,25 @@ from musicweb.db.models import Album, Artist, Track
 from musicweb.db.repositories import tracks as tracks_repo
 from musicweb.db.session import get_db
 from musicweb.library import Library
-from musicweb.routes.deps import artist_image_store, cover_store, library, transcoder
+from musicweb.artist_images.preferred import (
+    PreferredImageTooLarge,
+    PreferredImageUndecodable,
+    apply_preferred_upload,
+    revert_preferred,
+)
+from musicweb.artist_images.resolve import (
+    pick_artist_image_path,
+    reconcile_artist_image_flags,
+)
+from musicweb.config import ARTIST_IMAGE_MAX_BYTES
+from musicweb.routes.serializers import artist_dict
+from musicweb.routes.deps import (
+    artist_image_store,
+    cover_store,
+    library,
+    preferred_artist_image_store,
+    transcoder,
+)
 from musicweb.transcode import (
     DEFAULT_PROFILE_TAG,
     browser_profiles,
@@ -339,17 +357,60 @@ async def artist_image(
     size: Literal["full", "thumb"] = Query(default="full"),
     db: Session = Depends(get_db),
 ) -> Response:
-    store = artist_image_store(request)
+    scanned = artist_image_store(request)
+    preferred = preferred_artist_image_store(request)
     artist = db.get(Artist, artist_id)
     if artist is None:
         raise HTTPException(status_code=404, detail="Artist not found")
 
-    hit = store.image_path(artist_id, size)
+    reconcile_artist_image_flags(
+        artist,
+        preferred.has(artist_id),
+        scanned.has_image(artist_id),
+    )
+    hit = pick_artist_image_path(
+        preferred.get_path(artist_id, size),
+        scanned.image_path(artist_id, size),
+    )
     if hit is not None:
         return FileResponse(hit, media_type="image/webp", headers=_COVER_HEADERS)
 
-    # Keep DB flag honest if files were deleted externally.
-    if artist.has_image:
-        artist.has_image = store.has_image(artist_id)
-
     return _placeholder_response(size)
+
+
+@router.post("/artist-image")
+async def artist_image_upload(
+    request: Request,
+    artist_id: str = Query(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> dict:
+    store = preferred_artist_image_store(request)
+    artist = db.get(Artist, artist_id)
+    if artist is None:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    if file.size is not None and file.size > ARTIST_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large")
+    data = await file.read(ARTIST_IMAGE_MAX_BYTES + 1)
+    try:
+        apply_preferred_upload(store, artist, data)
+    except PreferredImageTooLarge as exc:
+        raise HTTPException(status_code=413, detail="Image too large") from exc
+    except PreferredImageUndecodable as exc:
+        raise HTTPException(status_code=400, detail="Could not decode image") from exc
+    return artist_dict(artist)
+
+
+@router.delete("/artist-image")
+def artist_image_delete(
+    request: Request,
+    artist_id: str = Query(...),
+    db: Session = Depends(get_db),
+) -> dict:
+    store = preferred_artist_image_store(request)
+    artist = db.get(Artist, artist_id)
+    if artist is None:
+        raise HTTPException(status_code=404, detail="Artist not found")
+    revert_preferred(store, artist)
+    return artist_dict(artist)

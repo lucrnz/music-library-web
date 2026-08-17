@@ -129,6 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.database = rt.database
     app.state.cover_store = rt.cover_store
     app.state.artist_image_store = rt.artist_image_store
+    app.state.preferred_artist_image_store = rt.preferred_artist_image_store
     app.state.jobs = rt.jobs
     # Back-compat alias for code still using .scanner
     app.state.scanner = rt.jobs

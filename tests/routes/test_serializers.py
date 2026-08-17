@@ -1,7 +1,7 @@
 """API serializer shapes without HTTP."""
 
 from musicweb.db.models import Album, Artist, Track, TrackLyrics
-from musicweb.routes.serializers import album_dict, lyrics_dict, track_dict
+from musicweb.routes.serializers import album_dict, artist_dict, lyrics_dict, track_dict
 
 
 def _track(**overrides) -> Track:
@@ -41,6 +41,26 @@ def test_track_dict_missing_path_is_null():
     body = track_dict(track)
     assert body["path"] is None
     assert body["is_missing"] is True
+
+
+def test_artist_dict_includes_preferred_keys():
+    artist = Artist(
+        id="art",
+        name="Artist",
+        name_norm="artist",
+        sort_name="artist",
+        album_count=1,
+        track_count=1,
+        has_image=True,
+        has_preferred_image=True,
+        preferred_rev=4,
+    )
+    body = artist_dict(artist)
+    assert body["has_image"] is True
+    assert body["has_preferred_image"] is True
+    assert body["preferred_rev"] == 4
+    assert body["id"] == "art"
+    assert body["name"] == "Artist"
 
 
 def test_album_dict_lossy_kind():

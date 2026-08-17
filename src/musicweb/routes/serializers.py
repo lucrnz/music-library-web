@@ -38,6 +38,8 @@ def artist_dict(artist: Artist) -> dict:
         "album_count": artist.album_count,
         "track_count": artist.track_count,
         "has_image": bool(artist.has_image),
+        "has_preferred_image": bool(artist.has_preferred_image),
+        "preferred_rev": int(artist.preferred_rev or 0),
     }
 
 
