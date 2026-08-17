@@ -21,7 +21,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 - `AGENTS.md`: short agent/human operating rules.
 - `src/musicweb/`: application package.
 - `frontend/`: Vite + pnpm Vue SPA (source); `frontend/dist/` is gitignored build output.
-- `tests/`: automated tests (pytest); smoke coverage starts with package importability. Frontend smoke: `pnpm --dir frontend test`.
+- `tests/`: pytest (existing `test_*.py` plus `tests/<package>/`). Frontend tests: `frontend/tests/`. How to run and what we never boot: `docs/development/testing.md`.
 
 ## Package layout (`src/musicweb`)
 

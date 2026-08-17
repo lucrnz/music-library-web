@@ -26,6 +26,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (Vite + pnpm). Stre
 - [Setup (operator on-ramp)](docs/setup.md)
 - [Commands](docs/development/commands.md)
 - [Project structure](docs/development/project-structure.md)
+- [Testing](docs/development/testing.md)
 - [Environment and config](docs/development/environment.md)
 - [Architecture](docs/architecture/index.md)
 - [Audio quality and product guidelines](docs/product/core-guidelines.md)

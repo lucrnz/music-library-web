@@ -26,6 +26,7 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 - `docs/development/environment.md`: environment variables and config ownership.
 - `docs/development/commands.md`: install, run, Alembic CLI.
 - `docs/development/project-structure.md`: where code lives and what each package owns.
+- `docs/development/testing.md`: pytest and Vitest — what we test, how to run, what we never boot.
 
 ## Architecture and systems
 
