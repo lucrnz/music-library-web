@@ -32,6 +32,28 @@
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
 }
 
+#view-playlist .view-actions .pill {
+  min-width: 40px;
+  padding: 6px;
+  justify-content: center;
+}
+
+#view-playlist .view-actions .pill span {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  #view-playlist .view-actions .pill {
+    min-width: 0;
+    padding: 6px 14px;
+    justify-content: center;
+  }
+
+  #view-playlist .view-actions .pill span {
+    display: inline;
+  }
+}
+
 .search-bar {
   padding: 0 12px 10px;
   flex-shrink: 0;

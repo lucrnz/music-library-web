@@ -293,16 +293,29 @@ const route = useRoute();
             type="button"
             class="pill"
             title="Download queue"
+            aria-label="Download queue"
             @click="onDownloadQueue"
           ><Icon name="download" /><span>Download</span></button>
-          <button type="button" class="pill" title="Save queue as playlist" @click="onSave">Save</button>
+          <button
+            type="button"
+            class="pill"
+            title="Save queue as playlist"
+            aria-label="Save queue as playlist"
+            @click="onSave"
+          ><Icon name="save" /><span>Save</span></button>
           <button
             v-if="pl.editing && pl.length"
             type="button"
             class="pill danger"
+            aria-label="Clear all"
             @click="onClear"
-          >Clear all</button>
-          <button type="button" class="pill" @click="toggleEdit">
+          ><Icon name="trash" /><span>Clear all</span></button>
+          <button
+            type="button"
+            class="pill"
+            :aria-label="pl.editing ? 'Done' : 'Edit'"
+            @click="toggleEdit"
+          >
             <Icon name="edit" /><span>{{ pl.editing ? 'Done' : 'Edit' }}</span>
           </button>
         </div>
