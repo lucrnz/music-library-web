@@ -34,7 +34,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (Vite + pnpm). Stre
 - [Migrations](docs/database/migrations.md)
 - [Frontend conventions](docs/frontend/conventions.md)
 - [Transcoding](docs/systems/transcoding.md)
-- [Library scan](docs/systems/library-scan.md)
+- [Library scan](docs/systems/library-scan.md) — preferred artist files under `covers/artists-preferred/` are sacred to scan
 - [PWA shell](docs/systems/pwa.md)
 - [Offline downloads](docs/systems/downloads.md)
 - [Playback and quality](docs/systems/playback.md)

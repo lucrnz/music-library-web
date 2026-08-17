@@ -43,7 +43,7 @@ Exact skip/rehash heuristics live in source; docs only state the product intent.
 ## Enrichment policies
 
 - **Covers:** embedded art or common folder filenames; stored once as full + thumb WebP.
-- **Artist images:** optional remote providers need keys/email in env; local `artist.jpg` / `artist.png` works without keys. Rate limits and retry cooldowns are source constants in `config.py`.
+- **Artist images:** optional remote providers need keys/email in env; local `artist.jpg` / `artist.png` works without keys. Rate limits and retry cooldowns are source constants in `config.py`. Scan writes only `covers/artists/`. An operator override may live beside that pair under `covers/artists-preferred/`; fetch and `--force` must not delete it. `GET /api/artist-image` serves the override first (`artist_images/resolve.py`).
 - **Lyrics:** LRCLIB needs no API key; retries/cooldowns are source constants.
 
 ## Guardrails

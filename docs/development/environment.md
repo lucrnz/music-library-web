@@ -73,6 +73,7 @@ $MUSICWEB_DATA_DIR/
   library.db
   covers/albums/
   covers/artists/
+  covers/artists-preferred/
   diag/events-YYYY-MM-DD.jsonl
 ```
 

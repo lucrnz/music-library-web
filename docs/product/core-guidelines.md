@@ -20,6 +20,7 @@ Musicweb is a **personal LAN library player**: browse and stream your own lossle
 - **Honest capability:** Codec profile pickers should list only formats the **current browser can actually decode** (runtime media probes), not optimistic `canPlayType` / UA guesses alone. See `docs/systems/playback.md`.
 - **Quality preferences (client):** Streaming quality can differ for Wi‑Fi vs mobile data when the browser reports `connection.type` (hidden on typical desktop). Download quality is independent. Playback may prefer a local download when it is at least as good as the active stream profile (user-selectable policy). Network cost hints never replace an explicit user setting. See `docs/systems/playback.md`.
 - **Offline downloads (client):** Optional download-to-device features use browser storage (OPFS); they must not corrupt the server index. Optional “only download on Wi‑Fi” pauses the queue on cellular when connection type is detectable. See `docs/systems/downloads.md` and `docs/systems/connectivity.md`.
+- **Custom artist art:** an operator can set one library-wide preferred portrait from a device file (cropped square). It is a server-side display override, LAN-global and reversible, never written back into the music library tree. Scan still fills `covers/artists/` and must not delete the override.
 
 ## Audio quality principles
 
