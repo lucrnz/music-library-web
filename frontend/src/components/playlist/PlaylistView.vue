@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { coverUrl, fetchPlaylistTracks } from "@/api";
 import { isLocallyPlayableDownload } from "@/downloads/catalog";
 import { connectivity } from "@/stores/connectivity";
-import { isDesktopViewport, useDesktopViewport } from "@/layout";
+import { useDesktopViewport } from "@/layout";
 import { formatTime } from "@/util";
 import {
   pl,
@@ -29,6 +29,8 @@ import { kindForTrack } from "@/lossyKind";
 import Icon from "@/components/icons/Icon.vue";
 import LossyMark from "@/components/lossy/LossyMark.vue";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
+import { isDesktopContextMenu } from "@/components/menu/rowActionMenu";
+import { useRowActionMenu } from "@/components/menu/useRowActionMenu";
 import {
   buildQueueMenuItems,
   slotKey,
@@ -50,8 +52,8 @@ const route = useRoute();
     const draggingFrom = ref(-1);
     const menuIndex = ref(-1);
     const menuOpenedKey = ref("");
-    const menuAnchor = ref<MenuAnchor | null>(null);
-    const menuRestoreEl = ref<HTMLElement | null>(null);
+    const { menuAnchor, menuRestoreEl, closeMenu: closeMenuChrome, openMenu: openMenuChrome } =
+      useRowActionMenu();
 
     async function refreshSaved() {
       try {
@@ -72,8 +74,7 @@ const route = useRoute();
     function closeMenu() {
       menuIndex.value = -1;
       menuOpenedKey.value = "";
-      menuAnchor.value = null;
-      menuRestoreEl.value = null;
+      closeMenuChrome();
     }
 
     const menuSlotMatches = computed(() =>
@@ -97,8 +98,7 @@ const route = useRoute();
       if (!track) return;
       menuIndex.value = index;
       menuOpenedKey.value = slotKey(track);
-      menuAnchor.value = anchor;
-      menuRestoreEl.value = restoreEl || null;
+      openMenuChrome(anchor, restoreEl);
     }
 
     function onMenuClick(index: number, e: MouseEvent) {
@@ -117,7 +117,7 @@ const route = useRoute();
     function onRowContextMenu(index: number, e: MouseEvent) {
       e.preventDefault();
       if (pl.editing) return;
-      if (!isDesktopViewport()) return;
+      if (!isDesktopContextMenu()) return;
       const current = e.currentTarget;
       if (!(current instanceof HTMLElement)) return;
       const btn = current.querySelector(".row-menu");
