@@ -34,7 +34,7 @@ Exact skip/rehash heuristics live in source; docs only state the product intent.
 
 1. Walk eligible indexable files (lossless, plus MP3/AAC when the flag is on). Skip a lossy file when a lossless sibling exists in the same folder.
 2. Fingerprint / identity resolution → stable track IDs.
-3. Batch upsert track and graph metadata (tags, audio tech for later encode policy).
+3. Batch upsert track and graph metadata (tags, audio tech for later encode policy). Scan stores the file’s average/nominal bitrate and, for MP3 and AAC, an encoding mode when it can tell. MP3 mode comes from the file header. AAC-in-m4a compares the MP4 `esds` max vs average bitrate (equal → CBR, max higher → VBR; otherwise leave empty). A **full** scan fills existing libraries; quick scan does not re-read unchanged files.
 4. Cover extraction to durable WebP under the data dir (missing art).
 5. Artist portrait fetch cascade for artists still missing images (local file → remote providers when configured).
 6. Lyrics fetch for tracks still missing lyrics (local sidecars → LRCLIB).
