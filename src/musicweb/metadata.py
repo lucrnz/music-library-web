@@ -9,6 +9,7 @@ from pathlib import Path
 from mutagen import File as MutagenFile
 from mutagen.mp4 import MP4
 
+from musicweb.scan.bitrate_mode import lossy_bitrate_mode
 from musicweb.scan.formats import mp4_kind
 
 _YEAR_RE = re.compile(r"(\d{4})")
@@ -31,6 +32,7 @@ class TrackMetadata:
     channels: int | None
     source_codec: str | None
     bitrate_kbps: int | None = None
+    bitrate_mode: str | None = None
 
 
 def _first(tags: dict | None, *keys: str) -> str | None:
@@ -163,6 +165,7 @@ def read_metadata(path: Path) -> TrackMetadata:
     channels: int | None = None
     source_codec: str | None = None
     bitrate_kbps: int | None = None
+    bitrate_mode: str | None = None
 
     try:
         audio = MutagenFile(path, easy=True)
@@ -180,6 +183,8 @@ def read_metadata(path: Path) -> TrackMetadata:
             bit_depth=bit_depth,
             channels=channels,
             source_codec=source_codec,
+            bitrate_kbps=bitrate_kbps,
+            bitrate_mode=bitrate_mode,
         )
 
     if audio is None:
@@ -199,6 +204,8 @@ def read_metadata(path: Path) -> TrackMetadata:
                 bit_depth=bit_depth,
                 channels=channels,
                 source_codec=source_codec,
+                bitrate_kbps=bitrate_kbps,
+                bitrate_mode=bitrate_mode,
             )
         if audio is None:
             return TrackMetadata(
@@ -214,6 +221,8 @@ def read_metadata(path: Path) -> TrackMetadata:
                 bit_depth=bit_depth,
                 channels=channels,
                 source_codec=source_codec,
+                bitrate_kbps=bitrate_kbps,
+                bitrate_mode=bitrate_mode,
             )
 
     info = getattr(audio, "info", None)
@@ -226,6 +235,11 @@ def read_metadata(path: Path) -> TrackMetadata:
         channels = tech["channels"]
         source_codec = tech["source_codec"]
         bitrate_kbps = tech["bitrate_kbps"]
+        bitrate_mode = lossy_bitrate_mode(
+            source_codec=source_codec,
+            info=info,
+            path=path,
+        )
 
     tags = getattr(audio, "tags", None)
     if tags is None:
@@ -242,6 +256,8 @@ def read_metadata(path: Path) -> TrackMetadata:
             bit_depth=bit_depth,
             channels=channels,
             source_codec=source_codec,
+            bitrate_kbps=bitrate_kbps,
+            bitrate_mode=bitrate_mode,
         )
 
     if hasattr(tags, "get"):
@@ -320,4 +336,6 @@ def read_metadata(path: Path) -> TrackMetadata:
         bit_depth=bit_depth,
         channels=channels,
         source_codec=source_codec,
+        bitrate_kbps=bitrate_kbps,
+        bitrate_mode=bitrate_mode,
     )

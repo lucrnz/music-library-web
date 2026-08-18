@@ -99,6 +99,7 @@ class Track(Base):
     source_codec: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_lossy: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     bitrate_kbps: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bitrate_mode: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
     is_missing: Mapped[bool] = mapped_column(

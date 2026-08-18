@@ -35,6 +35,7 @@ def _meta(path: Path):
         channels=2,
         source_codec="flac" if path.suffix == ".flac" else "mp3",
         bitrate_kbps=None,
+        bitrate_mode=None,
     )
 
 

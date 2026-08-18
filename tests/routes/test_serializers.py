@@ -85,6 +85,27 @@ def test_album_dict_lossy_kind():
     assert album_dict(album)["lossy_kind"] == "mixed"
 
 
+def test_track_dict_includes_bitrate_mode():
+    album = Album(
+        id="alb",
+        artist_id="art",
+        title="Album",
+        title_norm="album",
+        track_count=1,
+        has_cover=False,
+        lossy_kind="mp3",
+    )
+    vbr = _track(is_lossy=True, source_codec="mp3", bitrate_kbps=192, bitrate_mode="vbr")
+    vbr.album = album
+    body = track_dict(vbr)
+    assert body["bitrate_kbps"] == 192
+    assert body["bitrate_mode"] == "vbr"
+
+    unset = _track()
+    unset.album = album
+    assert track_dict(unset)["bitrate_mode"] is None
+
+
 def test_lyrics_dict_pending_and_instrumental():
     pending = lyrics_dict("t1", None)
     assert pending["status"] == "pending"

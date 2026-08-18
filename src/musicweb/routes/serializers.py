@@ -27,6 +27,7 @@ def track_dict(track: Track) -> dict:
         "is_lossy": bool(track.is_lossy),
         "source_codec": track.source_codec,
         "bitrate_kbps": track.bitrate_kbps,
+        "bitrate_mode": track.bitrate_mode,
     }
 
 

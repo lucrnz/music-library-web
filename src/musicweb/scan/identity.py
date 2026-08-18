@@ -202,6 +202,7 @@ def apply_track_fields(
     track.source_codec = meta.source_codec
     track.is_lossy = source_codec_is_lossy(meta.source_codec)
     track.bitrate_kbps = meta.bitrate_kbps
+    track.bitrate_mode = meta.bitrate_mode
     track.size_bytes = size
     track.mtime_ns = mtime_ns
     track.is_missing = False

@@ -146,3 +146,33 @@ def test_apply_track_fields_writes_columns_and_fts(db, tmp_path):
         assert track.size_bytes == 3
         assert track.mtime_ns == 9
         assert fts_search_track_ids(session, "parano") == [tid]
+        assert track.bitrate_mode is None
+
+
+def test_apply_track_fields_persists_lossy_bitrate_mode(db, tmp_path):
+    path = tmp_path / "song.mp3"
+    path.write_bytes(b"x")
+    tid = track_id_for("sha256", "fp-mp3")
+    with db.session() as session:
+        track = resolve_track(
+            session,
+            fingerprint="fp-mp3",
+            fingerprint_algo="sha256",
+            track_id=tid,
+            rel_path="song.mp3",
+            existing_by_path=None,
+            now="t0",
+        )
+        for mode in ("cbr", "vbr", "abr"):
+            apply_track_fields(
+                session,
+                track,
+                path=Path(path),
+                size=3,
+                mtime_ns=9,
+                meta=_meta(source_codec="mp3", bitrate_kbps=320, bitrate_mode=mode),
+                now="t1",
+            )
+            assert track.bitrate_kbps == 320
+            assert track.bitrate_mode == mode
+        session.commit()
