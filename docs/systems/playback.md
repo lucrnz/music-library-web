@@ -4,7 +4,7 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 
 ## Source of truth
 
-- Player store: `frontend/src/stores/player.ts` (loaders); `playerState.ts`, `playerSession.ts`, `playerPrefs.ts`
+- Player store: `frontend/src/stores/player.ts` (loaders); `playerState.ts`, `playerSession.ts`, `playerPrefs.ts`, `playbackPosition.ts`
 - Quality / network prefs: `frontend/src/stores/settings.ts`
 - Session queue + prepare helpers: `frontend/src/stores/playlist.ts`
 - Delivery tag / lossy kind: `frontend/src/lossyKind.ts`
@@ -35,7 +35,15 @@ Resolution is decision-first: load catalog record when downloads are enabled, ap
 
 When downloads are enabled and `connectivity.canUseRemote` is false, queue rows without a playable local file (`trackDownloadState` `ready` or `other`) are shown unavailable (`PlaylistView`). Cursor advance is `stepNext` / `stepPrev` on a record; skip is `pl.advanceToPlayable` (clone + those steps). `playNext` / `playPrev` stay thin; a tap still `playIndex`s that index. `computeNextIndex` / `peekNextIndex` stay download-agnostic. Current playback is not yanked when reachability drops.
 
-The reactive `player` record lives in `playerState.js`. Cover / Media Session metadata: `playerSession.js`. Volume / expanded storage: `playerPrefs.js`. Load and sinks stay in `player.js`.
+The reactive `player` record lives in `playerState.js`. Cover / Media Session metadata: `playerSession.js`. Volume / expanded storage: `playerPrefs.js`. Resume position: `playbackPosition.ts` (`musicweb.playbackPosition.v1`). Load and sinks stay in `player.js`.
+
+## Resume position
+
+The current track’s last paused (or page-hidden) time is one `{ trackId, seconds }` slot in `musicweb.playbackPosition.v1`, not the playlist blob.
+
+It is written on any pause, on page hide / document hidden, and on seek while paused. Boot hydrates the now-playing bar from that slot and the track tag duration. Media is not loaded and Play is not started. Seek runs only on the first Play while `playSource` is still `none`. An already-loaded tap of the current queue row still starts at 0 and clears the slot.
+
+Apply only when the saved id matches the current track. Clear on stop, skip, track end, and a different-track load. A save within 3 seconds of duration (or past the end) restores at 0. Exclusive companion uses the same rules; seek waits until duration is known. Auto-play on restore is out of product scope.
 
 ## Quality preferences
 
