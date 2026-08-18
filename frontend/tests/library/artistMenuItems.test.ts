@@ -29,23 +29,54 @@ describe("buildArtistMenuItems", () => {
   it("omits download when disabled and omit use-library without preferred", () => {
     const items = buildArtistMenuItems({
       artist: artist(),
-      downloadsEnabled: false,
+      includePhoto: true,
+      addAll: () => {},
     });
-    expect(items.map((i) => i.id)).toEqual(["add-all", "change-photo"]);
+    expect(items.map((i) => i.id)).toEqual([
+      "add-all",
+      "copy-artist",
+      "change-photo",
+    ]);
   });
 
   it("includes download and use-library when enabled / preferred", () => {
     artistArtOverlays.clear();
     const items = buildArtistMenuItems({
       artist: artist({ has_preferred_image: true }),
-      downloadsEnabled: true,
+      includePhoto: true,
+      addAll: () => {},
+      downloadAll: () => {},
     });
     expect(items.map((i) => i.id)).toEqual([
       "add-all",
       "download-all",
+      "copy-artist",
       "change-photo",
       "use-library",
     ]);
     expect(menuHasPreferred(artist({ has_preferred_image: true }))).toBe(true);
+  });
+
+  it("drops photo items when includePhoto is false", () => {
+    const items = buildArtistMenuItems({
+      artist: artist({ has_preferred_image: true }),
+      includePhoto: false,
+      addAll: () => {},
+      downloadAll: () => {},
+    });
+    expect(items.map((i) => i.id)).toEqual([
+      "add-all",
+      "download-all",
+      "copy-artist",
+    ]);
+  });
+
+  it("omits copy when the artist name is empty", () => {
+    const items = buildArtistMenuItems({
+      artist: artist({ name: "  " }),
+      includePhoto: false,
+      addAll: () => {},
+    });
+    expect(items.map((i) => i.id)).toEqual(["add-all"]);
   });
 });

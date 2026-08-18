@@ -12,6 +12,8 @@ import {
 import { router } from "@/router";
 import { playIndex, stopPlayback } from "@/stores/player";
 import { pl, removeIndices } from "@/stores/playlist";
+import { copyText } from "@/clipboard";
+import { copyAction } from "@/components/menu/copyItems";
 import { showToast } from "@/stores/ui";
 import type { ActionItem } from "@/components/menu/actionItem";
 import type { Track } from "@/models/track";
@@ -62,6 +64,38 @@ export function buildQueueMenuItems({
         router.push({ name: "artist", params: { artistId: track.artistId } });
       },
     });
+  }
+
+  for (const copy of [
+    copyAction({
+      id: "copy-title",
+      label: "Copy title",
+      value: track.title,
+      run: async (text) => {
+        if (!slotMatches(index, openedKey)) return;
+        await copyText(text);
+      },
+    }),
+    copyAction({
+      id: "copy-artist",
+      label: "Copy artist name",
+      value: track.artist,
+      run: async (text) => {
+        if (!slotMatches(index, openedKey)) return;
+        await copyText(text);
+      },
+    }),
+    copyAction({
+      id: "copy-album",
+      label: "Copy album name",
+      value: track.album,
+      run: async (text) => {
+        if (!slotMatches(index, openedKey)) return;
+        await copyText(text);
+      },
+    }),
+  ]) {
+    if (copy) items.push(copy);
   }
 
   const { kind } = downloadActionKind(track);

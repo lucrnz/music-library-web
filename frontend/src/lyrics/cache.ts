@@ -13,6 +13,12 @@ import { emptyLyrics, fromApiLyrics, type Lyrics } from "@/models/lyrics";
 
 const memory = new Map<string, Lyrics>();
 
+/** Sync read of the in-memory map only. Miss is undefined, not not_found. */
+export function peekLyricsMemory(trackId: string): Lyrics | undefined {
+  if (!trackId) return undefined;
+  return memory.get(trackId);
+}
+
 function isTerminalSuccess(payload: Lyrics | null | undefined): boolean {
   if (!payload) return false;
   const status = payload.status;
