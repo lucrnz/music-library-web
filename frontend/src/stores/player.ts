@@ -27,6 +27,12 @@ import {
   getExclusiveProfileTag,
   isExclusiveEnabled,
 } from "@/stores/exclusiveAudio";
+import {
+  clearPlaybackPosition,
+  readPlaybackPosition,
+  resumeSeconds,
+  writePlaybackPosition,
+} from "@/stores/playbackPosition";
 import { pl, commit, trackNeedsStreamPrepare } from "@/stores/playlist";
 import { readVolume, writeVolume } from "@/stores/playerPrefs";
 import {
@@ -63,6 +69,49 @@ let nearEndPrepareSent = false;
 
 /** Current playIndex / stopPlayback load generation (stale-await guard). */
 let playGen = 0;
+
+/** Cold-load resume seek waiting for sink duration, keyed by playGen. */
+let pendingResume: { gen: number; seconds: number } | null = null;
+
+function persistCurrentPosition() {
+  const id = pl.current?.id;
+  const seconds = player.currentTime;
+  if (!id || !Number.isFinite(seconds) || seconds < 0) return;
+  writePlaybackPosition(id, seconds);
+}
+
+function persistPausePosition() {
+  if (player.playSource !== "streaming" && player.playSource !== "downloaded") {
+    return;
+  }
+  if (!activeSink.paused) return;
+  persistCurrentPosition();
+}
+
+function flushPendingResume() {
+  if (!pendingResume || pendingResume.gen !== playGen) {
+    pendingResume = null;
+    return;
+  }
+  if (player.playSource !== "streaming" && player.playSource !== "downloaded") {
+    return;
+  }
+  const dur = activeSink.duration;
+  if (!(dur > 0)) return;
+  const trackId = pl.current?.id;
+  const seconds = resumeSeconds({
+    trackId,
+    saved: trackId
+      ? { trackId, seconds: pendingResume.seconds }
+      : null,
+    duration: dur,
+  });
+  pendingResume = null;
+  if (seconds != null && seconds > 0) activeSink.seek(seconds);
+  player.currentTime = activeSink.currentTime || 0;
+  if (Number.isFinite(dur) && dur > 0) player.duration = dur;
+  updatePositionState();
+}
 
 function failCtx(extra?: Record<string, unknown> | null): Record<string, unknown> {
   return {
@@ -234,13 +283,18 @@ function onSinkEnded() {
     Promise.resolve(activeSink.resume()).catch(console.error);
     return;
   }
+  clearPlaybackPosition();
   playNext();
 }
 
 function onSinkTime(t: number, d: number) {
   if (player.seeking) return;
-  player.currentTime = t || 0;
   if (Number.isFinite(d) && d > 0) player.duration = d;
+  if (pendingResume && pendingResume.gen === playGen) {
+    flushPendingResume();
+    return;
+  }
+  player.currentTime = t || 0;
   updatePositionState();
   maybePrepareNext();
 }
@@ -263,6 +317,7 @@ function wireSinkHandlers() {
           t.duration = d;
           commit();
         }
+        flushPendingResume();
       }
     },
     onEnded: onSinkEnded,
@@ -312,6 +367,7 @@ function wireSinkHandlers() {
     },
     onPauseState: () => {
       syncTransportFlags();
+      persistPausePosition();
     },
   };
   htmlSink.setHandlers(handlers);
@@ -339,6 +395,7 @@ export function stopPlayback() {
   pl.index = -1;
   player.currentTime = 0;
   player.duration = 0;
+  clearPlaybackPosition();
   commit();
   syncTransportFlags();
   updateMediaSession();
@@ -582,7 +639,18 @@ async function playHtml(gen: number, track: Track | null | undefined) {
 
 export async function playIndex(index: number) {
   if (index < 0 || index >= pl.length) return;
+  const cold = player.playSource === "none";
+  const nextTrack = pl.tracks[index];
+  const seekTo = cold
+    ? resumeSeconds({
+        trackId: nextTrack?.id,
+        saved: readPlaybackPosition(),
+        duration: nextTrack?.duration,
+      })
+    : null;
+  if (seekTo == null) clearPlaybackPosition();
   const gen = beginLoad();
+  pendingResume = seekTo != null ? { gen, seconds: seekTo } : null;
   pl.index = index;
   if (pl.shuffle) {
     pl.shufflePos = pl.shuffleOrder.indexOf(index);
@@ -601,9 +669,11 @@ export async function playIndex(index: number) {
   setPlayNotice(null);
 
   if (isExclusiveEnabled()) {
-    return playExclusive(gen, track);
+    await playExclusive(gen, track);
+  } else {
+    await playHtml(gen, track);
   }
-  return playHtml(gen, track);
+  if (still(gen)) flushPendingResume();
 }
 
 function shouldSkipUnplayableQueue() {
@@ -684,10 +754,19 @@ export function cycleRepeat() {
 }
 
 export function seekToFraction(frac: number) {
-  const dur = activeSink.duration;
+  const sinkDur = activeSink.duration;
+  const dur =
+    Number.isFinite(sinkDur) && sinkDur > 0 ? sinkDur : player.duration;
   if (!Number.isFinite(dur) || dur <= 0) return;
-  activeSink.seek(frac * dur);
+  const seconds = Math.max(0, frac * dur);
+  if (player.playSource === "none") {
+    player.currentTime = seconds;
+    persistCurrentPosition();
+    return;
+  }
+  activeSink.seek(seconds);
   onSinkTime(activeSink.currentTime, dur);
+  if (activeSink.paused) persistCurrentPosition();
 }
 
 export function setVolume(v: number) {
@@ -724,7 +803,14 @@ export function initAudioListeners() {
       ) {
         activeSink.seek(details.seekTime);
         onSinkTime(activeSink.currentTime, activeSink.duration);
+        if (activeSink.paused) persistCurrentPosition();
       }
     });
   }
+
+  const persistOnHide = () => persistCurrentPosition();
+  window.addEventListener("pagehide", persistOnHide);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") persistOnHide();
+  });
 }

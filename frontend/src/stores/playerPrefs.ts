@@ -1,6 +1,10 @@
 /**
- * Volume / expanded persistence. Storage only — sink apply stays in player.ts.
+ * Volume / expanded / resume-position persistence. Sink apply stays in player.ts.
  */
+import {
+  readPlaybackPosition,
+  resumeSeconds,
+} from "@/stores/playbackPosition";
 import { pl } from "@/stores/playlist";
 import { player } from "@/stores/playerState";
 
@@ -62,4 +66,21 @@ export function setExpanded(open: boolean) {
 export function applyExpanded() {
   const want = readExpanded();
   player.expanded = !!(want && pl.length > 0);
+}
+
+/**
+ * Restore last paused/hidden position onto the player face.
+ * Call after loadPlaylist(); does not load media or start playback.
+ */
+export function applyPlaybackPosition() {
+  const t = pl.current;
+  if (!t?.id) return;
+  const seconds = resumeSeconds({
+    trackId: t.id,
+    saved: readPlaybackPosition(),
+    duration: t.duration,
+  });
+  if (seconds == null) return;
+  player.currentTime = seconds;
+  if (t.duration != null && t.duration > 0) player.duration = t.duration;
 }

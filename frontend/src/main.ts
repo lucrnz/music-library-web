@@ -5,7 +5,7 @@ import { createApp } from "vue";
 import { router } from "@/router";
 import App from "@/components/App.vue";
 import { loadPlaylist } from "@/stores/playlist";
-import { applyExpanded } from "@/stores/playerPrefs";
+import { applyExpanded, applyPlaybackPosition } from "@/stores/playerPrefs";
 import { refreshPlayerCovers } from "@/stores/playerSession";
 import { applyVolume, initAudioListeners } from "@/stores/player";
 import {
@@ -25,6 +25,7 @@ initDiag();
 loadPlaylist();
 applyVolume();
 applyExpanded();
+applyPlaybackPosition();
 initAudioListeners();
 // Connectivity store before codecs so the first probe report is mirrored.
 bindConnectivityStore();
