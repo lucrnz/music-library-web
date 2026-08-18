@@ -35,6 +35,7 @@ export function buildNowPlayingMenuItems({
     items.push({
       id: "copy-lyrics",
       label: "Copy lyrics",
+      icon: "copy",
       run: () => copyLyrics(),
     });
   }

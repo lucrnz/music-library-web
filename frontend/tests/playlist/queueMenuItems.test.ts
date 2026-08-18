@@ -61,6 +61,9 @@ describe("buildQueueMenuItems", () => {
     expect(remove).toBeGreaterThan(copy);
     expect(ids).toContain("copy-artist");
     expect(ids).toContain("copy-album");
+    expect(
+      items.filter((i) => i.id.startsWith("copy-")).every((i) => i.icon === "copy"),
+    ).toBe(true);
   });
 
   it("omits empty copies", () => {

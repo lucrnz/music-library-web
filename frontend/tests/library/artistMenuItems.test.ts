@@ -37,6 +37,7 @@ describe("buildArtistMenuItems", () => {
       "copy-artist",
       "change-photo",
     ]);
+    expect(items.find((i) => i.id === "copy-artist")?.icon).toBe("copy");
   });
 
   it("includes download and use-library when enabled / preferred", () => {

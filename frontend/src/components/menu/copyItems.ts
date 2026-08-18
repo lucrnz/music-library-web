@@ -20,6 +20,7 @@ export function copyAction({
   return {
     id,
     label,
+    icon: "copy",
     run: async () => {
       if (run) await run(text);
       else await copyText(text);

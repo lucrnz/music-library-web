@@ -39,13 +39,20 @@ const track: Track = {
 
 describe("buildAlbumMenuItems", () => {
   it("orders add, optional download, then copies", () => {
-    expect(
-      buildAlbumMenuItems({
-        album,
-        addAll: () => {},
-        download: () => {},
-      }).map((i) => i.id),
-    ).toEqual(["add-all", "download", "copy-album", "copy-artist"]);
+    const items = buildAlbumMenuItems({
+      album,
+      addAll: () => {},
+      download: () => {},
+    });
+    expect(items.map((i) => i.id)).toEqual([
+      "add-all",
+      "download",
+      "copy-album",
+      "copy-artist",
+    ]);
+    expect(items.filter((i) => i.id.startsWith("copy-")).every((i) => i.icon === "copy")).toBe(
+      true,
+    );
   });
 
   it("omits download and empty copies", () => {
@@ -58,16 +65,27 @@ describe("buildAlbumMenuItems", () => {
   });
 });
 
+function expectCopyIcons(items: { id: string; icon?: string }[]) {
+  expect(
+    items.filter((i) => i.id.startsWith("copy-")).every((i) => i.icon === "copy"),
+  ).toBe(true);
+}
+
 describe("buildTrackMenuItems", () => {
   it("orders add then copies", () => {
-    expect(
-      buildTrackMenuItems({
-        title: "Song",
-        artist: "A",
-        album: "LP",
-        addToPlaylist: () => {},
-      }).map((i) => i.id),
-    ).toEqual(["add-to-playlist", "copy-title", "copy-artist", "copy-album"]);
+    const items = buildTrackMenuItems({
+      title: "Song",
+      artist: "A",
+      album: "LP",
+      addToPlaylist: () => {},
+    });
+    expect(items.map((i) => i.id)).toEqual([
+      "add-to-playlist",
+      "copy-title",
+      "copy-artist",
+      "copy-album",
+    ]);
+    expectCopyIcons(items);
   });
 
   it("omits empty copies", () => {
@@ -82,24 +100,27 @@ describe("buildTrackMenuItems", () => {
 
 describe("buildFolderMenuItems", () => {
   it("copies name and path", () => {
-    expect(
-      buildFolderMenuItems({
-        dir: { name: "Jazz", path: "/music/Jazz" },
-        addAll: () => {},
-      }).map((i) => i.id),
-    ).toEqual(["add-all", "copy-folder-name", "copy-folder-path"]);
+    const items = buildFolderMenuItems({
+      dir: { name: "Jazz", path: "/music/Jazz" },
+      addAll: () => {},
+    });
+    expect(items.map((i) => i.id)).toEqual([
+      "add-all",
+      "copy-folder-name",
+      "copy-folder-path",
+    ]);
+    expectCopyIcons(items);
   });
 });
 
 describe("buildNowPlayingMenuItems", () => {
   it("is copy-focused then go-to", () => {
-    expect(
-      buildNowPlayingMenuItems({
-        track,
-        offerCopyLyrics: true,
-        copyLyrics: () => {},
-      }).map((i) => i.id),
-    ).toEqual([
+    const items = buildNowPlayingMenuItems({
+      track,
+      offerCopyLyrics: true,
+      copyLyrics: () => {},
+    });
+    expect(items.map((i) => i.id)).toEqual([
       "copy-title",
       "copy-artist",
       "copy-album",
@@ -107,6 +128,7 @@ describe("buildNowPlayingMenuItems", () => {
       "go-album",
       "go-artist",
     ]);
+    expectCopyIcons(items);
   });
 
   it("hides copy-lyrics when not offered", () => {
