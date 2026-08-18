@@ -64,6 +64,8 @@ export type LibraryBody =
 export interface LibraryPage {
   chrome: LibraryChrome;
   body: LibraryBody;
+  headerArtist?: ArtistListItem | null;
+  headerAlbum?: LibraryAlbum | null;
 }
 
 /**
@@ -71,8 +73,12 @@ export interface LibraryPage {
  * @param {LibraryBody} body
  * @returns {LibraryPage}
  */
-export function page(chrome: LibraryChrome, body: LibraryBody): LibraryPage {
-  return { chrome, body };
+export function page(
+  chrome: LibraryChrome,
+  body: LibraryBody,
+  extra?: Pick<LibraryPage, "headerArtist" | "headerAlbum">,
+): LibraryPage {
+  return { chrome, body, ...extra };
 }
 
 /**
@@ -155,30 +161,38 @@ export async function loadSearch(q: string): Promise<LibraryPage> {
 
 export async function loadArtistDetail(id: string): Promise<LibraryPage> {
   let title = "Artist";
+  let headerArtist: ArtistListItem | null = null;
   try {
     const artist = await fetchArtist(id);
     title = artist.name || "Artist";
+    headerArtist = artist;
   } catch {
     /* keep default */
   }
   const chrome = { title, showBack: true };
   const albums = await fetchArtistAlbums(id);
   if (!albums.length) {
-    return page(chrome, {
-      kind: "empty",
-      message: "No albums for this artist",
-    });
+    return page(
+      chrome,
+      {
+        kind: "empty",
+        message: "No albums for this artist",
+      },
+      { headerArtist },
+    );
   }
-  return page(chrome, { kind: "albumGrid", albums });
+  return page(chrome, { kind: "albumGrid", albums }, { headerArtist });
 }
 
 export async function loadAlbumDetail(id: string): Promise<LibraryPage> {
   let title = "Album";
   /** @type {string|undefined} */
   let backArtistId;
+  let headerAlbum: LibraryAlbum | null = null;
   try {
     const album = await fetchAlbum(id);
     title = album.title || "Album";
+    headerAlbum = album;
     const aid = album.artistId;
     if (aid) backArtistId = String(aid);
   } catch {
@@ -187,7 +201,7 @@ export async function loadAlbumDetail(id: string): Promise<LibraryPage> {
   const chrome = { title, showBack: true, backArtistId };
   const tracks = await fetchAlbumTracks(id);
   if (!tracks.length) {
-    return page(chrome, { kind: "empty", message: "No tracks" });
+    return page(chrome, { kind: "empty", message: "No tracks" }, { headerAlbum });
   }
   // Fallback: first track's album artist if album meta lacked id.
   if (!chrome.backArtistId && tracks[0]) {
@@ -195,7 +209,7 @@ export async function loadAlbumDetail(id: string): Promise<LibraryPage> {
     const aid = t.albumArtistId || t.artistId;
     if (aid) chrome.backArtistId = String(aid);
   }
-  return page(chrome, { kind: "tracks", tracks });
+  return page(chrome, { kind: "tracks", tracks }, { headerAlbum });
 }
 
 export async function loadArtistsList(): Promise<LibraryPage> {

@@ -7,7 +7,19 @@ import { useRouter } from "vue-router";
 import { openCropFromFile } from "@/artistArt/pickFile";
 import { coverSrc } from "@/artistArt/state";
 import { submitPreferredCrop } from "@/artistArt/submit";
-import { buildArtistMenuItems } from "@/components/library/artistMenuItems";
+import { buildAlbumMenuItems } from "@/components/library/albumMenuItems";
+import {
+  buildArtistMenuItems,
+  runArtistDownloadAll,
+} from "@/components/library/artistMenuItems";
+import { buildFolderMenuItems } from "@/components/library/folderMenuItems";
+import { buildTrackMenuItems } from "@/components/library/trackMenuItems";
+import {
+  openMenuKey,
+  type OpenMenu,
+} from "@/components/library/entityMenu";
+import type { EntityActions } from "@/components/library/EntityListHost.vue";
+import { queueOnly } from "@/components/library/rows";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
 import {
   isDesktopContextMenu,
@@ -42,12 +54,16 @@ import EntityListHost from "@/components/library/EntityListHost.vue";
 import LibraryChrome from "@/components/library/LibraryChrome.vue";
 import {
   addAll as addAllAction,
+  addAllForAlbum,
+  addAllForArtist,
   addAllForFolder,
   addSelected as addSelectedAction,
+  downloadAlbumById,
   downloadCurrentAlbum as downloadAlbumAction,
 } from "@/components/library/libraryActions";
 import {
   loadLibraryPage,
+  type LibraryAlbum,
   type LibraryBody,
   type LibraryPage,
 } from "@/components/library/loaders";
@@ -143,6 +159,9 @@ const router = useRouter();
     }
 
     /** @param {import("./loaders.js").LibraryPage} page */
+    const headerArtist = ref<ArtistListItem | null>(null);
+    const headerAlbum = ref<LibraryAlbum | null>(null);
+
     function applyPage(page: LibraryPage) {
       title.value = page.chrome.title;
       showBack.value = page.chrome.showBack;
@@ -150,6 +169,8 @@ const router = useRouter();
         ? String(page.chrome.backArtistId)
         : null;
       body.value = page.body;
+      headerArtist.value = page.headerArtist ?? null;
+      headerAlbum.value = page.headerAlbum ?? null;
     }
 
     function applyTreeChrome() {
@@ -159,6 +180,8 @@ const router = useRouter();
       showBack.value = false;
       backArtistId.value = null;
       body.value = INITIAL_BODY;
+      headerArtist.value = null;
+      headerAlbum.value = null;
     }
 
     async function load() {
@@ -336,12 +359,8 @@ const router = useRouter();
       connectivityBanner(connectivity.state, downloads.enabled)
     );
 
-    const menusEnabled = computed(
-      () =>
-        mode.value === "artists" &&
-        routeName.value !== "artist" &&
-        !isSearch.value &&
-        !showTree.value,
+    const includeArtistPhoto = computed(
+      () => mode.value === "artists" && !isSearch.value,
     );
 
     const {
@@ -351,48 +370,86 @@ const router = useRouter();
       openMenu,
     } = useRowActionMenu();
     const menuKey = ref("");
-    const menuArtist = ref<ArtistListItem | null>(null);
+    const menuTarget = ref<OpenMenu | null>(null);
     const menuOpen = computed(() => !!menuKey.value);
     const menuItems = computed(() => {
-      if (!menuArtist.value) return [];
-      return buildArtistMenuItems({
-        artist: menuArtist.value,
-        downloadsEnabled: downloads.enabled,
-      });
+      const target = menuTarget.value;
+      if (!target) return [];
+      switch (target.kind) {
+        case "artist":
+          return buildArtistMenuItems({
+            artist: target.artist,
+            includePhoto: includeArtistPhoto.value,
+            addAll: () => addAllForArtist(target.artist.id),
+            downloadAll: downloads.enabled
+              ? () => runArtistDownloadAll(target.artist)
+              : undefined,
+          });
+        case "album":
+          return buildAlbumMenuItems({
+            album: target.album,
+            addAll: () => addAllForAlbum(target.album.id),
+            download: downloads.enabled
+              ? () => downloadAlbumById(target.album.id)
+              : undefined,
+          });
+        case "track":
+          return buildTrackMenuItems({
+            title: target.track.title,
+            artist: target.track.artist,
+            album: target.track.album,
+            addToPlaylist: () => queueOnly(target.track),
+          });
+        case "file": {
+          const t = target.file.track;
+          return buildTrackMenuItems({
+            title: t?.title || target.file.displayName || target.file.name,
+            artist: t?.artist,
+            album: t?.album,
+            addToPlaylist: () =>
+              queueOnly(t || target.file.id || target.file.path),
+          });
+        }
+        case "folder":
+          return buildFolderMenuItems({
+            dir: target.dir,
+            addAll: () => addAllForFolder(target.dir.path || ""),
+          });
+      }
     });
 
     function artistCover(artist: ArtistListItem) {
       return coverSrc(artist);
     }
 
-    function closeArtistMenu() {
+    function closeEntityMenu() {
       menuKey.value = "";
-      menuArtist.value = null;
+      menuTarget.value = null;
       closeMenu();
     }
 
-    function openArtistMenu(
-      artist: ArtistListItem,
+    function openEntityMenu(
+      target: OpenMenu,
       anchor: { kind: "el"; el: HTMLElement } | { kind: "point"; x: number; y: number },
       restoreEl?: HTMLElement | null,
     ) {
-      const next = nextOpenKey(menuKey.value, artist.id);
+      const next = nextOpenKey(menuKey.value, openMenuKey(target));
       if (!next) {
-        closeArtistMenu();
+        closeEntityMenu();
         return;
       }
       menuKey.value = next;
-      menuArtist.value = artist;
+      menuTarget.value = target;
       openMenu(anchor, restoreEl);
     }
 
-    function onArtistMenuClick(artist: ArtistListItem, e: MouseEvent) {
+    function onEntityMenuClick(target: OpenMenu, e: MouseEvent) {
       const el = e.currentTarget;
       if (!(el instanceof HTMLElement)) return;
-      openArtistMenu(artist, { kind: "el", el }, el);
+      openEntityMenu(target, { kind: "el", el }, el);
     }
 
-    function onArtistRowContext(artist: ArtistListItem, e: MouseEvent) {
+    function onEntityContext(target: OpenMenu, e: MouseEvent) {
       if (!isDesktopContextMenu()) return;
       e.preventDefault();
       const current = e.currentTarget;
@@ -400,8 +457,8 @@ const router = useRouter();
         current instanceof HTMLElement
           ? current.querySelector(".row-menu")
           : null;
-      openArtistMenu(
-        artist,
+      openEntityMenu(
+        target,
         { kind: "point", x: e.clientX, y: e.clientY },
         btn instanceof HTMLElement ? btn : null,
       );
@@ -413,19 +470,60 @@ const router = useRouter();
       await submitPreferredCrop(artist, blob);
     }
 
-    const artistRowActions = computed(() =>
-      menusEnabled.value
-        ? {
-            onMenuClick: onArtistMenuClick,
-            onRowContextMenu: onArtistRowContext,
-            onThumbDrop: onArtistThumbDrop,
-          }
-        : null,
-    );
+    const entityActions = computed((): EntityActions => ({
+      artist: {
+        includePhoto: includeArtistPhoto.value,
+        onMenuClick: (artist, e) =>
+          onEntityMenuClick({ kind: "artist", artist }, e),
+        onRowContextMenu: (artist, e) =>
+          onEntityContext({ kind: "artist", artist }, e),
+        onThumbDrop: includeArtistPhoto.value ? onArtistThumbDrop : undefined,
+      },
+      album: {
+        onMenuClick: (album, e) =>
+          onEntityMenuClick({ kind: "album", album }, e),
+        onRowContextMenu: (album, e) =>
+          onEntityContext({ kind: "album", album }, e),
+      },
+      track: {
+        onMenuClick: (track, e) =>
+          onEntityMenuClick({ kind: "track", track }, e),
+        onRowContextMenu: (track, e) =>
+          onEntityContext({ kind: "track", track }, e),
+      },
+      folder: {
+        onMenuClick: (dir, e) =>
+          onEntityMenuClick({ kind: "folder", dir }, e),
+        onRowContextMenu: (dir, e) =>
+          onEntityContext({ kind: "folder", dir }, e),
+      },
+      file: {
+        onMenuClick: (file, e) =>
+          onEntityMenuClick({ kind: "file", file }, e),
+        onRowContextMenu: (file, e) =>
+          onEntityContext({ kind: "file", file }, e),
+      },
+    }));
+
+    const headerMenuTarget = computed((): OpenMenu | null => {
+      if (headerArtist.value) {
+        return { kind: "artist", artist: headerArtist.value };
+      }
+      if (headerAlbum.value) {
+        return { kind: "album", album: headerAlbum.value };
+      }
+      return null;
+    });
+
+    function onHeaderMenuClick(e: MouseEvent) {
+      const target = headerMenuTarget.value;
+      if (!target) return;
+      onEntityMenuClick(target, e);
+    }
 
     watch(
       () => [route.fullPath, ui.libraryLayout, showTree.value] as const,
-      () => closeArtistMenu(),
+      () => closeEntityMenu(),
     );
 </script>
 
@@ -439,6 +537,14 @@ const router = useRouter();
       @back="goBack"
     >
       <template #actions>
+        <button
+          v-if="headerMenuTarget"
+          type="button"
+          class="icon-btn row-menu"
+          title="More actions"
+          aria-label="More actions"
+          @click="onHeaderMenuClick"
+        ><Icon name="more-vert" /></button>
         <button
           v-if="showAddSelected"
           type="button"
@@ -484,7 +590,7 @@ const router = useRouter();
         :grid-host="gridHost"
         :is-selected="isSelected"
         :artist-cover="artistCover"
-        :artist-row-actions="artistRowActions"
+        :entity-actions="entityActions"
         @open-artist="openArtist"
         @open-album="openAlbum"
         @open-folder="openFolder"
@@ -497,7 +603,7 @@ const router = useRouter();
           :items="menuItems"
           :anchor="menuAnchor"
           :restore-el="menuRestoreEl"
-          @close="closeArtistMenu"
+          @close="closeEntityMenu"
         />
       </template>
     </LibraryChrome>

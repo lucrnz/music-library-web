@@ -9,7 +9,8 @@ const props = withDefaults(defineProps<{
   coverSrc?: string;
   showCounts?: boolean;
   showMenu?: boolean;
-}>(), { coverSrc: "", showCounts: true, showMenu: false });
+  includePhoto?: boolean;
+}>(), { coverSrc: "", showCounts: true, showMenu: false, includePhoto: false });
 const emit = defineEmits<{
   open: [artist: ArtistListItem];
   "menu-click": [artist: ArtistListItem, e: MouseEvent];
@@ -40,7 +41,7 @@ const cover = computed(
       emit("row-contextmenu", props.artist, e);
     }
     function onDragOver(e: DragEvent) {
-      if (!props.showMenu) return;
+      if (!props.includePhoto) return;
       if (!e.dataTransfer?.types.includes("Files")) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
@@ -51,7 +52,7 @@ const cover = computed(
     }
     function onDrop(e: DragEvent) {
       (e.currentTarget as HTMLElement).classList.remove("thumb-drop-over");
-      if (!props.showMenu) return;
+      if (!props.includePhoto) return;
       e.preventDefault();
       e.stopPropagation();
       const file = e.dataTransfer?.files?.[0];

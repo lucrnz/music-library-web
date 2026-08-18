@@ -16,12 +16,21 @@ import {
   seekToFraction,
   setVolume,
 } from "@/stores/player";
+import { canReachServer } from "@/connectivity";
+import { copyText } from "@/clipboard";
+import { peekLyricsMemory, resolveLyrics } from "@/lyrics/cache";
+import { lyricsClipboardText } from "@/lyrics/plainText";
 import { openSettings } from "@/stores/settings";
+import { showToast } from "@/stores/ui";
 import { formatTime, setRangeFill } from "@/util";
 import { kindForTrack } from "@/lossyKind";
+import ActionMenu from "@/components/menu/ActionMenu.vue";
+import { useRowActionMenu } from "@/components/menu/useRowActionMenu";
+import { useDesktopViewport } from "@/layout";
 import Icon from "@/components/icons/Icon.vue";
 import LossyMark from "@/components/lossy/LossyMark.vue";
 import LyricsOverlay from "@/components/player/LyricsOverlay.vue";
+import { buildNowPlayingMenuItems } from "@/components/player/nowPlayingMenuItems";
 import PlaybackStatusLine from "@/components/player/PlaybackStatusLine.vue";
 
 const DESKTOP_BREAKPOINT = "(min-width: 900px)";
@@ -169,6 +178,70 @@ function focusClose() {
   });
 }
 
+const desktop = useDesktopViewport();
+const {
+  menuAnchor,
+  menuRestoreEl,
+  closeMenu,
+  openMenu,
+} = useRowActionMenu();
+const menuOpen = computed(() => !!menuAnchor.value);
+
+const currentTrack = computed(() => pl.current);
+
+const offerCopyLyrics = ref(true);
+
+function refreshLyricsOffer() {
+  const id = props.trackId;
+  if (!id) {
+    offerCopyLyrics.value = false;
+    return;
+  }
+  const peek = peekLyricsMemory(id);
+  offerCopyLyrics.value = !(peek && lyricsClipboardText(peek) == null);
+}
+
+async function copyLyrics() {
+  const id = props.trackId;
+  if (!id) return;
+  const payload = await resolveLyrics(id, {
+    allowNetwork: canReachServer(),
+  });
+  if (props.trackId !== id) return;
+  const text = lyricsClipboardText(payload);
+  if (!text) {
+    showToast("No lyrics to copy");
+    return;
+  }
+  await copyText(text);
+}
+
+const menuItems = computed(() => {
+  const track = currentTrack.value;
+  if (!track) return [];
+  return buildNowPlayingMenuItems({
+    track,
+    offerCopyLyrics: offerCopyLyrics.value,
+    copyLyrics,
+  });
+});
+
+function onNowPlayingMenuClick(e: MouseEvent) {
+  const el = e.currentTarget;
+  if (!(el instanceof HTMLElement)) return;
+  if (menuOpen.value) {
+    closeMenu();
+    return;
+  }
+  refreshLyricsOffer();
+  openMenu({ kind: "el", el }, el);
+}
+
+watch(
+  () => [player.expanded, props.trackId] as const,
+  () => closeMenu(),
+);
+
 defineExpose({ focusClose, closeBtn });
 </script>
 
@@ -194,6 +267,17 @@ defineExpose({ focusClose, closeBtn });
           @click="collapse"
         >
           <Icon :name="closeIcon" />
+        </button>
+        <button
+          v-if="player.expanded && currentTrack"
+          type="button"
+          class="icon-btn row-menu"
+          title="Now playing actions"
+          aria-label="Now playing actions"
+          :aria-haspopup="desktop ? 'menu' : 'dialog'"
+          @click="onNowPlayingMenuClick"
+        >
+          <Icon name="more-vert" />
         </button>
       </div>
 
@@ -335,5 +419,12 @@ defineExpose({ focusClose, closeBtn });
           @click="openSettings"
         ><Icon name="settings" /></button>
       </div>
+      <ActionMenu
+        :open="menuOpen"
+        :items="menuItems"
+        :anchor="menuAnchor"
+        :restore-el="menuRestoreEl"
+        @close="closeMenu"
+      />
     </div>
 </template>

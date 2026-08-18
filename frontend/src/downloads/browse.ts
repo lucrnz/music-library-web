@@ -6,6 +6,8 @@
 import { kindForTracks, type AlbumLossyKind } from "@/lossyKind";
 import { fromCatalogRecord, type Track } from "@/models/track";
 import { getLocalArtistImageUrl, getLocalCoverUrl } from "@/downloads/catalog";
+import type { ArtistListItem } from "@/api";
+import type { LibraryAlbum } from "@/components/library/loaders";
 import {
   buildDownloadsHierarchy,
   type DownloadsHierarchyAlbum,
@@ -36,6 +38,8 @@ export interface DownloadsBrowseState {
   albumGrid: boolean;
   artUrls: Record<string, string>;
   parentArtistId?: string;
+  headerArtist?: ArtistListItem | null;
+  headerAlbum?: LibraryAlbum | null;
 }
 
 export interface DownloadsBrowseOpts {
@@ -73,10 +77,12 @@ export async function loadDownloadsView(
     const id = opts.albumId;
     let found: DownloadsHierarchyAlbum | null = null;
     let parentArtistId: string | undefined;
+    let parentArtistName = "";
     for (const ar of tree.artists) {
       found = ar.albums.find((al) => al.albumId === id) || null;
       if (found) {
         parentArtistId = ar.artistId;
+        parentArtistName = ar.name;
         break;
       }
     }
@@ -102,6 +108,12 @@ export async function loadDownloadsView(
       albumGrid: false,
       artUrls,
       parentArtistId,
+      headerAlbum: {
+        id: found.albumId,
+        title: found.title,
+        artist: parentArtistName,
+        trackCount: found.tracks.length,
+      },
     };
   }
 
@@ -140,6 +152,12 @@ export async function loadDownloadsView(
       tracks: [],
       albumGrid: true,
       artUrls,
+      headerArtist: {
+        id: ar.artistId,
+        name: ar.name,
+        album_count: ar.albums.length,
+        track_count: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
+      },
     };
   }
 

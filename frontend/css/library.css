@@ -172,6 +172,14 @@
   border-radius: 999px;
 }
 
+.media-card-menu {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+}
+
 .media-card-title {
   font-size: 13px;
   font-weight: 600;

@@ -136,7 +136,8 @@
 
 .sheet-grab {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
   flex-shrink: 0;
 }
 

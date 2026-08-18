@@ -8,15 +8,20 @@ import { kindForTrack } from "@/lossyKind";
 import DownloadIcon from "@/components/downloads/DownloadIcon.vue";
 import Icon from "@/components/icons/Icon.vue";
 import LossyMark from "@/components/lossy/LossyMark.vue";
+import { useDesktopViewport } from "@/layout";
 import { playOrQueueTrack, queueOnly } from "@/components/library/rows";
 import type { FileRowModel } from "@/components/library/loaders";
 const props = withDefaults(defineProps<{
   file: FileRowModel | null;
   selected?: boolean;
-}>(), { selected: false, file: null });
+  showMenu?: boolean;
+}>(), { selected: false, file: null, showMenu: false });
 const emit = defineEmits<{
   select: [file: FileRowModel, e?: MouseEvent];
+  "menu-click": [file: FileRowModel, e: MouseEvent];
+  "row-contextmenu": [file: FileRowModel, e: MouseEvent];
 }>();
+const desktop = useDesktopViewport();
 const cover = computed(
       () => props.file?.cover || "/static/img/placeholder.svg"
     );
@@ -38,7 +43,14 @@ const cover = computed(
 
     async function onClick(e: MouseEvent) {
       const target = e.target;
-      if (target instanceof Element && target.closest(".lossy-mark")) return;
+      if (
+        target instanceof Element &&
+        (target.closest(".lossy-mark") ||
+          target.closest(".row-menu") ||
+          target.closest(".row-add"))
+      ) {
+        return;
+      }
       if (!props.file) return;
       if (e.metaKey || e.ctrlKey) {
         emit("select", props.file, e);
@@ -55,6 +67,18 @@ const cover = computed(
       if (!entry) return;
       await queueOnly(entry);
     }
+
+    function onMenuClick(e: MouseEvent) {
+      e.stopPropagation();
+      e.preventDefault();
+      if (!props.file) return;
+      emit("menu-click", props.file, e);
+    }
+
+    function onContext(e: MouseEvent) {
+      if (!props.showMenu || !props.file) return;
+      emit("row-contextmenu", props.file, e);
+    }
 </script>
 
 <template>
@@ -63,6 +87,7 @@ const cover = computed(
       class="row"
       :class="{ selected }"
       @click="onClick"
+      @contextmenu="onContext"
     >
       <span class="row-cover-wrap">
         <img class="row-cover" :src="cover" alt="" loading="lazy" />
@@ -75,6 +100,16 @@ const cover = computed(
       </span>
       <DownloadIcon v-if="track" :track="track" />
       <button
+        v-if="showMenu"
+        type="button"
+        class="icon-btn row-menu"
+        title="Track actions"
+        aria-label="Track actions"
+        :aria-haspopup="desktop ? 'menu' : 'dialog'"
+        @click="onMenuClick"
+      ><Icon name="more-vert" /></button>
+      <button
+        v-else
         type="button"
         class="icon-btn row-add"
         title="Add to playlist"

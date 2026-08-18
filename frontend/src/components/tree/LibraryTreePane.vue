@@ -7,7 +7,29 @@ import { useRoute } from "vue-router";
 import { openCropFromFile } from "@/artistArt/pickFile";
 import { coverSrc } from "@/artistArt/state";
 import { submitPreferredCrop } from "@/artistArt/submit";
-import { buildArtistMenuItems } from "@/components/library/artistMenuItems";
+import { buildAlbumMenuItems } from "@/components/library/albumMenuItems";
+import {
+  buildArtistMenuItems,
+  runArtistDownloadAll,
+} from "@/components/library/artistMenuItems";
+import { buildFolderMenuItems } from "@/components/library/folderMenuItems";
+import { buildTrackMenuItems } from "@/components/library/trackMenuItems";
+import {
+  openMenuKey,
+  type OpenMenu,
+} from "@/components/library/entityMenu";
+import { addAllDownloadedAlbum, addAllDownloadedArtist } from "@/downloads/addAll";
+import {
+  albumFromDl,
+  artistFromDl,
+  trackFromDl,
+} from "@/components/tree/sources/downloadsMenuMap";
+import { queueOnly } from "@/components/library/rows";
+import type { LibraryAlbum } from "@/components/library/loaders";
+import type {
+  DownloadsHierarchyAlbum,
+  DownloadsHierarchyArtist,
+} from "@/downloads/hierarchy";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
 import {
   isDesktopContextMenu,
@@ -19,11 +41,9 @@ import { downloads } from "@/downloads/state";
 import type { ArtistListItem } from "@/api";
 import {
   clearLibSelection,
-  showToast,
   toggleLibSelection,
   ui,
 } from "@/stores/ui";
-import { addToQueue } from "@/stores/playlist";
 import Icon from "@/components/icons/Icon.vue";
 import FileRow from "@/components/library/rows/FileRow.vue";
 import TrackRow from "@/components/library/rows/TrackRow.vue";
@@ -35,7 +55,6 @@ import {
 } from "@/components/library/libraryActions";
 import {
   fromCatalogRecord,
-  tracksFromCatalogRecords,
   type Track,
 } from "@/models/track";
 import { playOrQueueTrack } from "@/components/library/rows";
@@ -43,7 +62,6 @@ import { listAlbumRoots, loadAlbumChildren } from "@/components/tree/sources/alb
 import {
   listArtistRoots,
   loadArtistChildren,
-  treeNodeId,
   treeNodePath,
   type TreeNode,
 } from "@/components/tree/sources/artistsSource";
@@ -81,14 +99,62 @@ const {
   openMenu,
 } = useRowActionMenu();
 const menuKey = ref("");
-const menuArtist = ref<ArtistListItem | null>(null);
+const menuTarget = ref<OpenMenu | null>(null);
 const menuOpen = computed(() => !!menuKey.value);
+const downloadsMode = computed(() => props.mode === "downloads");
 const menuItems = computed(() => {
-  if (!menuArtist.value) return [];
-  return buildArtistMenuItems({
-    artist: menuArtist.value,
-    downloadsEnabled: downloads.enabled,
-  });
+  const target = menuTarget.value;
+  if (!target) return [];
+  const photo = artistsMode.value && target.kind === "artist";
+  switch (target.kind) {
+    case "artist":
+      return buildArtistMenuItems({
+        artist: target.artist,
+        includePhoto: photo,
+        addAll: () =>
+          downloadsMode.value
+            ? addAllDownloadedArtist(target.artist.id)
+            : addAllForArtist(target.artist.id),
+        downloadAll:
+          !downloadsMode.value && downloads.enabled
+            ? () => runArtistDownloadAll(target.artist)
+            : undefined,
+      });
+    case "album":
+      return buildAlbumMenuItems({
+        album: target.album,
+        addAll: () =>
+          downloadsMode.value
+            ? addAllDownloadedAlbum(target.album.id)
+            : addAllForAlbum(target.album.id),
+        download:
+          !downloadsMode.value && downloads.enabled
+            ? () => downloadAlbumById(target.album.id)
+            : undefined,
+      });
+    case "track":
+      return buildTrackMenuItems({
+        title: target.track.title,
+        artist: target.track.artist,
+        album: target.track.album,
+        addToPlaylist: () => queueOnly(target.track),
+      });
+    case "file": {
+      const t = target.file.track;
+      return buildTrackMenuItems({
+        title: t?.title || target.file.displayName || target.file.name,
+        artist: t?.artist,
+        album: t?.album,
+        addToPlaylist: () =>
+          queueOnly(t || target.file.id || target.file.path),
+      });
+    }
+    case "folder":
+      return buildFolderMenuItems({
+        dir: target.dir,
+        addAll: () => addAllForFolder(target.dir.path || ""),
+      });
+  }
 });
 
 function artistFromNode(node: TreeNode): ArtistListItem | null {
@@ -103,52 +169,123 @@ function resolveCover(node: TreeNode): string {
     const artist = artistFromNode(node);
     return artist ? coverSrc(artist) : node.cover || "";
   }
-  if (props.mode === "downloads" && node.kind === "artist") {
-    const id = treeNodeId(node);
-    return artUrlCache.urls[`artist:${id}:thumb`] || node.cover || "";
+  if (props.mode === "downloads" && node.kind === "dl-artist") {
+    const data = node.data as DownloadsHierarchyArtist | undefined;
+    const id = data?.artistId;
+    return (id && artUrlCache.urls[`artist:${id}:thumb`]) || node.cover || "";
   }
   return node.cover || "";
 }
 
-function closeArtistMenu() {
+function closeEntityMenu() {
   menuKey.value = "";
-  menuArtist.value = null;
+  menuTarget.value = null;
   closeMenu();
 }
 
-function openArtistMenu(
-  artist: ArtistListItem,
+function openEntityMenu(
+  target: OpenMenu,
   anchor: { kind: "el"; el: HTMLElement } | { kind: "point"; x: number; y: number },
   restoreEl?: HTMLElement | null,
 ) {
-  const next = nextOpenKey(menuKey.value, artist.id);
+  const next = nextOpenKey(menuKey.value, openMenuKey(target));
   if (!next) {
-    closeArtistMenu();
+    closeEntityMenu();
     return;
   }
   menuKey.value = next;
-  menuArtist.value = artist;
+  menuTarget.value = target;
   openMenu(anchor, restoreEl);
 }
 
-function onArtistMenuClick(artist: ArtistListItem, e: MouseEvent) {
+function parentNameForAlbum(albumId: string): string {
+  if (!downloadsHierarchy) return "";
+  for (const ar of downloadsHierarchy.artists) {
+    if (ar.albums.some((al) => al.albumId === albumId)) return ar.name;
+  }
+  return "";
+}
+
+function targetFromNode(node: TreeNode): OpenMenu | null {
+  switch (node.kind) {
+    case "artist": {
+      const artist = artistFromNode(node);
+      return artist ? { kind: "artist", artist } : null;
+    }
+    case "dl-artist": {
+      const data = node.data as DownloadsHierarchyArtist | undefined;
+      if (!data?.artistId) return null;
+      return { kind: "artist", artist: artistFromDl(data) };
+    }
+    case "album": {
+      const album = node.data as LibraryAlbum | undefined;
+      if (!album?.id) return null;
+      return { kind: "album", album };
+    }
+    case "dl-album": {
+      const data = node.data as DownloadsHierarchyAlbum | undefined;
+      if (!data?.albumId) return null;
+      return {
+        kind: "album",
+        album: albumFromDl(data, parentNameForAlbum(data.albumId)),
+      };
+    }
+    case "dir":
+      return {
+        kind: "folder",
+        dir: { name: node.title, path: treeNodePath(node) },
+      };
+    case "track": {
+      const track = asTrack(node.data);
+      return track ? { kind: "track", track } : null;
+    }
+    case "dl-track": {
+      try {
+        return {
+          kind: "track",
+          track: trackFromDl(node.data as CatalogTrackRecord),
+        };
+      } catch {
+        return null;
+      }
+    }
+    case "file": {
+      const file = fileFromNode(node);
+      return file ? { kind: "file", file } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+function onNodeMenuClick(node: TreeNode, e: MouseEvent) {
   e.stopPropagation();
+  e.preventDefault();
+  const target = targetFromNode(node);
+  const el = e.currentTarget;
+  if (!target || !(el instanceof HTMLElement)) return;
+  openEntityMenu(target, { kind: "el", el }, el);
+}
+
+function onLeafMenuClick(target: OpenMenu, e: MouseEvent) {
+  e.stopPropagation();
+  e.preventDefault();
   const el = e.currentTarget;
   if (!(el instanceof HTMLElement)) return;
-  openArtistMenu(artist, { kind: "el", el }, el);
+  openEntityMenu(target, { kind: "el", el }, el);
 }
 
 function onRowContextMenu(node: TreeNode, e: MouseEvent) {
-  if (!artistsMode.value) return;
-  const artist = artistFromNode(node);
-  if (!artist || !isDesktopContextMenu()) return;
+  if (!isDesktopContextMenu()) return;
+  const target = targetFromNode(node);
+  if (!target) return;
   e.preventDefault();
   const btn =
     e.currentTarget instanceof HTMLElement
       ? e.currentTarget.querySelector(".row-menu")
       : null;
-  openArtistMenu(
-    artist,
+  openEntityMenu(
+    target,
     { kind: "point", x: e.clientX, y: e.clientY },
     btn instanceof HTMLElement ? btn : null,
   );
@@ -162,18 +299,14 @@ async function onThumbDrop(node: TreeNode, file: File) {
   await submitPreferredCrop(artist, blob);
 }
 
-const artistTreeListeners = computed(() =>
-  artistsMode.value
-    ? {
-        "row-contextmenu": onRowContextMenu,
-        "thumb-drop": onThumbDrop,
-      }
-    : {},
-);
+const treeListeners = computed(() => ({
+  "row-contextmenu": onRowContextMenu,
+  ...(artistsMode.value ? { "thumb-drop": onThumbDrop } : {}),
+}));
 
 watch(
   () => [route.fullPath, ui.libraryLayout, props.mode] as const,
-  () => closeArtistMenu(),
+  () => closeEntityMenu(),
 );
 
 const roots = ref<TreeNode[]>([]);
@@ -286,12 +419,6 @@ function fileFromNode(node: TreeNode): FileRowModel | null {
   return rec;
 }
 
-function catalogTracks(data: unknown): CatalogTrackRecord[] {
-  if (!data || typeof data !== "object" || !("tracks" in data)) return [];
-  const tracks = (data as { tracks?: unknown }).tracks;
-  return Array.isArray(tracks) ? (tracks as CatalogTrackRecord[]) : [];
-}
-
 async function onActivateLeaf(node: TreeNode) {
   if (node.kind === "track" && node.data) {
     await playOrQueueTrack(node.data as Track);
@@ -312,38 +439,14 @@ async function onActivateLeaf(node: TreeNode) {
   }
 }
 
-async function onDownloadAlbum(node: TreeNode) {
-  await downloadAlbumById(treeNodeId(node));
-}
-
-const groupAddByKind: Record<string, (node: TreeNode) => Promise<void>> = {
-  artist: async (node) => {
-    await addAllForArtist(treeNodeId(node));
-  },
-  album: async (node) => {
-    await addAllForAlbum(treeNodeId(node));
-  },
-  dir: async (node) => {
-    await addAllForFolder(treeNodePath(node) || "");
-  },
-  "dl-album": async (node) => {
-    await addToQueue(tracksFromCatalogRecords(catalogTracks(node.data)));
-  },
-};
-
-function showGroupAdd(node: TreeNode) {
-  return Boolean(groupAddByKind[node.kind]);
-}
-
-async function onGroupAdd(node: TreeNode) {
-  const run = groupAddByKind[node.kind];
-  if (!run) return;
-  try {
-    await run(node);
-  } catch (err: unknown) {
-    console.error(err);
-    showToast(err instanceof Error ? err.message : "Failed to add to playlist");
-  }
+function showGroupMenu(node: TreeNode) {
+  return (
+    node.kind === "artist" ||
+    node.kind === "album" ||
+    node.kind === "dir" ||
+    node.kind === "dl-artist" ||
+    node.kind === "dl-album"
+  );
 }
 
 function isSelected(path: string) {
@@ -357,10 +460,6 @@ function onSelectFile(file: FileRowModel) {
 function onSelectDir(node: TreeNode, e?: MouseEvent) {
   e?.stopPropagation?.();
   toggleLibSelection(treeNodePath(node), "dir");
-}
-
-function showAlbumDownload(node: TreeNode) {
-  return node.kind === "album" && downloads.enabled;
 }
 
 function asTrack(rec: unknown): Track | null {
@@ -406,7 +505,7 @@ onMounted(loadRoots);
       :empty-message="emptyMessage"
       :resolve-cover="props.mode === 'artists' || props.mode === 'downloads' ? resolveCover : null"
       :thumb-drop-enabled="artistsMode"
-      v-on="artistTreeListeners"
+      v-on="treeListeners"
       @activate-leaf="onActivateLeaf"
     >
       <template #group-actions="{ node }">
@@ -420,28 +519,12 @@ onMounted(loadRoots);
           @click="onSelectDir(node, $event)"
         ><Icon name="check" /></button>
         <button
-          v-if="showGroupAdd(node)"
-          type="button"
-          class="icon-btn"
-          title="Add all to playlist"
-          aria-label="Add all to playlist"
-          @click="onGroupAdd(node)"
-        ><Icon name="plus" /></button>
-        <button
-          v-if="showAlbumDownload(node)"
-          type="button"
-          class="icon-btn"
-          title="Download album"
-          aria-label="Download album"
-          @click="onDownloadAlbum(node)"
-        ><Icon name="download" /></button>
-        <button
-          v-if="artistsMode && node.kind === 'artist'"
+          v-if="showGroupMenu(node)"
           type="button"
           class="icon-btn row-menu"
-          title="Artist actions"
-          aria-label="Artist actions"
-          @click="(e) => { const a = artistFromNode(node); if (a) onArtistMenuClick(a, e); }"
+          title="More actions"
+          aria-label="More actions"
+          @click="(e) => onNodeMenuClick(node, e)"
         ><Icon name="more-vert" /></button>
       </template>
       <template #leaf="{ node }">
@@ -449,18 +532,24 @@ onMounted(loadRoots);
           v-if="node.kind === 'track'"
           :track="asTrack(node.data)"
           :show-download="showTrackDownload"
+          :show-menu="true"
+          @menu-click="(t, e) => onLeafMenuClick({ kind: 'track', track: t }, e)"
         />
         <FileRow
           v-else-if="node.kind === 'file'"
           :file="fileFromNode(node)"
           :selected="isSelected(treeNodePath(node))"
+          :show-menu="true"
           @select="onSelectFile"
+          @menu-click="(f, e) => onLeafMenuClick({ kind: 'file', file: f }, e)"
         />
         <TrackRow
           v-else-if="node.kind === 'dl-track'"
           :track="asTrack(node.data)"
           :show-download="false"
           title-mode="title"
+          :show-menu="true"
+          @menu-click="(t, e) => onLeafMenuClick({ kind: 'track', track: t }, e)"
         />
       </template>
     </TreeView>
@@ -469,6 +558,6 @@ onMounted(loadRoots);
       :items="menuItems"
       :anchor="menuAnchor"
       :restore-el="menuRestoreEl"
-      @close="closeArtistMenu"
+      @close="closeEntityMenu"
     />
 </template>

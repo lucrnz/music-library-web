@@ -4,6 +4,7 @@
  * Cover overrides via optional getters (downloads local art).
  */
 
+import { computed } from "vue";
 import AlbumCard from "@/components/library/rows/AlbumCard.vue";
 import AlbumListRow from "@/components/library/rows/AlbumListRow.vue";
 import ArtistCard from "@/components/library/rows/ArtistCard.vue";
@@ -21,10 +22,20 @@ import type {
 import type { ArtistListItem, BrowseDir } from "@/api";
 import type { Track } from "@/models/track";
 
-export interface ArtistRowActions {
-  onMenuClick: (artist: ArtistListItem, e: MouseEvent) => void;
-  onRowContextMenu: (artist: ArtistListItem, e: MouseEvent) => void;
-  onThumbDrop: (artist: ArtistListItem, file: File) => void;
+export interface EntityMenuHandlers<T> {
+  onMenuClick: (item: T, e: MouseEvent) => void;
+  onRowContextMenu: (item: T, e: MouseEvent) => void;
+}
+
+export interface EntityActions {
+  artist?: EntityMenuHandlers<ArtistListItem> & {
+    includePhoto: boolean;
+    onThumbDrop?: (artist: ArtistListItem, file: File) => void;
+  };
+  album?: EntityMenuHandlers<LibraryAlbum>;
+  track?: EntityMenuHandlers<Track>;
+  folder?: EntityMenuHandlers<BrowseDir>;
+  file?: EntityMenuHandlers<FileRowModel>;
 }
 
 const props = withDefaults(defineProps<{
@@ -38,8 +49,8 @@ const props = withDefaults(defineProps<{
   albumCover?: ((item: LibraryAlbum) => string) | null;
   trackCover?: ((item: Track) => string) | null;
   isSelected?: ((path: string) => boolean) | null;
-  artistRowActions?: ArtistRowActions | null;
-}>(), { error: "", loading: false, isGrid: false, gridHost: false, showTrackDownload: true, artistCover: null, albumCover: null, trackCover: null, isSelected: null, artistRowActions: null });
+  entityActions?: EntityActions | null;
+}>(), { error: "", loading: false, isGrid: false, gridHost: false, showTrackDownload: true, artistCover: null, albumCover: null, trackCover: null, isSelected: null, entityActions: null });
 const emit = defineEmits<{
   "open-artist": [artist: ArtistListItem];
   "open-album": [album: LibraryAlbum];
@@ -74,6 +85,11 @@ function artistSrc(artist: ArtistListItem) {
     function selectFile(f: FileRowModel) {
       emit("select-file", f);
     }
+    const artistActions = computed(() => props.entityActions?.artist);
+    const albumActions = computed(() => props.entityActions?.album);
+    const trackActions = computed(() => props.entityActions?.track);
+    const folderActions = computed(() => props.entityActions?.folder);
+    const fileActions = computed(() => props.entityActions?.file);
 </script>
 
 <template>
@@ -89,15 +105,21 @@ function artistSrc(artist: ArtistListItem) {
             :key="'d-' + dir.path"
             :dir="dir"
             :selected="selected(dir.path)"
+            :show-menu="!!folderActions"
             @open="openFolder"
             @select="selectFolder"
+            @menu-click="(d, e) => folderActions?.onMenuClick(d, e)"
+            @row-contextmenu="(d, e) => folderActions?.onRowContextMenu(d, e)"
           />
           <FileCard
             v-for="file in body.files"
             :key="'f-' + file.path"
             :file="file"
             :selected="selected(file.path)"
+            :show-menu="!!fileActions"
             @select="selectFile"
+            @menu-click="(f, e) => fileActions?.onMenuClick(f, e)"
+            @row-contextmenu="(f, e) => fileActions?.onRowContextMenu(f, e)"
           />
         </div>
         <template v-else>
@@ -106,15 +128,21 @@ function artistSrc(artist: ArtistListItem) {
             :key="'d-' + dir.path"
             :dir="dir"
             :selected="selected(dir.path)"
+            :show-menu="!!folderActions"
             @open="openFolder"
             @select="selectFolder"
+            @menu-click="(d, e) => folderActions?.onMenuClick(d, e)"
+            @row-contextmenu="(d, e) => folderActions?.onRowContextMenu(d, e)"
           />
           <FileRow
             v-for="file in body.files"
             :key="'f-' + file.path"
             :file="file"
             :selected="selected(file.path)"
+            :show-menu="!!fileActions"
             @select="selectFile"
+            @menu-click="(f, e) => fileActions?.onMenuClick(f, e)"
+            @row-contextmenu="(f, e) => fileActions?.onRowContextMenu(f, e)"
           />
         </template>
       </template>
@@ -126,10 +154,12 @@ function artistSrc(artist: ArtistListItem) {
             :key="artist.id"
             :artist="artist"
             :cover-src="artistSrc(artist)"
-            :menu-enabled="!!artistRowActions"
+            :show-menu="!!artistActions"
+            :include-photo="!!artistActions?.includePhoto"
             @open="openArtist"
-            @row-contextmenu="(a, e) => artistRowActions?.onRowContextMenu(a, e)"
-            @thumb-drop="(a, f) => artistRowActions?.onThumbDrop(a, f)"
+            @menu-click="(a, e) => artistActions?.onMenuClick(a, e)"
+            @row-contextmenu="(a, e) => artistActions?.onRowContextMenu(a, e)"
+            @thumb-drop="(a, f) => artistActions?.onThumbDrop?.(a, f)"
           />
         </div>
         <template v-else>
@@ -138,11 +168,12 @@ function artistSrc(artist: ArtistListItem) {
             :key="artist.id"
             :artist="artist"
             :cover-src="artistSrc(artist)"
-            :show-menu="!!artistRowActions"
+            :show-menu="!!artistActions"
+            :include-photo="!!artistActions?.includePhoto"
             @open="openArtist"
-            @menu-click="(a, e) => artistRowActions?.onMenuClick(a, e)"
-            @row-contextmenu="(a, e) => artistRowActions?.onRowContextMenu(a, e)"
-            @thumb-drop="(a, f) => artistRowActions?.onThumbDrop(a, f)"
+            @menu-click="(a, e) => artistActions?.onMenuClick(a, e)"
+            @row-contextmenu="(a, e) => artistActions?.onRowContextMenu(a, e)"
+            @thumb-drop="(a, f) => artistActions?.onThumbDrop?.(a, f)"
           />
         </template>
       </template>
@@ -154,7 +185,10 @@ function artistSrc(artist: ArtistListItem) {
             :key="album.id"
             :album="album"
             :cover-src="albumSrc(album)"
+            :show-menu="!!albumActions"
             @open="openAlbum"
+            @menu-click="(a, e) => albumActions?.onMenuClick(a, e)"
+            @row-contextmenu="(a, e) => albumActions?.onRowContextMenu(a, e)"
           />
         </div>
         <template v-else>
@@ -163,7 +197,10 @@ function artistSrc(artist: ArtistListItem) {
             :key="album.id"
             :album="album"
             :cover-src="albumSrc(album)"
+            :show-menu="!!albumActions"
             @open="openAlbum"
+            @menu-click="(a, e) => albumActions?.onMenuClick(a, e)"
+            @row-contextmenu="(a, e) => albumActions?.onRowContextMenu(a, e)"
           />
         </template>
       </template>
@@ -175,6 +212,9 @@ function artistSrc(artist: ArtistListItem) {
           :track="track"
           :cover-src="trackSrc(track)"
           :show-download="showTrackDownload"
+          :show-menu="!!trackActions"
+          @menu-click="(t, e) => trackActions?.onMenuClick(t, e)"
+          @row-contextmenu="(t, e) => trackActions?.onRowContextMenu(t, e)"
         />
       </template>
 
@@ -187,7 +227,12 @@ function artistSrc(artist: ArtistListItem) {
             :artist="artist"
             :show-counts="false"
             :cover-src="artistSrc(artist)"
+            :show-menu="!!artistActions"
+            :include-photo="!!artistActions?.includePhoto"
             @open="openArtist"
+            @menu-click="(a, e) => artistActions?.onMenuClick(a, e)"
+            @row-contextmenu="(a, e) => artistActions?.onRowContextMenu(a, e)"
+            @thumb-drop="(a, f) => artistActions?.onThumbDrop?.(a, f)"
           />
         </template>
         <template v-if="body.sections.albums.length">
@@ -197,7 +242,10 @@ function artistSrc(artist: ArtistListItem) {
             :key="'sal-' + album.id"
             :album="album"
             :cover-src="albumSrc(album)"
+            :show-menu="!!albumActions"
             @open="openAlbum"
+            @menu-click="(a, e) => albumActions?.onMenuClick(a, e)"
+            @row-contextmenu="(a, e) => albumActions?.onRowContextMenu(a, e)"
           />
         </template>
         <template v-if="body.sections.tracks.length">
@@ -208,8 +256,11 @@ function artistSrc(artist: ArtistListItem) {
             :track="track"
             :cover-src="trackSrc(track)"
             :show-download="showTrackDownload"
+            :show-menu="!!trackActions"
             title-mode="title"
             subtitle-mode="artist-album"
+            @menu-click="(t, e) => trackActions?.onMenuClick(t, e)"
+            @row-contextmenu="(t, e) => trackActions?.onRowContextMenu(t, e)"
           />
         </template>
       </template>
