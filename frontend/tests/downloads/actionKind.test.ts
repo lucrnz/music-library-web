@@ -27,6 +27,7 @@ function track(partial: Partial<Track> & { id: string }): Track {
     isLossy: false,
     sourceCodec: null,
     bitrateKbps: null,
+    bitrateMode: null,
     ...partial,
   };
 }

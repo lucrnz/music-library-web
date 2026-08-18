@@ -35,6 +35,7 @@ const track: Track = {
   isLossy: false,
   sourceCodec: null,
   bitrateKbps: null,
+  bitrateMode: null,
 };
 
 describe("buildAlbumMenuItems", () => {

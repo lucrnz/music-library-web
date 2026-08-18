@@ -60,6 +60,8 @@ export interface QueueTrackSnapshot {
   isLossy: boolean;
   sourceCodec: string | null;
   bitrateKbps: number | null;
+  sampleRateHz: number | null;
+  bitrateMode: string | null;
 }
 
 /** IDB "queue" row. `id` is assigned by autoIncrement after insert. */
@@ -406,6 +408,8 @@ async function enqueueTrackCore(
       isLossy: !!n.isLossy,
       sourceCodec: n.sourceCodec || null,
       bitrateKbps: n.bitrateKbps ?? null,
+      sampleRateHz: n.sampleRateHz ?? null,
+      bitrateMode: n.bitrateMode ?? null,
     },
     state: QueueState.PENDING,
     error: null,

@@ -18,19 +18,21 @@ import {
   type PlayBlockReason,
   type PlaySourceState,
 } from "@/playBlock";
+import type { Track } from "@/models/track";
 import { resolveProfileMeta, type ProfileMeta } from "@/qualityRank";
 
 export type { ProfileMeta };
+
+const KNOWN_BITRATE_MODES = new Set(["cbr", "vbr", "abr"]);
 
 export interface PlayStatusState {
   playSource: PlaySourceState;
   playProfileId?: string | null;
   playBlockReason?: PlayBlockReason | string | null;
-  track?: {
-    isLossy?: boolean;
-    sourceCodec?: string | null;
-    bitrateKbps?: number | null;
-  } | null;
+  track?: Pick<
+    Track,
+    "isLossy" | "sourceCodec" | "bitrateKbps" | "sampleRateHz" | "bitrateMode"
+  > | null;
 }
 
 export interface PlaybackDetailRow {
@@ -296,6 +298,22 @@ export function buildPlaybackDetailsRows(
         key: "bitrate",
         label: "Bitrate",
         value: `${parts.bitrateKbps} kbps`,
+      });
+    }
+    const mode = (state.track.bitrateMode || "").toLowerCase();
+    if (KNOWN_BITRATE_MODES.has(mode)) {
+      rows.push({
+        key: "encoding",
+        label: "Encoding",
+        value: mode.toUpperCase(),
+      });
+    }
+    const fileRate = formatSampleRate(state.track.sampleRateHz);
+    if (fileRate) {
+      rows.push({
+        key: "sample_rate",
+        label: "Sample rate",
+        value: fileRate,
       });
     }
     rows.push({

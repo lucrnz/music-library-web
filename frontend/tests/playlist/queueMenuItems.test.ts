@@ -39,6 +39,7 @@ function track(partial: Partial<Track> = {}): Track {
     isLossy: false,
     sourceCodec: null,
     bitrateKbps: null,
+    bitrateMode: null,
     ...partial,
   };
 }

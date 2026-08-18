@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fromApiTrack } from "@/models/track";
+import { fromApiTrack, fromCatalogRecord } from "@/models/track";
 
 describe("fromApiTrack", () => {
   it("maps snake_case API fields", () => {
@@ -14,11 +14,17 @@ describe("fromApiTrack", () => {
       is_missing: false,
       is_lossy: true,
       source_codec: "mp3",
+      bitrate_kbps: 320,
+      bitrate_mode: "vbr",
+      sample_rate_hz: 44100,
     });
     expect(track.albumId).toBe("alb");
     expect(track.isLossy).toBe(true);
     expect(track.sourceCodec).toBe("mp3");
     expect(track.path).toBe("a/b.flac");
+    expect(track.bitrateKbps).toBe(320);
+    expect(track.bitrateMode).toBe("vbr");
+    expect(track.sampleRateHz).toBe(44100);
   });
 
   it("keeps a null path for missing tracks", () => {
@@ -29,5 +35,24 @@ describe("fromApiTrack", () => {
     });
     expect(track.path).toBeNull();
     expect(track.isMissing).toBe(true);
+  });
+});
+
+describe("fromCatalogRecord", () => {
+  it("round-trips sampleRateHz and bitrateMode", () => {
+    const track = fromCatalogRecord({
+      trackId: "t1",
+      title: "Song",
+      artist: "A",
+      album: "B",
+      isLossy: true,
+      sourceCodec: "aac",
+      bitrateKbps: 256,
+      sampleRateHz: 48000,
+      bitrateMode: "cbr",
+    });
+    expect(track.sampleRateHz).toBe(48000);
+    expect(track.bitrateMode).toBe("cbr");
+    expect(track.bitrateKbps).toBe(256);
   });
 });

@@ -27,6 +27,7 @@ export interface Track {
   isLossy: boolean;
   sourceCodec: string | null;
   bitrateKbps: number | null;
+  bitrateMode: string | null;
 }
 
 /**
@@ -55,6 +56,8 @@ export interface CatalogTrackRecord {
   isLossy?: boolean;
   sourceCodec?: string | null;
   bitrateKbps?: number | null;
+  sampleRateHz?: number | null;
+  bitrateMode?: string | null;
   id?: string;
   artistId?: string;
   albumArtistId?: string;
@@ -63,6 +66,8 @@ export interface CatalogTrackRecord {
   is_lossy?: boolean;
   source_codec?: string;
   bitrate_kbps?: number | null;
+  sample_rate_hz?: number | null;
+  bitrate_mode?: string | null;
 }
 
 function asRecord(raw: unknown): Record<string, unknown> | null {
@@ -124,6 +129,7 @@ export function fromApiTrack(raw: unknown): Track {
     isLossy: !!(pick(rec, "isLossy", "is_lossy") ?? false),
     sourceCodec: (pick(rec, "sourceCodec", "source_codec") as string | null | undefined) ?? null,
     bitrateKbps: _nullableNumber(pick(rec, "bitrateKbps", "bitrate_kbps")),
+    bitrateMode: (pick(rec, "bitrateMode", "bitrate_mode") as string | null | undefined) ?? null,
   };
 }
 
@@ -160,6 +166,8 @@ export function fromCatalogRecord(rec: CatalogTrackRecord | Record<string, unkno
     isLossy: r.isLossy ?? r.is_lossy,
     sourceCodec: r.sourceCodec ?? r.source_codec ?? null,
     bitrateKbps: r.bitrateKbps ?? r.bitrate_kbps,
+    sampleRateHz: r.sampleRateHz ?? r.sample_rate_hz,
+    bitrateMode: r.bitrateMode ?? r.bitrate_mode,
   });
 }
 

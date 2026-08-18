@@ -529,6 +529,8 @@ export async function commitTrackDownload(
     isLossy: !!n.isLossy,
     sourceCodec: n.sourceCodec || null,
     bitrateKbps: n.bitrateKbps ?? null,
+    sampleRateHz: n.sampleRateHz ?? null,
+    bitrateMode: n.bitrateMode ?? null,
     bytes: audioMeta.bytes || 0,
     albumId: n.albumId,
     artistIds: pinArtists,

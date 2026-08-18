@@ -39,6 +39,7 @@ function track(id: string): Track {
     isLossy: false,
     sourceCodec: null,
     bitrateKbps: null,
+    bitrateMode: null,
   };
 }
 
