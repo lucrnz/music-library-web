@@ -25,6 +25,7 @@ import {
 } from "@/downloads/index";
 import { downloads } from "@/downloads/state";
 import { confirmDialog } from "@/stores/dialog";
+import { copyText } from "@/clipboard";
 import { showToast } from "@/stores/ui";
 import {
   DIAG_MODES,
@@ -198,12 +199,7 @@ const playbackPolicies = PLAYBACK_POLICIES;
 
     async function copyDiagId(value: string | null) {
       if (!value) return;
-      try {
-        await navigator.clipboard.writeText(value);
-        showToast("Copied");
-      } catch {
-        showToast("Could not copy");
-      }
+      await copyText(value);
     }
 
     function onKey(e: KeyboardEvent) {
