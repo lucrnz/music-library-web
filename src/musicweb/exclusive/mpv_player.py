@@ -15,6 +15,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from musicweb.exclusive.coreaudio import get_device_volume, set_device_volume
+from musicweb.exclusive.volume import ExclusiveVolume, Restore
+
 logger = logging.getLogger(__name__)
 
 EventCallback = Callable[[str, dict[str, Any]], None]
@@ -42,7 +45,11 @@ class MpvPlayer:
         self._results: dict[int, Any] = {}
         self._closed = False
         self._device: str | None = None
-        self._volume = 100.0
+        self._vol = ExclusiveVolume(
+            get_hw=lambda d: get_device_volume(d),
+            set_hw=lambda d, v: set_device_volume(d, v),
+            set_digital=self._set_digital,
+        )
         self._paused = True
         self._position = 0.0
         self._duration = 0.0
@@ -54,7 +61,7 @@ class MpvPlayer:
 
     @property
     def volume(self) -> float:
-        return self._volume
+        return self._vol.user
 
     @property
     def paused(self) -> bool:
@@ -113,6 +120,10 @@ class MpvPlayer:
     def close(self) -> None:
         with self._lock:
             self._closed = True
+            self._unhog_unlocked()
+            restore = self._vol.on_release()
+            self._device = None
+            self._write_restore(restore)
             if self._sock is not None:
                 try:
                     self._command_unlocked("quit")
@@ -143,9 +154,15 @@ class MpvPlayer:
     def set_device(self, mpv_device: str) -> None:
         """Select output and arm exclusive mode for that device."""
         with self._lock:
+            leaving = self._device is not None and self._device != mpv_device
+            restore = self._vol.on_device(mpv_device)
+            if leaving:
+                self._unhog_unlocked()
+            self._write_restore(restore)
             self._device = mpv_device
             self._command_unlocked("set_property", "audio-exclusive", True)
             self._command_unlocked("set_property", "audio-device", mpv_device)
+            self._vol.apply()
 
     def load(self, url: str) -> None:
         """Load and play an absolute HTTP(S) stream URL."""
@@ -157,6 +174,7 @@ class MpvPlayer:
             self._command_unlocked("loadfile", url, "replace")
             self._command_unlocked("set_property", "pause", False)
             self._paused = False
+            self._vol.apply()
 
     def pause(self) -> None:
         with self._lock:
@@ -177,9 +195,10 @@ class MpvPlayer:
         """Stop playback and drop exclusive Core Audio hold (idle process stays up)."""
         with self._lock:
             self._clear_transport_unlocked()
-            self._command_unlocked("set_property", "audio-exclusive", False)
-            self._command_unlocked("set_property", "audio-device", "auto")
+            self._unhog_unlocked()
+            restore = self._vol.on_release()
             self._device = None
+            self._write_restore(restore)
             logger.info("Exclusive device released")
 
     def _clear_transport_unlocked(self) -> None:
@@ -199,21 +218,39 @@ class MpvPlayer:
             self._command_unlocked("set_property", "time-pos", float(seconds))
 
     def set_volume(self, volume_0_100: float) -> None:
-        v = max(0.0, min(100.0, float(volume_0_100)))
         with self._lock:
-            self._volume = v
-            self._command_unlocked("set_property", "volume", v)
+            self._vol.set_user(volume_0_100)
 
     def status_snapshot(self) -> dict[str, Any]:
         return {
             "device": self._device,
-            "volume": self._volume,
+            "volume": self._vol.user,
             "paused": self._paused,
             "position": self._position,
             "duration": self._duration,
             "url": self._url,
-            "volume_path": "digital",
+            "volume_path": self._vol.path,
         }
+
+    def _set_digital(self, digital: float) -> None:
+        if self._sock is None:
+            return
+        self._command_unlocked("set_property", "volume", digital)
+
+    def _unhog_unlocked(self) -> None:
+        try:
+            self._command_unlocked("set_property", "audio-exclusive", False)
+            self._command_unlocked("set_property", "audio-device", "auto")
+        except Exception:
+            pass
+
+    def _write_restore(self, restore: Restore | None) -> None:
+        if restore is None:
+            return
+        try:
+            set_device_volume(restore.device_id, restore.volume)
+        except Exception:
+            logger.debug("hardware volume restore failed", exc_info=True)
 
     def _next_id(self) -> int:
         self._req_id += 1
@@ -310,6 +347,21 @@ class MpvPlayer:
                         "error",
                         {"message": f"mpv end-file: {reason}"},
                     )
+            return
+        if msg.get("event") == "audio-reconfig":
+            try:
+                with self._lock:
+                    if (
+                        not self._closed
+                        and self._device
+                        and self._vol.device_id
+                    ):
+                        self._vol.apply()
+            except Exception:
+                logger.debug(
+                    "volume re-apply after audio-reconfig failed",
+                    exc_info=True,
+                )
             return
         if msg.get("event") == "log-message":
             text = msg.get("text") or ""
