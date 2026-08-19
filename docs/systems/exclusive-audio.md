@@ -35,7 +35,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#ex
 ## Source of truth
 
 - Companion CLI: `src/musicweb/cli/exclusive_audio.py`
-- Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `mpv_player.py`, `coreaudio.py`)
+- Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `mpv_player.py`, `coreaudio.py`, `volume.py`)
 - Profile tags + catalog: `src/musicweb/transcode/profiles.py`
 - HTTP: `GET /api/exclusive-formats`, existing `GET /api/stream` + `POST /api/transcode/prepare` with tags
 - Client: `frontend/src/exclusive/` (including `statusFace.ts`, `companionClient.ts`), `stores/exclusiveAudio.ts`, `playback/sinks/`, `stores/player.ts`, `playbackStatus.ts`
@@ -151,7 +151,13 @@ Implementation: pure `static/js/exclusive/statusFace.js` — Settings panel uses
 
 ## Volume
 
-Digital **mpv** volume is required and always available. Core Audio hardware volume is best-effort and must not block playback.
+Digital **mpv** volume is required and must not block playback. Hog bypasses the Mac mixer, so exclusive at the in-app slider 100% is often quieter than browser playback unless analog gain is written.
+
+When a hardware volume write succeeds, that write is the slider and mpv stays at unity. Otherwise the slider is digital mpv. Each apply picks the path independently. The companion re-applies after exclusive output is up, not only when the slider moves.
+
+Pre-hog hardware volume is restored when exclusive is released, the output device changes, or the companion process stops. If that level could not be read, it is left alone. A crash or SIGKILL without a clean stop cannot restore.
+
+Mac volume keys usually do nothing while hogged. The in-app slider is exclusive volume.
 
 ## Prepare while exclusive
 
