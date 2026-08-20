@@ -5,7 +5,7 @@
 import type { QueueRecord } from "@/downloads/queue";
 import { reactive } from "vue";
 
-export type AutoPausedReason = "offline" | "server" | "metered";
+export type AutoPausedReason = "offline" | "server";
 
 export interface LiveProgress {
   loaded: number;

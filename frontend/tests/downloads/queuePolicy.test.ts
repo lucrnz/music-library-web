@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { autoPauseReason, isConstrainedConnection } = vi.hoisted(() => ({
+const { autoPauseReason } = vi.hoisted(() => ({
   autoPauseReason: vi.fn(),
-  isConstrainedConnection: vi.fn(),
 }));
 
 vi.mock("@/connectivity", () => ({
@@ -13,11 +12,6 @@ vi.mock("@/connectivity", () => ({
   onConnectivityRecovered: vi.fn(),
   requestHealthProbe: vi.fn(),
   setHealthContext: vi.fn(),
-}));
-vi.mock("@/networkConstraints", () => ({
-  isConstrainedConnection,
-  canDetectConnectionType: vi.fn(() => false),
-  onConstraintChange: vi.fn(),
 }));
 vi.mock("@/downloads/db", () => ({
   getOne: vi.fn(),
@@ -52,17 +46,10 @@ vi.mock("@/api", () => ({
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
 
 import { downloadAutoPauseReason } from "@/downloads/queuePolicy";
-import { settings } from "@/stores/settings";
 
 describe("downloadAutoPauseReason", () => {
   beforeEach(() => {
     autoPauseReason.mockReset();
-    isConstrainedConnection.mockReset();
-    settings.onlyDownloadOnWifi = false;
-  });
-
-  afterEach(() => {
-    settings.onlyDownloadOnWifi = false;
   });
 
   it("returns offline / server from autoPauseReason", () => {
@@ -72,17 +59,8 @@ describe("downloadAutoPauseReason", () => {
     expect(downloadAutoPauseReason()).toBe("server");
   });
 
-  it("returns metered when only-wifi and constrained", () => {
+  it("returns null when connectivity is clear", () => {
     autoPauseReason.mockReturnValue(null);
-    settings.onlyDownloadOnWifi = true;
-    isConstrainedConnection.mockReturnValue(true);
-    expect(downloadAutoPauseReason()).toBe("metered");
-  });
-
-  it("returns null when unconstrained", () => {
-    autoPauseReason.mockReturnValue(null);
-    settings.onlyDownloadOnWifi = true;
-    isConstrainedConnection.mockReturnValue(false);
     expect(downloadAutoPauseReason()).toBeNull();
   });
 });

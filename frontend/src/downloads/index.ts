@@ -477,10 +477,3 @@ export async function checkOrphans() {
   }
 }
 
-/** Cellular / Wi‑Fi constraint flip — re-evaluate only-download-on-Wi‑Fi pause. */
-export function onNetworkConstraintChanged() {
-  syncControlFlags();
-  import("./queuePolicy.js")
-    .then((q) => q.reapplyNetworkPolicy?.())
-    .catch(() => {});
-}

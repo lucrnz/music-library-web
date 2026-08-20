@@ -9,7 +9,7 @@ import { applyExpanded, applyPlaybackPosition } from "@/stores/playerPrefs";
 import { refreshPlayerCovers } from "@/stores/playerSession";
 import { applyVolume, initAudioListeners } from "@/stores/player";
 import {
-  bindNetworkConstraintEffects,
+  bindSettingsPrepareTracks,
   loadCodecs,
 } from "@/stores/settings";
 import { initExclusiveAudio } from "@/stores/exclusiveAudio";
@@ -33,7 +33,7 @@ initAudioListeners();
 bindConnectivityStore();
 loadCodecs();
 initExclusiveAudio();
-bindNetworkConstraintEffects(() => pl.tracks);
+bindSettingsPrepareTracks(() => pl.tracks);
 bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.
 initDownloads().then(() => refreshPlayerCovers());

@@ -1,6 +1,6 @@
 /**
- * Quality preferences: Wi‑Fi stream, cellular stream, download codec,
- * playback policy when a download exists, only-download-on-Wi‑Fi.
+ * Quality preferences: stream codec, download codec, playback policy
+ * when a download exists.
  */
 import { reactive } from "vue";
 import { apiGet, requestPrepare, preparedKeys } from "@/api";
@@ -12,25 +12,17 @@ import {
 } from "@/codecSupport";
 import type { Track } from "@/models/track";
 import {
-  canDetectConnectionType,
-  isConstrainedConnection,
-  onConstraintChange,
-} from "@/networkConstraints";
-import {
   getExclusiveProfileTag,
   isExclusiveEnabled,
 } from "@/stores/exclusiveAudio";
 import { acquireModalLock, releaseModalLock } from "@/stores/modalLock";
 
-const KEY_STREAM_WIFI = "musicweb.streamCodec";
-const KEY_STREAM_CELLULAR = "musicweb.streamCodecCellular";
+const KEY_STREAM = "musicweb.streamCodec";
 const KEY_DOWNLOAD = "musicweb.downloadCodec";
 const KEY_PLAYBACK_POLICY = "musicweb.playbackPolicy";
-const KEY_ONLY_WIFI = "musicweb.onlyDownloadOnWifi";
 const KEY_CATALOG = "musicweb.codecCatalog.v1";
 
 const DEFAULT_CODEC = "opus_192_48000";
-const DEFAULT_CELLULAR = "opus_160_48000";
 
 export type PlaybackPolicy = "prefer_better" | "prefer_offline" | "prefer_stream";
 
@@ -47,16 +39,12 @@ export interface CodecCatalog {
 }
 
 export interface SettingsState {
-  streamWifi: string;
-  streamCellular: string | null;
+  streamCodec: string;
   download: string;
   playbackPolicy: PlaybackPolicy;
-  onlyDownloadOnWifi: boolean;
   options: CodecOption[];
   default: string;
   open: boolean;
-  canDetectConnectionType: boolean;
-  constrained: boolean;
 }
 
 export interface StreamChangeCtx {
@@ -70,7 +58,6 @@ interface ApplyStreamOpts {
   restartPlayback?: boolean;
   playIndex?: (i: number) => void;
   index?: number;
-  notifyDownloads?: boolean;
 }
 
 export const PLAYBACK_POLICIES = [
@@ -92,14 +79,11 @@ export const PLAYBACK_POLICIES = [
 ];
 
 export const settings = reactive<SettingsState>({
-  /** Wi‑Fi / unrestricted stream profile tag */
-  streamWifi: DEFAULT_CODEC,
-  /** Cellular stream profile tag, or null = same as Wi‑Fi. */
-  streamCellular: DEFAULT_CELLULAR,
+  /** Stream profile tag */
+  streamCodec: DEFAULT_CODEC,
   /** OPFS download profile tag */
   download: DEFAULT_CODEC,
   playbackPolicy: "prefer_better",
-  onlyDownloadOnWifi: true,
   /**
    * Catalog entries from GET /api/codecs, filtered to formats this browser can decode.
    */
@@ -116,10 +100,6 @@ export const settings = reactive<SettingsState>({
   default: DEFAULT_CODEC,
   /** Settings modal open state */
   open: false,
-  /** Mirrors canDetectConnectionType for UI reactivity */
-  canDetectConnectionType: canDetectConnectionType(),
-  /** Mirrors isConstrainedConnection for UI / queue */
-  constrained: isConstrainedConnection(),
 });
 
 /** Last active stream used for prepare bookkeeping */
@@ -135,19 +115,6 @@ function pickDefault() {
     settings.options[0]?.id ||
     settings.default
   );
-}
-
-function pickDefaultCellular() {
-  const ids = new Set(settings.options.map((o) => o.id));
-  if (ids.has(DEFAULT_CELLULAR)) return DEFAULT_CELLULAR;
-  // Next-lower Opus by bitrate if possible
-  const opus = settings.options
-    .filter((o) => (o.kind || "").toLowerCase() === "opus")
-    .slice()
-    .sort((a, b) => (b.bitrate_kbps || 0) - (a.bitrate_kbps || 0));
-  if (opus.length >= 2) return opus[1].id;
-  if (opus.length === 1) return opus[0].id;
-  return null;
 }
 
 function kindFromTag(id: string) {
@@ -226,33 +193,23 @@ function loadPrefs({ catalogIsAuthoritative }: { catalogIsAuthoritative: boolean
   const fallback = pickDefault();
 
   try {
-    const wifiRaw = localStorage.getItem(KEY_STREAM_WIFI);
-    if (wifiRaw != null && ids.has(wifiRaw)) {
-      settings.streamWifi = wifiRaw;
-    } else if (wifiRaw != null && !catalogIsAuthoritative) {
-      settings.streamWifi = wifiRaw;
-      ensureSyntheticOption(wifiRaw);
+    const streamRaw = localStorage.getItem(KEY_STREAM);
+    if (streamRaw != null && ids.has(streamRaw)) {
+      settings.streamCodec = streamRaw;
+    } else if (streamRaw != null && !catalogIsAuthoritative) {
+      settings.streamCodec = streamRaw;
+      ensureSyntheticOption(streamRaw);
     } else {
-      settings.streamWifi = fallback;
+      settings.streamCodec = fallback;
     }
   } catch {
-    settings.streamWifi = fallback;
+    settings.streamCodec = fallback;
   }
 
   try {
-    const cellRaw = localStorage.getItem(KEY_STREAM_CELLULAR);
-    if (cellRaw === "" || cellRaw === "same") {
-      settings.streamCellular = null;
-    } else if (cellRaw != null && ids.has(cellRaw)) {
-      settings.streamCellular = cellRaw;
-    } else if (cellRaw != null && !catalogIsAuthoritative) {
-      settings.streamCellular = cellRaw;
-      ensureSyntheticOption(cellRaw);
-    } else {
-      settings.streamCellular = pickDefaultCellular();
-    }
+    localStorage.removeItem("musicweb.streamCodecCellular");
   } catch {
-    settings.streamCellular = pickDefaultCellular();
+    /* ignore */
   }
 
   try {
@@ -263,10 +220,10 @@ function loadPrefs({ catalogIsAuthoritative }: { catalogIsAuthoritative: boolean
       settings.download = dlRaw;
       ensureSyntheticOption(dlRaw);
     } else {
-      settings.download = settings.streamWifi;
+      settings.download = settings.streamCodec;
     }
   } catch {
-    settings.download = settings.streamWifi;
+    settings.download = settings.streamCodec;
   }
 
   try {
@@ -280,11 +237,9 @@ function loadPrefs({ catalogIsAuthoritative }: { catalogIsAuthoritative: boolean
   }
 
   try {
-    const ow = localStorage.getItem(KEY_ONLY_WIFI);
-    // Default true when unset
-    settings.onlyDownloadOnWifi = ow == null ? true : ow === "1" || ow === "true";
+    localStorage.removeItem("musicweb.onlyDownloadOnWifi");
   } catch {
-    settings.onlyDownloadOnWifi = true;
+    /* ignore */
   }
 
   if (catalogIsAuthoritative) persistAll();
@@ -297,27 +252,11 @@ function persistNonCodecPrefs() {
   } catch {
     /* ignore */
   }
-  try {
-    localStorage.setItem(
-      KEY_ONLY_WIFI,
-      settings.onlyDownloadOnWifi ? "true" : "false"
-    );
-  } catch {
-    /* ignore */
-  }
 }
 
 function persistAll() {
   try {
-    localStorage.setItem(KEY_STREAM_WIFI, settings.streamWifi);
-  } catch {
-    /* ignore */
-  }
-  try {
-    localStorage.setItem(
-      KEY_STREAM_CELLULAR,
-      settings.streamCellular == null ? "same" : settings.streamCellular
-    );
+    localStorage.setItem(KEY_STREAM, settings.streamCodec);
   } catch {
     /* ignore */
   }
@@ -329,15 +268,9 @@ function persistAll() {
   persistNonCodecPrefs();
 }
 
-/** Active stream profile for the current network condition. */
+/** Active stream profile. */
 export function getActiveStreamCodec() {
-  if (!canDetectConnectionType() || !isConstrainedConnection()) {
-    return settings.streamWifi;
-  }
-  if (settings.streamCellular == null || settings.streamCellular === "") {
-    return settings.streamWifi;
-  }
-  return settings.streamCellular;
+  return settings.streamCodec;
 }
 
 /**
@@ -350,7 +283,6 @@ export async function loadCodecs() {
     await applyServerCatalog(cached);
   }
   loadPrefs({ catalogIsAuthoritative: !!cached });
-  refreshNetworkFlags();
   lastPreparedActive = getActiveStreamCodec();
 
   const ctrl = new AbortController();
@@ -379,11 +311,6 @@ export async function loadCodecs() {
   } finally {
     clearTimeout(timer);
   }
-}
-
-export function refreshNetworkFlags() {
-  settings.canDetectConnectionType = canDetectConnectionType();
-  settings.constrained = isConstrainedConnection();
 }
 
 /**
@@ -415,11 +342,6 @@ function applyActiveStreamSideEffects(
     for (const [tag, group] of byTag) {
       requestPrepare(group, tag, { replace: true });
     }
-    if (opts.notifyDownloads) {
-      import("../downloads/index.js")
-        .then((m) => m.onNetworkConstraintChanged?.())
-        .catch(() => {});
-    }
     return;
   }
 
@@ -435,11 +357,6 @@ function applyActiveStreamSideEffects(
     });
     requestPrepare(list, active, { replace: true });
   }
-  if (opts.notifyDownloads) {
-    import("../downloads/index.js")
-      .then((m) => m.onNetworkConstraintChanged?.())
-      .catch(() => {});
-  }
   if (
     opts.restartPlayback &&
     changed &&
@@ -451,45 +368,13 @@ function applyActiveStreamSideEffects(
   }
 }
 
-/**
- * Background prepare when network constraint flips (no current-track restart).
- */
-export function onNetworkConstraintChanged(tracks?: Track[] | null) {
-  refreshNetworkFlags();
-  applyActiveStreamSideEffects(tracks, {
-    restartPlayback: false,
-    notifyDownloads: true,
-  });
-}
-
-export function setStreamWifi(v: string, ctx: StreamChangeCtx) {
+export function setStreamCodec(v: string, ctx: StreamChangeCtx) {
   if (!settings.options.some((o) => o.id === v)) return false;
-  if (v === settings.streamWifi) {
+  if (v === settings.streamCodec) {
     settings.open = false;
     return false;
   }
-  settings.streamWifi = v;
-  persistAll();
-  settings.open = false;
-  applyActiveStreamSideEffects(ctx.tracks, {
-    restartPlayback: true,
-    playIndex: ctx.playIndex,
-    index: ctx.index,
-  });
-  return true;
-}
-
-/** @param v null = same as Wi‑Fi */
-export function setStreamCellular(v: string | null, ctx: StreamChangeCtx) {
-  if (v != null && v !== "" && !settings.options.some((o) => o.id === v)) {
-    return false;
-  }
-  const next = v == null || v === "" ? null : v;
-  if (next === settings.streamCellular) {
-    settings.open = false;
-    return false;
-  }
-  settings.streamCellular = next;
+  settings.streamCodec = v;
   persistAll();
   settings.open = false;
   applyActiveStreamSideEffects(ctx.tracks, {
@@ -524,20 +409,8 @@ export function setPlaybackPolicy(v: PlaybackPolicy) {
   return true;
 }
 
-export function setOnlyDownloadOnWifi(on: boolean) {
-  const next = !!on;
-  if (next === settings.onlyDownloadOnWifi) return false;
-  settings.onlyDownloadOnWifi = next;
-  persistAll();
-  import("../downloads/index.js")
-    .then((m) => m.onNetworkConstraintChanged?.())
-    .catch(() => {});
-  return true;
-}
-
 export function openSettings() {
   settings.open = true;
-  refreshNetworkFlags();
   acquireModalLock("settings");
 }
 
@@ -547,11 +420,9 @@ export function closeSettings() {
 }
 
 /**
- * Subscribe once: keep settings flags fresh; store tracks getter for prepare.
+ * Store a playlist-tracks getter so prepare-on-policy-change can run
+ * without importing the playlist store.
  */
-export function bindNetworkConstraintEffects(getTracks: () => Track[]) {
+export function bindSettingsPrepareTracks(getTracks: () => Track[]) {
   getTracksFn = getTracks;
-  onConstraintChange(() => {
-    onNetworkConstraintChanged(getTracks() || []);
-  });
 }

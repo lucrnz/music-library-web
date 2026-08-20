@@ -11,8 +11,6 @@ import {
   requestHealthProbe,
   setHealthContext,
 } from "@/connectivity";
-import { isConstrainedConnection } from "@/networkConstraints";
-import { settings } from "@/stores/settings";
 import { codecExt } from "@/downloads/catalog";
 import { getOne, putOne, type MetaRecord } from "@/downloads/db";
 import {
@@ -42,18 +40,13 @@ let schedulePumpFn: (() => void) | null = null;
 let downloadsEnabled = false;
 
 /**
- * Combined auto-pause: offline / server / mobile data (when only-download-on-Wi‑Fi).
- * @returns {null | 'offline' | 'server' | 'metered'}
+ * Combined auto-pause: offline / server unreachable.
+ * @returns {null | 'offline' | 'server'}
  */
-export type DownloadAutoPauseReason = "offline" | "server" | "metered";
+export type DownloadAutoPauseReason = "offline" | "server";
 
 export function downloadAutoPauseReason(): DownloadAutoPauseReason | null {
-  const base = autoPauseReason();
-  if (base) return base;
-  if (settings.onlyDownloadOnWifi && isConstrainedConnection()) {
-    return "metered";
-  }
-  return null;
+  return autoPauseReason();
 }
 
 export async function syncHealthFromPolicy() {
@@ -91,7 +84,7 @@ export function initPolicy(hooks: { schedulePump: () => void }) {
 }
 
 /**
- * Re-evaluate offline / server / metered policy after constraint, setting, or recovery.
+ * Re-evaluate offline / server policy after connectivity change or recovery.
  */
 export async function reapplyNetworkPolicy() {
   const reason = downloadAutoPauseReason();
@@ -158,9 +151,6 @@ export function getPauseBanner() {
   }
   if (reason === "server") {
     return "Paused — waiting for the library server. Retrying automatically…";
-  }
-  if (reason === "metered") {
-    return "Paused — waiting for Wi‑Fi. Downloads won't use mobile data.";
   }
   return "";
 }

@@ -8,11 +8,9 @@ import {
   PLAYBACK_POLICIES,
   settings,
   closeSettings,
-  setStreamWifi,
-  setStreamCellular,
+  setStreamCodec,
   setDownloadCodec,
   setPlaybackPolicy,
-  setOnlyDownloadOnWifi,
 } from "@/stores/settings";
 import {
   clearStoredDownloads,
@@ -41,7 +39,6 @@ import ExclusiveAudioPanel from "@/components/settings/ExclusiveAudioPanel.vue";
 import LibraryScanPanel from "@/components/settings/LibraryScanPanel.vue";
 import SettingsSelect from "@/components/settings/SettingsSelect.vue";
 
-const SAME_AS_WIFI = "__same_as_wifi__";
 const playbackPolicies = PLAYBACK_POLICIES;
     const diagModes = DIAG_MODES;
     const downloadsBusy = ref(false);
@@ -52,31 +49,14 @@ const playbackPolicies = PLAYBACK_POLICIES;
       return canReachServer();
     });
 
-    const showNetworkQuality = computed(
-      () => settings.canDetectConnectionType
-    );
-
     const hideBrowserQuality = computed(() =>
       shouldHideBrowserQualityControls()
     );
 
     const showExclusivePanel = computed(() => exclusiveAudio.capable);
 
-    const streamFieldLabel = computed(() =>
-      showNetworkQuality.value ? "Streaming — Wi‑Fi" : "Streaming"
-    );
-
     const scanPanelActive = computed(
       () => settings.open && libraryReachable.value
-    );
-
-    const cellularOptions = computed(() => [
-      { id: SAME_AS_WIFI, label: "Same as Wi‑Fi" },
-      ...settings.options,
-    ]);
-
-    const cellularSelectedId = computed(() =>
-      settings.streamCellular == null ? SAME_AS_WIFI : settings.streamCellular
     );
 
     const policyHint = computed(() => {
@@ -94,12 +74,8 @@ const playbackPolicies = PLAYBACK_POLICIES;
       openMenu.value = openMenu.value === id ? null : id;
     }
 
-    function chooseWifi(id: string) {
-      setStreamWifi(id, playbackCtx());
-    }
-
-    function chooseCellular(id: string) {
-      setStreamCellular(id === SAME_AS_WIFI ? null : id, playbackCtx());
+    function chooseStream(id: string) {
+      setStreamCodec(id, playbackCtx());
     }
 
     function chooseDownload(id: string) {
@@ -113,12 +89,6 @@ const playbackPolicies = PLAYBACK_POLICIES;
         id === "prefer_stream"
       ) {
         setPlaybackPolicy(id);
-      }
-    }
-
-    function onOnlyWifiChange(e: Event) {
-      if (e.target instanceof HTMLInputElement) {
-        setOnlyDownloadOnWifi(e.target.checked);
       }
     }
 
@@ -261,32 +231,19 @@ const playbackPolicies = PLAYBACK_POLICIES;
         <div v-if="!hideBrowserQuality" class="modal-section">
           <div class="modal-section-title">Quality</div>
           <p class="modal-hint">
-            Choose streaming quality
-            <template v-if="showNetworkQuality"> for Wi‑Fi and mobile data</template>.
+            Choose streaming quality.
             <template v-if="downloads.enabled"> Downloads use their own quality setting.</template>
           </p>
 
           <SettingsSelect
-            menu-id="wifi"
-            label-id="wifi-codec-label"
-            :field-label="streamFieldLabel"
+            menu-id="stream"
+            label-id="stream-codec-label"
+            field-label="Streaming"
             :options="settings.options"
-            :selected-id="settings.streamWifi"
+            :selected-id="settings.streamCodec"
             :open-menu="openMenu"
             @toggle="toggleMenu"
-            @choose="chooseWifi"
-          />
-
-          <SettingsSelect
-            v-if="showNetworkQuality"
-            menu-id="cellular"
-            label-id="cell-codec-label"
-            field-label="Streaming — Mobile data"
-            :options="cellularOptions"
-            :selected-id="cellularSelectedId"
-            :open-menu="openMenu"
-            @toggle="toggleMenu"
-            @choose="chooseCellular"
+            @choose="chooseStream"
           />
 
           <SettingsSelect
@@ -344,18 +301,6 @@ const playbackPolicies = PLAYBACK_POLICIES;
               :checked="downloads.enabled"
               :disabled="downloadsBusy"
               @change="onToggleDownloads"
-            />
-          </label>
-          <label
-            v-if="showNetworkQuality && downloads.enabled"
-            class="toggle-row"
-          >
-            <span class="toggle-label">Only download on Wi‑Fi</span>
-            <input
-              type="checkbox"
-              class="toggle-input"
-              :checked="settings.onlyDownloadOnWifi"
-              @change="onOnlyWifiChange"
             />
           </label>
           <p v-if="downloads.enabled && downloadsStorageLine" class="modal-hint" style="margin-top:8px">
