@@ -10,7 +10,8 @@ One household-wide 24/7 station. With no tuners it only advances a clock. Listen
 - Shared prepare enqueue: `src/musicweb/transcode/enqueue.py`
 - Client chrome + socket: `frontend/src/stores/radio.ts`
 - Radio-owned audio: `frontend/src/radio/`
-- Room / bar / mini: `frontend/src/components/radio/`
+- Radio wrapper + mini: `frontend/src/components/radio/`
+- Shared now-playing surface: `frontend/src/components/player/NowPlayingView.vue`
 - Related: `docs/systems/transcoding.md`, `docs/systems/playback.md`, `docs/systems/exclusive-audio.md`
 
 ## Station
@@ -41,9 +42,11 @@ First Tune-in starts complete-file work so `GET /api/stream?id=&codec=` + Range 
 
 ## Client
 
-`/radio` is a third pane (not a ModeBar chip). Desktop shows the tab bar; Radio replaces both library panes (`v-if` unmount, not CSS hide). Opening Radio does not steal the bar. Radio chrome starts at first Tune-in and stays until a library/queue play.
+`/radio` is a third pane (not a ModeBar chip). Desktop shows the tab bar; Radio replaces both library panes (`v-if` unmount, not CSS hide). `#player` is hidden on `/radio` — the Radio pane is the only now-playing surface there. Opening Radio does not auto Tune in. Radio chrome starts at first Tune-in and stays until a library/queue play.
 
-`radio.ts` owns the socket. Connect on Radio tab enter; do not disconnect on leave. Socket stays up for the Radio tab or chrome `stopped` | `tuning` | `tuned`. Audio is a radio-owned `HTMLAudioElement`, not the shared on-demand sink. Now-playing layout matches on-demand: title, then `Artist — album`. No user seek, skip, or pause-in-place. Play = Tune in, pause/stop = Tune out. Lyrics `seekable=false`. Radio does not write listen-stat events.
+Off `/radio`, mobile shows `RadioMini` only; desktop shows a compact `NowPlayingView` in the player slot. Never both. Cover/title navigate to `/radio`. Tune in/out uses `#i-tune-in` / `#i-tune-out` (icon-only on mini; icon+label on room and compact). After Tune out, the stopped face stays until a library/queue play.
+
+`radio.ts` owns the socket. Connect on Radio tab enter; do not disconnect on leave. Socket stays up for the Radio tab or chrome `stopped` | `tuning` | `tuned`. Audio is a radio-owned `HTMLAudioElement`, not the shared on-demand sink. `radio.ts` and `NowPlayingView` do not import `player.ts`. The room is `NowPlayingView` via a thin radio wrapper (`RadioNowPlaying`), not a parallel now-playing tree. Title, then `Artist — album`. Transport is Tune in/out only — no shuffle, prev, next, repeat, or play/pause. Seek is filled and not interactive. A `pause` while the element has `ended` is ignored; `ended` is never Tune-out (the station clock owns advance). Lyrics overlay + toggle, `seekable=false`; radio lyrics open state is local to the wrapper. Codec line is injected `PlaybackStatusLine` (`playSource: "streaming"` + tuner profile, or lossy source fields; exclusive snap disabled). Radio does not write listen-stat events.
 
 Media Session: radio-owned metadata; play/pause/stop only. `onDemandControl.ts` owns install/restore/suspend.
 
