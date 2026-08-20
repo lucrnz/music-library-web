@@ -71,3 +71,17 @@ Open the diff for the builder/host split, downloadsMenuMap projections, and the 
 ```bash
 git show 4537e82d11f11dd1d9726ad25471432f147c0df1
 ```
+
+## 2026-08-17-s2p5gdhq-custom-artist-art-done
+
+**Title:** Custom artist art
+
+**Commit:** `cd529cf155b9fdf9f7d7c346f09e371b641fde17`
+
+Added a library-wide preferred artist portrait: crop-to-square on the client, store under covers/artists-preferred/ so scan cannot touch it, serve it first from GET /api/artist-image, and queue uploads/reverts while offline.
+
+Open the diff for GET flag honesty, the artistArt overlay/pending module split, and why the preferred store is sacred to scan.
+
+```bash
+git show cd529cf155b9fdf9f7d7c346f09e371b641fde17
+```
