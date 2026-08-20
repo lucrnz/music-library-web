@@ -41,6 +41,14 @@ LRCLIB_USER_AGENT = (
 # Diagnostic JSONL store (source constant — not env).
 DIAG_DIR_MAX_BYTES = 64 * 1024 * 1024
 
+# Household radio picker (source constants — not env).
+RADIO_BATCH_SIZE = 8
+RADIO_MIN_DURATION_MS = 30000
+RADIO_BANLIST_MAX_BATCHES = 4
+RADIO_MAX_PER_ARTIST = 2
+RADIO_PICK_ATTEMPTS = 32
+RADIO_TICK_SECONDS = 1
+
 
 def _env_file() -> str | None:
     for candidate in _ENV_CANDIDATES:

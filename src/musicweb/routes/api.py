@@ -13,6 +13,7 @@ from musicweb.routes import (
     listens,
     media,
     playlists,
+    radio,
 )
 
 router = APIRouter()
@@ -24,3 +25,4 @@ router.include_router(media.router)
 router.include_router(playlists.router)
 router.include_router(listens.router)
 router.include_router(diag.router)
+router.include_router(radio.router)

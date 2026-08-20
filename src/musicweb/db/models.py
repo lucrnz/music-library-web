@@ -213,3 +213,34 @@ class ScanState(Base):
     files_total_hint: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     current_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class RadioStationState(Base):
+    """Singleton household radio clock. Track ids have no FK."""
+
+    __tablename__ = "radio_station"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    current_track_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    track_started_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    current_batch_seq: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+class RadioQueueItem(Base):
+    """Persisted current (and next) radio batch rows. Track ids have no FK."""
+
+    __tablename__ = "radio_queue"
+
+    batch_seq: Mapped[int] = mapped_column(Integer, primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    track_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+
+class RadioBanlistItem(Base):
+    """Persisted picked-batch banlist. Track ids have no FK."""
+
+    __tablename__ = "radio_banlist"
+
+    batch_seq: Mapped[int] = mapped_column(Integer, primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    track_id: Mapped[str] = mapped_column(String(36), nullable=False)

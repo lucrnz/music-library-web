@@ -16,7 +16,11 @@ from musicweb.config import Settings, load_settings
 from musicweb.jobs import LibraryJobRunner
 from musicweb.library import PathEscapeError
 from musicweb.pwa_shell import require_frontend_dist
+from musicweb.radio.prepare import RadioPrepare
+from musicweb.radio.station import RadioStation, run_radio_worker
+from musicweb.radio.tuners import TunerRegistry
 from musicweb.routes import api, pages, pwa
+from musicweb.routes.radio import NowPlayingHub, bind_station_listener
 from musicweb.runtime.bootstrap import bootstrap_services
 from musicweb.transcode import Transcoder, check_dependencies
 from musicweb.transcode.idle import (
@@ -46,6 +50,8 @@ async def lifespan(app: FastAPI):
     control = getattr(app.state, "control_server", None)
     sweep_task = None
     sweep_stop = asyncio.Event()
+    radio_task = None
+    radio_stop = asyncio.Event()
 
     settings.validate_library()
     settings.ensure_data_dir()
@@ -57,6 +63,25 @@ async def lifespan(app: FastAPI):
             app.state.stream_cache_idle, transcoder.clear_cache, sweep_stop
         ),
         name="stream-cache-idle",
+    )
+    station = RadioStation(app.state.database, app.state.library)
+    tuners = TunerRegistry()
+    prepare = RadioPrepare(
+        station,
+        tuners,
+        app.state.database,
+        app.state.library,
+        app.state.transcoder,
+    )
+    hub = NowPlayingHub()
+    bind_station_listener(station, hub, prepare)
+    app.state.radio = station
+    app.state.radio_hub = hub
+    app.state.radio_tuners = tuners
+    app.state.radio_prepare = prepare
+    radio_task = asyncio.create_task(
+        run_radio_worker(station, radio_stop),
+        name="radio-station",
     )
 
     if control is not None:
@@ -89,6 +114,13 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("Shutting down")
+        radio_stop.set()
+        if radio_task is not None:
+            radio_task.cancel()
+            try:
+                await radio_task
+            except asyncio.CancelledError:
+                pass
         sweep_stop.set()
         if sweep_task is not None:
             await sweep_task
