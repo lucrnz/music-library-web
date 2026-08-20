@@ -21,7 +21,7 @@ A listen is **70% accumulated media time** in one play cycle (successful load, o
 
 Cold-load resume is a seek. Time skipped by the resume jump does not count. Finishing from a late resume without hearing 70% after that seek does not count.
 
-All sinks count: stream, downloaded OPFS, and exclusive companion. Start the cycle after a successful html or exclusive load. Do **not** infer listens from `GET /api/stream`, prepare, or diagnostic JSONL.
+All sinks count: stream, downloaded OPFS, and exclusive companion. Start the cycle after a successful html or exclusive load. Do **not** infer listens from `GET /api/stream`, prepare, or diagnostic JSONL. **Radio must not start a listen cycle** and must not write listen-stat events.
 
 If duration is never known, count only on ended / companion eof.
 

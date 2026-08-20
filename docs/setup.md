@@ -6,7 +6,7 @@ Operator on-ramp for running Musicweb on your network. For the full command refe
 
 - **Python 3.11+** and [uv](https://github.com/astral-sh/uv)
 - **Node 20+** and [pnpm](https://pnpm.io/) (SPA lives under `frontend/`)
-- **ffmpeg** on `PATH`, built with **libsoxr**, **libopus**, and **flac** (the server refuses to start if those are missing)
+- **ffmpeg** and **ffprobe** on `PATH`, ffmpeg built with **libsoxr**, **libopus**, and **flac** (the server and `musicweb doctor` refuse to start if those are missing)
 - A music library root (any folder layout). Packed lossless (FLAC/ALAC) is indexed by default. MP3/AAC in the tree are ignored unless `MUSICWEB_INDEX_LOSSY` is on.
 
 ## Configure
@@ -32,7 +32,7 @@ pnpm --dir frontend build
 uv run musicweb
 ```
 
-Bare `musicweb` serves HTTP (same as `musicweb serve`). On start the process validates paths and ffmpeg, requires `frontend/dist`, applies migrations, starts a quick library scan, and prints listen / LAN URLs. `musicweb doctor` fails if the frontend dist is missing.
+Bare `musicweb` serves HTTP (same as `musicweb serve`). On start the process validates paths, ffmpeg, and ffprobe, requires `frontend/dist`, applies migrations, starts a quick library scan, and starts the household radio clock. `musicweb doctor` fails if the frontend dist or ffprobe is missing.
 
 More entrypoints (`scan`, `stats`, `doctor`, and so on): [development/commands.md](./development/commands.md).
 

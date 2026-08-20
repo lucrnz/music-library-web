@@ -20,7 +20,7 @@ uv sync
 pnpm --dir frontend install
 ```
 
-Requires Python 3.11+ and [uv](https://github.com/astral-sh/uv), plus **Node 20+** and [pnpm](https://pnpm.io/) for the SPA. System dependency: `ffmpeg` on `PATH` built with **libsoxr**, **libopus**, and **flac**. The server refuses to start if those encoders/resampler are missing.
+Requires Python 3.11+ and [uv](https://github.com/astral-sh/uv), plus **Node 20+** and [pnpm](https://pnpm.io/) for the SPA. System dependency: `ffmpeg` and **ffprobe** on `PATH`, ffmpeg built with **libsoxr**, **libopus**, and **flac**. The server and `musicweb doctor` refuse to start if those tools or encoders/resampler are missing.
 
 Chromium for `pnpm --dir frontend test` is a one-time install (not committed):
 

@@ -13,7 +13,8 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (Vite + pnpm). Stre
 
 ## Hard rules
 
-- Lossless-first library — index packed lossless by default. MP3/AAC are opt-in (`MUSICWEB_INDEX_LOSSY`), always marked, and streamed/downloaded as stored. Do not add other lossy formats or a lossy transcode path without a new product decision.
+- Lossless-first library — index packed lossless by default. MP3/AAC are opt-in (`MUSICWEB_INDEX_LOSSY`), always marked, and streamed/downloaded as stored (on-demand and radio). Do not add other lossy formats or a lossy transcode path without a new product decision.
+- **ffprobe** is a hard startup and `musicweb doctor` requirement (next to ffmpeg).
 - High-fidelity transcoding is a primary goal. Prefer transparent encode settings (libsoxr VHQ, correct dither policy) over “good enough” shortcuts. See product audio guidelines.
 - Stable track identity comes from content fingerprints, not paths. Renames should reattach when the fingerprint matches.
 - Process-temp stream cache is wiped on shutdown and after about an hour with no HTTP client; do not treat it as durable storage.
@@ -38,6 +39,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (Vite + pnpm). Stre
 - [PWA shell](docs/systems/pwa.md)
 - [Offline downloads](docs/systems/downloads.md)
 - [Playback and quality](docs/systems/playback.md)
+- [Household radio](docs/systems/radio.md)
 - [Playback stats](docs/systems/playback-stats.md)
 - [Connectivity](docs/systems/connectivity.md)
 - [Diagnostics](docs/systems/diagnostics.md)

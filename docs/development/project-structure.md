@@ -44,11 +44,12 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `sw.template.js` | Service worker template (Python-injected precache list) |
 | `db/` | Engine, models, FTS helpers, repositories, Alembic migrations |
 | `scan/` | Walk, fingerprint, batch upsert, covers, artist images, lyrics, finalize (phases only) |
-| `transcode/` | Dependency check, profiles, probe, encode worker, idle stream-cache eviction |
+| `transcode/` | Dependency check (ffmpeg + ffprobe), profiles, probe, encode worker, shared `enqueue_prepare`, idle stream-cache eviction |
+| `radio/` | Household station clock, picker, tuner prepare (reuses Transcoder) |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
 | `images/` | WebP render/store helpers |
-| `routes/` | HTTP API routers (health, scan, discovery, folders, media, playlists, listens, diag) + SPA pages |
+| `routes/` | HTTP API routers (health, scan, discovery, folders, media, playlists, listens, radio, diag) + SPA pages |
 
 ## Ownership rules
 
@@ -71,5 +72,5 @@ This page describes **ownership boundaries** — where code lives and what each 
 - `docs/development/`: commands, environment, structure.
 - `docs/frontend/`: SPA conventions.
 - `docs/product/`: product and audio guidelines.
-- `docs/systems/`: cross-cutting design (scan, transcode, PWA, downloads, playback, playback-stats, connectivity).
+- `docs/systems/`: cross-cutting design (scan, transcode, radio, PWA, downloads, playback, playback-stats, connectivity).
 - `docs/plans/`: in-flight multi-stage plans (`*-pending` only). Finished plans live in git history.

@@ -24,6 +24,7 @@ Conceptual areas:
 | Listen events | Household play log for Stats rankings (not the media archive; not diagnostic JSONL) |
 | FTS | Full-text search over indexed track/artist/album text |
 | Scan state | Single-row progress for the background scanner |
+| Radio station / queue / banlist | Household radio clock bookkeeping — not a user-facing queue |
 
 ## Identity and durability
 

@@ -16,7 +16,7 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 - Codec honesty (browser decode probes): `frontend/src/codecSupport.ts`, `codecProbes.ts`
 - HTTP stream / prepare: `frontend/src/api.ts`, `src/musicweb/routes/media.py`
 - Stream profiles (server): `src/musicweb/transcode/profiles.py`
-- Related: `docs/systems/transcoding.md`, `docs/systems/downloads.md`, `docs/systems/exclusive-audio.md`, `docs/product/core-guidelines.md`, `docs/systems/playback-stats.md`
+- Related: `docs/systems/transcoding.md`, `docs/systems/radio.md`, `docs/systems/downloads.md`, `docs/systems/exclusive-audio.md`, `docs/product/core-guidelines.md`, `docs/systems/playback-stats.md`
 
 Listen counting is **not** stream or prepare HTTP. Household stats live in `docs/systems/playback-stats.md`.
 
@@ -38,6 +38,8 @@ Resolution is decision-first: load catalog record when downloads are enabled, ap
 When downloads are enabled and `connectivity.canUseRemote` is false, queue rows without a playable local file (`trackDownloadState` `ready` or `other`) are shown unavailable (`PlaylistView`). Cursor advance is `stepNext` / `stepPrev` on a record; skip is `pl.advanceToPlayable` (clone + those steps). `playNext` / `playPrev` stay thin; a tap still `playIndex`s that index. `computeNextIndex` / `peekNextIndex` stay download-agnostic. Current playback is not yanked when reachability drops.
 
 The reactive `player` record lives in `playerState.js`. Cover / Media Session metadata: `playerSession.js`. Volume / expanded storage: `playerPrefs.js`. Resume position: `playbackPosition.ts` (`musicweb.playbackPosition.v1`). Load and sinks stay in `player.js`.
+
+Household radio is **not** stream-vs-download resolve. The radio element loads `/api/stream` for the current official id and instructed-seeks to the station clock. Display clocks: not tuned / tuning follow the official snapshot; tuned follows `audio.currentTime` (re-seek if drift > 2s). After Tune out the stopped radio face stays on the bar. A library/queue play calls `exitToQueue()` and takes the player. See `docs/systems/radio.md`.
 
 ## Resume position
 

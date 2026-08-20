@@ -11,7 +11,7 @@ Automated tests cover heavy logic on the server and in the SPA. They do not repl
 
 ## What we test
 
-Meaningful units: scan identity/fingerprints, job single-flight, transcode probe/policy, path jail, lyrics/artist-image pickers, client quality/play-block/download policy, playlist cursor, settings persist.
+Meaningful units: scan identity/fingerprints, job single-flight, transcode probe/policy, path jail, lyrics/artist-image pickers, radio picker/clock/tuner/protocol (mocked ffprobe and `Transcoder`), client quality/play-block/download policy, playlist cursor, settings persist. Radio tests hit extracted helpers; they do not import `player.ts`.
 
 Not Vue chrome, OPFS/IndexedDB/download worker, `player.ts` loaders, sinks, PWA registration, ffmpeg encode, or outbound fetch.
 
@@ -47,7 +47,7 @@ Identity, batch, finalize, FTS, and job-runner tests use `init_database` on a tm
 
 Tests must not:
 
-- call `create_app` or start uvicorn
+- call `create_app` or start uvicorn (radio tests hit `now_playing.serialize` / protocol helpers, not TestClient)
 - encode with ffmpeg or invoke a real `ffprobe` / `FLAC` file
 - talk to Last.fm, MusicBrainz, fanart.tv, or LRCLIB
 - exercise Core Audio / mpv

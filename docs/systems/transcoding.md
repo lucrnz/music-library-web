@@ -6,6 +6,7 @@
 - Worker / cache interaction: `src/musicweb/transcode/worker.py`
 - Dependency gate: `src/musicweb/transcode/deps.py`
 - Probe helpers: `src/musicweb/transcode/probe.py`
+- Shared enqueue: `src/musicweb/transcode/enqueue.py`
 - HTTP stream / prepare / cache clear: `src/musicweb/routes/media.py`
 - Reserved `source` passthrough: `src/musicweb/transcode/passthrough.py`
 - Idle eviction (last HTTP + in-flight): `src/musicweb/transcode/idle.py`
@@ -17,7 +18,7 @@ Deliver browser-playable audio from a lossless library using **explicit stream p
 
 ## Startup requirements
 
-The process verifies ffmpeg exposes **libsoxr**, **libopus**, and **flac**. Missing pieces are fatal at startup — silent fallback to lower-quality resamplers is not allowed.
+The process verifies **ffmpeg** and **ffprobe** are on PATH, and ffmpeg exposes **libsoxr**, **libopus**, and **flac**. Missing pieces are fatal at startup — silent fallback to lower-quality resamplers is not allowed.
 
 ## Encode policy (intent)
 
@@ -43,7 +44,7 @@ Client quality prefs, play-source resolution, and prepare timing are owned by `d
 - Stream by stable track id (preferred) with a codec/profile tag.
 - Settings UI should only offer profiles the browser can decode (client probes).
 - Client may pick one stream tag and one download tag; `/api/codecs` exposes bitrate/depth/rate so the client can rank quality.
-- Optional prepare endpoint prewarms encodes without blocking the main UX path.
+- Optional prepare endpoint prewarms encodes without blocking the main UX path. Radio and that endpoint share `enqueue_prepare`. Radio must not call `drop_pending_prewarm`. Radio jobs log `log_label` + profile tag, not paths. The 1-hour idle wipe is unchanged. Vite `/api` proxy sets `ws: true` so the radio WebSocket upgrades in `pnpm --dir frontend dev`.
 - Client may send prepare with `urgent: true` (near end of the current track, once per playback load) so the next queue item is promoted to the urgent encode tier before natural advance.
 
 ## Guardrails

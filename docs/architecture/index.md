@@ -19,7 +19,8 @@ Musicweb is a single-process LAN server:
 4. **On-demand transcoder** — ffmpeg worker produces Opus/FLAC stream profiles into a process-temp cache.
 5. **Client offline path** — optional OPFS downloads, connectivity, and play-source resolution in the browser.
 6. **Listen log** — household play events in SQLite for Stats rankings; not stream HTTP and not diagnostic JSONL. See `docs/systems/playback-stats.md`.
-7. **Diagnostics** — structured client/server events as JSONL under the data dir; Settings cutoff + `musicweb logs`. See `docs/systems/diagnostics.md`.
+7. **Household radio** — one process-lifetime station clock; tuners drive `Transcoder` prepare of the current track (not a second encoder). See `docs/systems/radio.md`.
+8. **Diagnostics** — structured client/server events as JSONL under the data dir; Settings cutoff + `musicweb logs`. See `docs/systems/diagnostics.md`.
 
 ```text
 Browser (Vue SFC + TypeScript SPA)
@@ -32,6 +33,7 @@ FastAPI (routes → services)
     ├── DB / repositories / FTS
     ├── Scanner (background thread)
     ├── Cover / artist-image stores
+    ├── Radio station (clock + picker; tuners enqueue Transcoder)
     └── Transcoder (ffmpeg worker)
             │
             ▼
@@ -46,6 +48,7 @@ FastAPI (routes → services)
 - `docs/systems/pwa.md`: installable shell and service worker scope.
 - `docs/systems/downloads.md`: client offline catalog (OPFS).
 - `docs/systems/playback.md`: play source, quality prefs, prepare.
+- `docs/systems/radio.md`: household station (encode + seek).
 - `docs/systems/playback-stats.md`: household listen log and Stats browse mode.
 - `docs/systems/connectivity.md`: reachability.
 - `docs/database/overview.md`: what the index represents.
@@ -59,7 +62,8 @@ FastAPI (routes → services)
 | `routes/` | HTTP parse, status codes, thin orchestration | Encode policy, SQL details |
 | `scan/` | Walk, fingerprint, upsert, enrichment passes | Serving HTTP |
 | `db/` | Models, sessions, FTS, migrations, repositories | Filesystem media I/O |
-| `transcode/` | Profiles, probe, worker, dependency checks | Persistent media storage |
+| `transcode/` | Profiles, probe, worker, dependency checks, shared enqueue | Persistent media storage |
+| `radio/` | Station clock, picker, tuner-driven prepare | Live encode pipe, listen stats |
 | `frontend/src/` | UI state, playback, connectivity, offline downloads (OPFS) | Server-side index writes |
 
 Composition root is `main.create_app`: settings, database, library, stores, scanner, process cache, and transcoder are attached to `app.state` for route deps.

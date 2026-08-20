@@ -14,7 +14,7 @@ Musicweb is a **personal LAN library player**: browse and stream your own lossle
 
 ## Experience principles
 
-- **Mobile-first.** Phones get bottom tabs, scrolling browse-mode chips, icon-only queue actions, a mini-player, and an expandable now-playing sheet. Desktop (≥ ~900px) gets side-by-side library/playlist panes and a persistent player bar. Chrome is an application shell, not a document: names and lyrics are copied from `⋯` menus, not by selecting page text.
+- **Mobile-first.** Phones get bottom tabs (Library | Playlist | Radio), scrolling browse-mode chips, icon-only queue actions, a mini-player, and an expandable now-playing sheet. Desktop (≥ ~900px) keeps the tab bar; Library/Playlist restore the dual-pane; Radio replaces both. Chrome is an application shell, not a document: names and lyrics are copied from `⋯` menus, not by selecting page text.
 
 - **Browse modes:** Folders (filesystem), Artists → Albums → Tracks, Albums grid, Search, Stats. Routes should remain bookmarkable. Stats is household most-played, not a Settings surface — see `docs/systems/playback-stats.md`.
 - **Queue vs playlists:** Session queue lives in the browser (survives reload). Saved playlists live in SQLite and are shared across devices on the same server.
@@ -32,7 +32,8 @@ Intentional policies (implementation in `transcode/`):
 - **Resampling:** libsoxr via ffmpeg at SoX Very High Quality equivalents — not the OS mixer’s cheap resampler.
 - **Dither:** Shibata-style dither **only when reducing bit depth**. Never dither when increasing bit depth or when depth is unchanged. If sample rate and bit depth already match the stream profile, skip aresample entirely.
 - **Encoders:** best practical quality knobs for each codec (e.g. Opus VBR at the selected bitrate; true 24-bit FLAC when that profile is chosen).
-- **Source library:** packed lossless is the default. MP3/AAC may be indexed when opted in; those files are marked and played as stored — do not re-encode them.
+- **Source library:** packed lossless is the default. MP3/AAC may be indexed when opted in; those files are marked and played as stored (on-demand **and** radio) — do not re-encode them.
+- **Radio tab:** one household station; Tune in joins the official clock via `/api/stream` + seek. Exclusive-mode radio is TODO (Tune-in stops the hog; radio stays HTML-only). See `docs/systems/radio.md`.
 
 Tweaking small pipeline details for transparent delivery is preferred over simpler lower-quality paths.
 

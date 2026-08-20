@@ -30,7 +30,11 @@ Indexed formats are FLAC and ALAC-in-MP4 by default. MP3 and AAC-in-M4A/MP4 may 
 
 ### ffmpeg + libsoxr for all stream conversion
 
-Browser-compatible delivery is produced by ffmpeg, not browser demux of arbitrary library codecs. Resampling uses libsoxr at very-high-quality settings; the server **fails startup** if required codecs/resampler are absent rather than silently degrading.
+Browser-compatible delivery is produced by ffmpeg, not browser demux of arbitrary library codecs. Resampling uses libsoxr at very-high-quality settings; the server **fails startup** if required codecs/resampler are absent rather than silently degrading. **ffprobe** is also required (startup and `musicweb doctor`) so radio pick-time validity checks are honest.
+
+### Household radio reuses Transcoder / `/api/stream`
+
+Radio is a household clock plus instructed client seek, not a live stdout pipe and not a second encoder. Tuners call the same `enqueue_prepare` as `/transcode/prepare`. There is no `/api/radio/stream` and no concat demuxer. See `docs/systems/radio.md`.
 
 ### Vite + pnpm frontend, FastAPI serves dist
 

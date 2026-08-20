@@ -32,10 +32,10 @@ To upgrade Vue/Router: change the version in `frontend/package.json`, run `pnpm 
 
 ## UX conventions
 
-- Mobile: bottom tab bar + mini-player / expanded now-playing. The inactive pane is `.hidden` on the `.view` root (`#view-library` / `#view-playlist` in `LibraryView.vue` / `PlaylistView.vue`). `LibraryView` must stay a single root so `App.vue`’s fallthrough `class` lands on `#view-library`. Desktop (`min-width: 900px` in `layout.ts` / `desktop.css`) forces `.view.hidden` visible and hides `#tab-bar`.
+- Mobile: bottom tab bar (Library | Playlist | Radio) + mini-player / expanded now-playing. The inactive library/queue pane is `.hidden` on the `.view` root. On `/radio`, `App.vue` **`v-if` unmounts** library+playlist (do not CSS-hide a still-mounted `LibraryView`). Desktop (`min-width: 900px`) **shows** `#tab-bar`; Library/Playlist remount the dual-pane; Radio replaces both. Do not add Radio as a ModeBar chip. `effectiveLibraryMode` stays radio-free.
 - **Browse mode chips** (`ModeBar.vue`, `frontend/css/library.css`): one labeled row, horizontal scroll, no wrap, do not shrink below the label. Selected id is `useLibraryLocation()` (last library on `/queue`), via `effectiveLibraryMode` in `browseMode.ts` — not raw `route.meta.mode`.
 - **Queue view-bar:** icon-only actions below 900px; labeled pills at/above. Glyphs live in the `frontend/index.html` sprite.
-- Desktop: two-pane library + playlist with persistent player bar (breakpoint owned by CSS).
+- Desktop: two-pane library + playlist with persistent player bar (breakpoint owned by CSS). Radio uses `RadioNowPlaying` `layout="room"` in the main area and `layout="bar"` in PlayerBar; mini is `RadioMini`. `radio.ts` owns the socket. Tuner codec is a `browser_listed` profile, never `source`. SettingsModal omits `playIndex` while radio chrome is on.
 - Codec list in settings reflects **probed** browser decode support (`codecSupport.ts` / related probes), not a static marketing list alone — see `docs/systems/playback.md`.
 - **Tracks and albums** normalize at the API boundary (`models/track.ts`, `models/album.ts`). Those leaves use camelCase — including album `lossyKind`. Artist, folder, and browse leaves keep today’s server field names (`album_count`, `track_count`, browse `dirs`/`files`). Do not add new runtime mappers for those surfaces.
 - **Lossy marks:** `LossyMark` is a button (hover `title`, `aria-label`, tap → `showToast`). Do not nest it inside another `<button>`. Icon tap must not play, expand, or navigate. No long-press. Copy lives in `lossyKind.ts`.

@@ -43,7 +43,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#ex
 
 ## Architecture (prose)
 
-1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks are **unavailable** in exclusive mode (`exclusive_lossy`) until a future remux plan — do not send MP3/AAC through companion FLAC encode.
+1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks are **unavailable** in exclusive mode (`exclusive_lossy`) until a future remux plan — do not send MP3/AAC through companion FLAC encode. **Exclusive-mode radio is TODO.** Tune-in stops the hog; radio audio is HTML-only until a future exclusive-radio design. See `docs/systems/radio.md`.
 2. **Mac PWA** (installed, standalone) enables exclusive mode, stores `HOG_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
 3. **Companion** (`musicweb exclusive-audio`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
 4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until the companion **accepts** a live device.
