@@ -15,3 +15,17 @@ A later agent would open the delete commit to recover the coverage inventory and
 ```bash
 git show bd3ac7b21745124cbbb6ee29878c6bc5d0ab6f6a
 ```
+
+## 2026-08-16-b9ut1p4i-vite-pnpm-vitest-browser-done
+
+**Title:** Vite + pnpm + Vitest browser (initial cutover)
+
+**Commit:** `45ef5c1af6fff2a4bf34e89c73f61ea0c841d844`
+
+Cut the SPA over from no-bundler ESM and vendor_deps onto a frontend/ Vite + pnpm package; FastAPI now serves frontend/dist and refuses to start without it, and PWA inventory walks that dist.
+
+Open the diff to see how Jinja/import-map serving was deleted and how /sw.js fingerprinting was rewritten for hashed assets.
+
+```bash
+git show 45ef5c1af6fff2a4bf34e89c73f61ea0c841d844
+```
