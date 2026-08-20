@@ -2,15 +2,361 @@
 
 Done plan directories removed from `docs/plans/` via git rm. Each entry's command shows that plan's delete commit.
 
+## 2026-08-12-cpnkw10w-near-end-urgent-prepare-done
+
+**Title:** Near-end urgent prepare
+
+**Commit:** `c8cae4f402ebc4fffed970ed4edac0d5aa703e53`
+
+Collapsed Transcoder enqueue/promote/preempt into one helper shared by non-blocking `prepare` and blocking `ensure_stream`, and made queue “what plays next” a single pure computation. A later agent would open the delete commit for the client prepare-policy helper and the thin once-per-load near-end urgent prepare latch (offline is not a permanent miss).
+
+```bash
+git show c8cae4f402ebc4fffed970ed4edac0d5aa703e53
+```
+
+## 2026-08-12-8v5zed63-np-playback-status-done
+
+**Title:** Now-playing playback status
+
+**Commit:** `1037d5e0abfbaf35fc21cf6782374225b5193a38`
+
+Replaced boolean `fromDownload` with structured play-source state (streaming / downloaded / unavailable, profile tag, block reason) and pure formatters for the status line and details rows. Open the diff for the expanded now-playing status line and Playback details (mobile modal / desktop popover) that read that state instead of guessing from `audio.src`.
+
+```bash
+git show 1037d5e0abfbaf35fc21cf6782374225b5193a38
+```
+
+## 2026-08-12-jkijfpzr-np-playback-status-cleanup-done
+
+**Title:** Now-playing playback status cleanup
+
+**Commit:** `63330e8fa4af9c41e8fe83ee41bda99ccddd13ae`
+
+Deduped play-block messages/types so resolve and formatters share one map, and made every player play-source write set source, profile, and block reason together. Open the diff for `PlaybackStatusLine` extraction and the collapse of dual modal/popover flags into one `detailsOpen`.
+
+```bash
+git show 63330e8fa4af9c41e8fe83ee41bda99ccddd13ae
+```
+
+## 2026-08-12-9sk1mb4n-library-tree-layout-done
+
+**Title:** Library tree layout
+
+**Commit:** `ac84687411dd01a933229365cd04782cfba5c088`
+
+Widened `libraryLayout` to list/grid/tree with a Finder-style menu and one recursive TreeView (session expand, lazy cache, visible-nodes) used by every mode. Open the diff for the pure `treeNavigation` policy (router stays on mode root), mode adapters, entity-id group actions, and WAI-ARIA tree keyboard.
+
+```bash
+git show ac84687411dd01a933229365cd04782cfba5c088
+```
+
+## 2026-08-12-hqb58c9x-downloads-tree-album-queue-done
+
+**Title:** Downloads tree album queue
+
+**Commit:** `64cd7aea92beef231ffc1afd3deca549a0885f87`
+
+Added a batch catalog-record → `Track[]` projector and replaced tree group-add ternaries with a kind→handler map. Open the diff for `dl-album` “Add all to playlist” that queues offline tracks through that projector.
+
+```bash
+git show 64cd7aea92beef231ffc1afd3deca549a0885f87
+```
+
+## 2026-08-12-85peeduf-cq-structural-fixes-done
+
+**Title:** CQ structural fixes
+
+**Commit:** `afbacf6fe670e2b2b3cdba56f596a152a1b8ed9c`
+
+Hard-cutover merged the downloads queue micro-graph into `queue.js` and catalog pieces into `catalog.js`, renamed enqueue vs UI download exports, and extracted shared browse-layout composables. Open the diff for the face-state vocabulary (`downloaded` / `streaming` / `unavailable`), catalogIndex-based prepare skip, and linearized `playIndex` attempt/fallback.
+
+```bash
+git show afbacf6fe670e2b2b3cdba56f596a152a1b8ed9c
+```
+
+## 2026-08-12-fskjdmw1-docs-high-priority-fix-done
+
+**Title:** Docs high-priority fix
+
+**Commit:** `ecb0c4c6dcdc8a2d8cc4151e1fd8ad4d9d421060`
+
+Added durable systems pages for downloads, playback/quality, and connectivity, then thinned frontend conventions to ownership pointers. Open the diff for the docs-map / AGENTS / Source-of-truth hygiene pass that first pointed at `docs/plans/` as historical.
+
+```bash
+git show ecb0c4c6dcdc8a2d8cc4151e1fd8ad4d9d421060
+```
+
+## 2026-08-12-xkez74gq-cli-library-management-done
+
+**Title:** CLI library management
+
+**Commit:** `1040a9b77e929c8bf1df980a2f049ec0ef53e27e`
+
+Added a data-dir exclusive flock, shared `musicweb.runtime` bootstrap (migrate-if-no-server), and `LibraryJobRunner` as the only scan/regen orchestrator. Open the diff for the Typer CLI (`serve`, `scan`, regen, `stats`, `doctor`), the length-prefixed UDS control protocol, and `run_library_job` that prefers the live server then falls back to local `run_sync`.
+
+```bash
+git show 1040a9b77e929c8bf1df980a2f049ec0ef53e27e
+```
+
+## 2026-08-12-43bbt818-playback-details-dismiss-done
+
+**Title:** Playback details dismiss
+
+**Commit:** `c40343596373b40061c7fd6ae9f475501208e274`
+
+Moved mobile Playback details from a footer Close pill to a Settings-style header dismiss, then tidied sheet chrome so the modal is not bottom-heavy. Open the diff for the `np-playback-details-*` header/CSS cut.
+
+```bash
+git show c40343596373b40061c7fd6ae9f475501208e274
+```
+
+## 2026-08-12-wr7lhei2-dismiss-icon-always-x-done
+
+**Title:** Dismiss icon always X
+
+**Commit:** `1a5015378698fc1c951c7918f3168dcee3d69ec2`
+
+Stopped using chevron-down as close: Downloads manager and other modals always show `close`, and expanded now-playing’s collapse control is X on mobile as well as desktop. Open the diff for `PlayerBar` / `NowPlayingFull` `closeIcon` and the modal dismiss buttons.
+
+```bash
+git show 1a5015378698fc1c951c7918f3168dcee3d69ec2
+```
+
+## 2026-08-12-rkpl98o2-exclusive-audio-done
+
+**Title:** Exclusive audio
+
+**Commit:** `e804f7c11df3007a6f2913dce39a79904d5040f7`
+
+Registered the exclusive FLAC allowlist (`flac_{depth}_{rate}`) on the same stream/prepare path, exposed it via `GET /api/exclusive-formats`, and shipped `musicweb exclusive-audio` (HOG_TOKEN, mpv, Core Audio devices) plus a Mac-PWA companion client. Open the diff for html vs companion sinks, exclusive hard-fail, and per-track exclusive prepare that never uses the browser stream codec.
+
+```bash
+git show e804f7c11df3007a6f2913dce39a79904d5040f7
+```
+
+## 2026-08-12-lakm77kz-pytest-setup-done
+
+**Title:** Pytest setup
+
+**Commit:** `636c0eb0f22128d74f273fc6bd50293d5f5a171a`
+
+Declared pytest in the uv `dev` dependency group, added a smoke import test, and documented `uv run --group dev pytest`. Open the diff for the first test harness commit before later coverage work.
+
+```bash
+git show 636c0eb0f22128d74f273fc6bd50293d5f5a171a
+```
+
+## 2026-08-12-d2yjrox0-exclusive-audio-uvicorn-ws-sansio-done
+
+**Title:** Exclusive audio uvicorn WS sansio
+
+**Commit:** `14c6be56fb371b430837ec821cfa9756446531f1`
+
+Pinned the exclusive-audio companion to `ws="websockets-sansio"` so uvicorn stops loading the deprecated legacy adapter, then script-verified hello still works. Open the diff for the one-line `uvicorn.run` pin in the companion CLI only.
+
+```bash
+git show 14c6be56fb371b430837ec821cfa9756446531f1
+```
+
+## 2026-08-12-9ta23trr-exclusive-settings-selects-done
+
+**Title:** Exclusive settings selects
+
+**Commit:** `bc88c1765256c531a583b88d46034268868553e8`
+
+Replaced `QualitySelect` with a shared `SettingsSelect` (neutral CSS names, one options list, document-level outside-click) and migrated quality menus onto it. Open the diff for the exclusive settings UI that reuses that primitive.
+
+```bash
+git show bc88c1765256c531a583b88d46034268868553e8
+```
+
+## 2026-08-13-jsi7cnkr-exclusive-release-on-controller-loss-done
+
+**Title:** Exclusive release on controller loss
+
+**Commit:** `ba5708c16a378122b3a095a269512d723137db27`
+
+Made exclusive a runtime property of the selected device (`set_device` arms; `release_device` unhogs and keeps idle mpv) and encoded “no controller ⇒ no exclusive hold” in one hub helper. Open the diff for disconnect/TTL release order, client re-apply of the persisted device, and the TTL hard-stop when the socket stays open.
+
+```bash
+git show ba5708c16a378122b3a095a269512d723137db27
+```
+
+## 2026-08-13-sj4gm7kd-exclusive-client-ux-done
+
+**Title:** Exclusive client UX
+
+**Commit:** `dc457afd1ac19353d9b3c1411b0fd79d63ddb61a`
+
+Split persisted preference from companion live device so `isExclusiveArmed()` follows the hog target, and made exclusive play ensure-then-load. Open the diff for the exclusive primary face on the status line, Playback details rows from exclusive-formats, and Settings copy that no longer says “Armed” without a live device.
+
+```bash
+git show dc457afd1ac19353d9b3c1411b0fd79d63ddb61a
+```
+
+## 2026-08-14-qx3t950k-queue-track-context-menu-done
+
+**Title:** Queue track context menu
+
+**Commit:** `1c2777a85c2fd27a2f2edceeafc163b6867e909f`
+
+Landed presentational `ActionCard` / `AnchoredMenu` / `ActionMenu` (no store) and wired session-queue ⋮ plus desktop right-click. Open the diff for Remove, kind-based download / Remove download, and Go to album / artist items, plus the 900px and close-before-confirm conventions.
+
+```bash
+git show 1c2777a85c2fd27a2f2edceeafc163b6867e909f
+```
+
+## 2026-08-15-5jaewd47-playback-exclusive-correctness-done
+
+**Title:** Playback and exclusive correctness
+
+**Commit:** `d2060f57c1155117f03ce1fc2a3de9824d1c3e28`
+
+Stopped the HTML sink from reporting error with no `src`, isolated player loads so stale sink events no-op, and made hub disconnect/message ignore sessions that are no longer mapped. Open the diff for idempotent companion sync (`event.target === ws`, live inFlightKey), continue-on-remove of the current queue row, and “online means `canReachServer()`”.
+
+```bash
+git show d2060f57c1155117f03ce1fc2a3de9824d1c3e28
+```
+
+## 2026-08-15-pxfaa9xf-lossy-index-passthrough-done
+
+**Title:** Lossy index and source passthrough
+
+**Commit:** `81298998654dd2ebf1323ec9b8befb9bc54b74d2`
+
+Added opt-in `MUSICWEB_INDEX_LOSSY`, lossless/lossy/indexable predicates, `is_lossy` / `bitrate_kbps` / album `lossy_kind`, and sibling skip so a lossy file next to a lossless copy is not indexed. Open the diff for `codec=source` stream/download (ffmpeg never sees a lossy path), client source play + exclusive refuse, and `LossyMark` on every title.
+
+```bash
+git show 81298998654dd2ebf1323ec9b8befb9bc54b74d2
+```
+
+## 2026-08-15-9h4h98f3-exclusive-identity-cleanup-done
+
+**Title:** Exclusive identity cleanup
+
+**Commit:** `72afa81f86bc86aa737c4aa0819b4b83ae93c777`
+
+Made “this ClientSession is the current socket / live controller” a locked hub predicate used before player work and again before hub writes. Open the diff for `togglePlay` folded onto `ensureAudible`, `isLiveSocket` for companion sync, and the single `companion(fn)` dynamic-import helper.
+
+```bash
+git show 72afa81f86bc86aa737c4aa0819b4b83ae93c777
+```
+
+## 2026-08-15-rpkq7l4z-lossy-delivery-unfork-done
+
+**Title:** Lossy delivery un-fork
+
+**Commit:** `187b4ca15254b6e12d947fbdaa8fc601cdfb60f1`
+
+Normalized the active stream tag to `"source"` for lossy tracks and deleted the copied offline/local/stream tree in `resolvePlaySource`. Open the diff for the `lossyKind` contract, shared MP4 ALAC-vs-AAC classify, `sourceFileMedia` ext/MIME table, and the single `read_metadata` reuse on the keep path.
+
+```bash
+git show 187b4ca15254b6e12d947fbdaa8fc601cdfb60f1
+```
+
+## 2026-08-15-kdeskmib-diag-logging-done
+
+**Title:** Diagnostic event capture
+
+**Commit:** `e0f84d085a4d700a5a874a7e200cf579d011f605`
+
+Added rotating JSONL under the diag dir, `POST /api/diag/events` ingest, and a client logger (stable client_id, IDB outbox, Errors only / Everything cutoff). Open the diff for player/stream/prepare call sites, join-key headers, and `musicweb logs` (list/show/tail/purge) that does not take the data-dir lock.
+
+```bash
+git show e0f84d085a4d700a5a874a7e200cf579d011f605
+```
+
+## 2026-08-15-6trel93j-diag-quality-judo-done
+
+**Title:** Diagnostic quality judo
+
+**Commit:** `46377c5eac81ac0f45f10694d1b15d5ea709ce2e`
+
+One server envelope + `event_files()`, one client `unacked` outbox, and one `/api` fetch helper that attaches diag headers (ingest flush stays raw `fetch`). Open the diff for `/api/stream`’s single try/except emit, player-seam emits on `beginLoad` / `failPlayback` / `attemptPlay`, and the CLI walker deleted in favor of `event_files`.
+
+```bash
+git show 46377c5eac81ac0f45f10694d1b15d5ea709ce2e
+```
+
+## 2026-08-15-46gctlry-diag-leftover-judo-done
+
+**Title:** Diagnostic leftover judo
+
+**Commit:** `2950e70939ec0403b5e15cea2c281d822eb23224`
+
+Made `append_many` the only JSONL write+rotate path (`append` is a one-record wrapper) and collapsed outbox ack/cap delete onto `dropIds`. Open the diff for the single `http.stream` success emit after plan and path are known.
+
+```bash
+git show 2950e70939ec0403b5e15cea2c281d822eb23224
+```
+
+## 2026-08-15-m8zkkqp5-lossy-delivery-judo-done
+
+**Title:** Lossy delivery judo
+
+**Commit:** `3eb36ea70dff4f79c1272125c0f83a5ec3093ce1`
+
+Added `audio_kind(path)` as the only walk/batch classify, restricted passthrough media to mp3/aac (else 400 / JS throw), and made `deliveryCodec` the only client tag decision. Open the diff for album-kind at the fetch boundary, and the play-load unfork that deletes remaining `isLossy` control flow in HTML/exclusive load.
+
+```bash
+git show 3eb36ea70dff4f79c1272125c0f83a5ec3093ce1
+```
+
+## 2026-08-15-wiicqyl8-offline-startup-done
+
+**Title:** Offline startup and download playback
+
+**Commit:** `c3aa7fb08e16fe3eae0ea4043b34dd30205e4e9b`
+
+Persisted the raw `/api/codecs` payload and applied stored quality prefs before the network GET, then treated the server as reachable only after a successful API in this page lifetime. Open the diff for fail-closed service-worker install (partial precache must not activate) and the boot path that no longer persist-disables downloads on `initDownloads` failure.
+
+```bash
+git show c3aa7fb08e16fe3eae0ea4043b34dd30205e4e9b
+```
+
+## 2026-08-15-3wzmasnl-offline-play-leftovers-done
+
+**Title:** Offline play leftovers
+
+**Commit:** `344c56df5633897e917dfb82979edb7413f11421`
+
+Made boot `GET /api/codecs` no-store so `reportSuccess()` means the origin answered, and named `canUseRemoteMedia()` as the one play-online gate. Open the diff for queue rows that gray and skip on next/prev/ended when downloads are on and remote media is closed.
+
+```bash
+git show 344c56df5633897e917dfb82979edb7413f11421
+```
+
+## 2026-08-15-f3622rq7-offline-play-judo-done
+
+**Title:** Offline play judo
+
+**Commit:** `d6bf984ce2c3fe27eb641c2a2921ae8db299ddaf`
+
+Published reachability as a snapshot (`canUseRemote` on the Vue store) and moved skip walks into playlist `stepNext` / `stepPrev` / `advanceToPlayable`. Open the diff for the player split (`playerState`, `playerSession`, `playerPrefs`) so skip and Media Session are not stuffed into the load/transport file.
+
+```bash
+git show d6bf984ce2c3fe27eb641c2a2921ae8db299ddaf
+```
+
+## 2026-08-16-kvlan2cd-idle-stream-cache-wipe-done
+
+**Title:** Idle stream-cache wipe
+
+**Commit:** `c6ba25a0ac30164554b7302fb2393b61cbc0c8ca`
+
+Added a pure idle predicate and `StreamCacheIdle` counter, then wrapped every HTTP request so enter/exit span the full body send. Open the diff for the ~60s sweeper that calls `Transcoder.clear_cache()` under the same gate as `POST /api/cache/clear`, and drains an in-flight wipe before shutdown.
+
+```bash
+git show c6ba25a0ac30164554b7302fb2393b61cbc0c8ca
+```
+
 ## 2026-08-16-a923d3cj-unit-test-coverage-done
 
 **Title:** Unit test coverage for meaningful components
 
 **Commit:** `bd3ac7b21745124cbbb6ee29878c6bc5d0ab6f6a`
 
-Shipped a hermetic pytest harness (tmp SQLite via the production migrate path) and a dual Vitest node/browser split, then filled unit tests for fingerprint, identity/reattach, job runner, transcode probe, and frontend policy/stores.
-
-A later agent would open the delete commit to recover the coverage inventory and the never-boot / no-ffmpeg / no-coverage-gate boundaries that living docs only summarize.
+Added a tmp-data-dir migrated-SQLite pytest fixture and a dual Vitest node/browser split, then filled hermetic tests for path jail, fingerprint/walk, identity/reattach, job-runner single-flight, transcode probe, and frontend policy/stores. Open the delete commit to recover the coverage inventory and the never-boot / no-ffmpeg / no-coverage-gate boundaries.
 
 ```bash
 git show bd3ac7b21745124cbbb6ee29878c6bc5d0ab6f6a
@@ -22,9 +368,7 @@ git show bd3ac7b21745124cbbb6ee29878c6bc5d0ab6f6a
 
 **Commit:** `45ef5c1af6fff2a4bf34e89c73f61ea0c841d844`
 
-Cut the SPA over from no-bundler ESM and vendor_deps onto a frontend/ Vite + pnpm package; FastAPI now serves frontend/dist and refuses to start without it, and PWA inventory walks that dist.
-
-Open the diff to see how Jinja/import-map serving was deleted and how /sw.js fingerprinting was rewritten for hashed assets.
+Scaffolded `frontend/` as a Vite + pnpm package, copied the SPA onto HMR with an `/api` proxy, and added a Chromium Icon smoke. Open the diff for the FastAPI cutover: serve `frontend/dist` or refuse to start, rewrite PWA inventory to walk hashed dist, and delete `vendor_deps` / Jinja / the no-bundler tree.
 
 ```bash
 git show 45ef5c1af6fff2a4bf34e89c73f61ea0c841d844
@@ -36,9 +380,7 @@ git show 45ef5c1af6fff2a4bf34e89c73f61ea0c841d844
 
 **Commit:** `76724e2e9ad8a0361dd5d1d42b09580939fb929e`
 
-Converted the Vue 3 SPA from defineComponent JS modules with string templates to <script setup lang="ts"> SFCs under frontend/src/, with vue-tsc as the type gate.
-
-Open the diff for the freeze-and-convert recipe, hand-written API types (no OpenAPI codegen), and the runtime-only Vue / Options-API-off cutover.
+Landed Vue SFC + TypeScript tooling on the still-JS app, then freeze-rewrote `frontend/js/` to `frontend/src/` (`<script setup lang="ts">`, `@/` imports, `vue-tsc` in build). Open the diff for the conversion recipe and the runtime-only Vue / Options-API-off cutover.
 
 ```bash
 git show 76724e2e9ad8a0361dd5d1d42b09580939fb929e
@@ -50,9 +392,7 @@ git show 76724e2e9ad8a0361dd5d1d42b09580939fb929e
 
 **Commit:** `1503c53c13a682586b97ac1121f842fa5a1a3e37`
 
-Restored single-pane mobile switching by giving LibraryView a real root so .hidden fallthrough lands, made mode chips scroll and light from last library location (including on /queue), and collapsed queue header actions to icons below 900px.
-
-Open the diff to see the fragment-class leak and the ModeBar selection source that must not use raw route.meta.mode on the queue.
+Gave `LibraryView` a single root so `:class="{ hidden: onQueue }"` lands on `#view-library` and only one pane shows below 900px. Open the diff for mode-chip horizontal scroll with last-library-mode selection on `/queue`, and icon-only queue header actions on mobile.
 
 ```bash
 git show 1503c53c13a682586b97ac1121f842fa5a1a3e37
@@ -64,9 +404,7 @@ git show 1503c53c13a682586b97ac1121f842fa5a1a3e37
 
 **Commit:** `4537e82d11f11dd1d9726ad25471432f147c0df1`
 
-Locked chrome text selection app-wide and put a ⋯ overflow menu on every music entity (list, grid, tree, page headers, now-playing) that copies names and lyrics instead of relying on native selection.
-
-Open the diff for the builder/host split, downloadsMenuMap projections, and the lyrics flatten / memory-peek Copy lyrics contract.
+Locked chrome selection (opt-in only for inputs and plain lyrics), extracted a shared clipboard helper, and built entity menu builders plus lyrics flatten / memory peek. Open the diff for `⋯` on list/grid/tree/headers/now-playing (including downloads projections) that copies names and flattened synced lyrics.
 
 ```bash
 git show 4537e82d11f11dd1d9726ad25471432f147c0df1
@@ -78,9 +416,7 @@ git show 4537e82d11f11dd1d9726ad25471432f147c0df1
 
 **Commit:** `cd529cf155b9fdf9f7d7c346f09e371b641fde17`
 
-Added a library-wide preferred artist portrait: crop-to-square on the client, store under covers/artists-preferred/ so scan cannot touch it, serve it first from GET /api/artist-image, and queue uploads/reverts while offline.
-
-Open the diff for GET flag honesty, the artistArt overlay/pending module split, and why the preferred store is sacred to scan.
+Added a second `WebpAssetStore` for preferred portraits, made GET serve that file first, and shipped POST/DELETE plus a 1:1 cropper. Open the diff for artist list/grid/tree menus (Change photo / Use library photo), the overlay, and the offline IDB pending queue that POSTs when the server returns.
 
 ```bash
 git show cd529cf155b9fdf9f7d7c346f09e371b641fde17
@@ -92,9 +428,7 @@ git show cd529cf155b9fdf9f7d7c346f09e371b641fde17
 
 **Commit:** `501577ce650930a88410b477436a22f63c39f26d`
 
-Added an i-copy sprite and made every ActionMenu copy row (including Copy lyrics) use icon: "copy" so those items match Add/Download/Go to.
-
-Open the diff for the sprite mark and the builder tests that lock the icon field.
+Added an `i-copy` sprite and set `icon: "copy"` on every ActionMenu copy row (`copyAction` and the hand-built Copy lyrics item). Open the diff for the sprite mark and the tests that lock the icon field so label-only copy cannot return from conventions.
 
 ```bash
 git show 501577ce650930a88410b477436a22f63c39f26d
@@ -106,9 +440,7 @@ git show 501577ce650930a88410b477436a22f63c39f26d
 
 **Commit:** `f1ba93d1525d072efac69d1cdcc93df88968e26b`
 
-Scan now actually persists bitrate_kbps and a new bitrate_mode (MP3 via mutagen, AAC via an esds walk); Playback details shows Encoding and Sample rate for lossy originals without inventing CBR/VBR.
-
-Open the diff for the esds walker, the TrackMetadata bitrate drop bugfix, and the catalog/queue snapshot fields needed offline.
+Scan now puts `bitrate_kbps` on every `TrackMetadata` return and classifies `bitrate_mode` (MP3 via mutagen, AAC-in-m4a via `esds` max vs avg). Open the diff for the `tracks.bitrate_mode` column and the Playback details Encoding / Sample rate rows (catalog snapshot included) that omit unknown values.
 
 ```bash
 git show f1ba93d1525d072efac69d1cdcc93df88968e26b
@@ -120,9 +452,7 @@ git show f1ba93d1525d072efac69d1cdcc93df88968e26b
 
 **Commit:** `a68a905e3a7e9fd3adc6a3bb19d5272231846bf8`
 
-On pause, page hide, or a paused seek, the current track position is stored; the next cold Play seeks there and does not auto-play.
-
-Open the diff for the dedicated localStorage key, near-end-is-0 clamp, invalidation on skip/stop, and companion pending-resume until duration is known.
+Added a pure position-store module (schema, id match, 3s near-end clamp) and wired it to pause, page hide, paused seeks, and cold `playIndex`. Open the diff for HTML and companion resume with no auto-play, and the invalidation paths on skip/stop/already-loaded replay.
 
 ```bash
 git show a68a905e3a7e9fd3adc6a3bb19d5272231846bf8
@@ -134,9 +464,7 @@ git show a68a905e3a7e9fd3adc6a3bb19d5272231846bf8
 
 **Commit:** `12d991d182992165c1dd5439a4a4bf9db474d4ef`
 
-Exclusive hog now writes Core Audio analog gain when a hardware volume selector succeeds, keeps mpv at unity on that path, and restores the pre-hog snapshot after unhog — including companion process stop.
-
-Open the diff for ExclusiveVolume tenure, HAL selector order, and the unhog-then-restore player sequence.
+Added a pure exclusive volume policy (slider clamp, hardware-vs-digital plan, one-device tenure) and real fail-open Core Audio get/set via a shared HAL bootstrap. Open the diff for `MpvPlayer` unhog-then-restore on device change / `release_device` / `close()`, and honest `volume_path`.
 
 ```bash
 git show 12d991d182992165c1dd5439a4a4bf9db474d4ef
@@ -148,9 +476,7 @@ git show 12d991d182992165c1dd5439a4a4bf9db474d4ef
 
 **Commit:** `f38df6b3cecaebb1a75cc40cb23a5008ef63c875`
 
-Every successful play cycle that hears 70% of duration records a household listen_event; the Stats browse mode ranks top artists and tracks over all-time / 7d / 30d / calendar months.
-
-Open the diff for the 70% accumulator (resume seek does not count skipped time), the localStorage outbox + idempotent POST, and listen_events ranking SQL.
+Added `listen_events` plus a single-object ingest / rankings API, and a pure 70% play-cycle accumulator. Open the diff for the localStorage outbox (`listens/bridge.ts` from sink hooks) and the bookmarkable Stats mode (time chips, top-100 artist and track rows).
 
 ```bash
 git show f38df6b3cecaebb1a75cc40cb23a5008ef63c875
