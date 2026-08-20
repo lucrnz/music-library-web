@@ -85,3 +85,17 @@ Open the diff for GET flag honesty, the artistArt overlay/pending module split, 
 ```bash
 git show cd529cf155b9fdf9f7d7c346f09e371b641fde17
 ```
+
+## 2026-08-18-kf508gw0-copy-menu-icon-done
+
+**Title:** Copy menu icon
+
+**Commit:** `501577ce650930a88410b477436a22f63c39f26d`
+
+Added an i-copy sprite and made every ActionMenu copy row (including Copy lyrics) use icon: "copy" so those items match Add/Download/Go to.
+
+Open the diff for the sprite mark and the builder tests that lock the icon field.
+
+```bash
+git show 501577ce650930a88410b477436a22f63c39f26d
+```
