@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * Expanded / full player chrome: sheet grab, cover, seek, transport, extras.
+ * On-demand now-playing wrapper: NowPlayingView + queue transport.
  * Parent owns expand/collapse and mini bar.
- * Delivery status lives in PlaybackStatusLine.
  */
-import { computed, nextTick, ref, watch, type Ref } from "vue";
+import { computed, ref, type Ref } from "vue";
+import { exclusiveStatusSnapshot } from "@/stores/exclusiveAudio";
 import { pl } from "@/stores/playlist";
 import {
   player,
@@ -16,31 +16,11 @@ import {
   seekToFraction,
   setVolume,
 } from "@/stores/player";
-import { canReachServer } from "@/connectivity";
-import { copyText } from "@/clipboard";
-import { peekLyricsMemory, resolveLyrics } from "@/lyrics/cache";
-import { lyricsClipboardText } from "@/lyrics/plainText";
-import { openSettings } from "@/stores/settings";
-import { showToast } from "@/stores/ui";
-import { formatTime, setRangeFill } from "@/util";
-import { kindForTrack } from "@/lossyKind";
-import ActionMenu from "@/components/menu/ActionMenu.vue";
-import { useRowActionMenu } from "@/components/menu/useRowActionMenu";
-import { useDesktopViewport } from "@/layout";
+import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
+import type { PlayStatusState } from "@/playbackStatus";
 import Icon from "@/components/icons/Icon.vue";
-import LossyMark from "@/components/lossy/LossyMark.vue";
-import LyricsOverlay from "@/components/player/LyricsOverlay.vue";
-import { buildNowPlayingMenuItems } from "@/components/player/nowPlayingMenuItems";
-import PlaybackStatusLine from "@/components/player/PlaybackStatusLine.vue";
-
-const DESKTOP_BREAKPOINT = "(min-width: 900px)";
-
-function isDesktop() {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia(DESKTOP_BREAKPOINT).matches
-  );
-}
+import NowPlayingView from "@/components/player/NowPlayingView.vue";
+import type { NowPlayingViewExpose } from "@/components/player/NowPlayingView.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -77,12 +57,23 @@ export type NowPlayingFullExpose = {
   closeBtn: Ref<HTMLButtonElement | null>;
 };
 
-const seekEl = ref<HTMLInputElement | null>(null);
-const volEl = ref<HTMLInputElement | null>(null);
-const closeBtn = ref<HTMLButtonElement | null>(null);
+const viewRef = ref<NowPlayingViewExpose | null>(null);
 const sheetDragY = ref<number | null>(null);
 
-const lossyKind = computed(() => kindForTrack(pl.current));
+const playState = computed((): PlayStatusState => {
+  void pl.index;
+  void pl.tracks;
+  return {
+    playSource: player.playSource as PlayStatusState["playSource"],
+    playProfileId: player.playProfileId,
+    playBlockReason: player.playBlockReason,
+    track: pl.current,
+  };
+});
+
+const exclusiveSnap = computed(
+  () => exclusiveStatusSnapshot() as ExclusiveFaceSnapshot,
+);
 
 function collapse() {
   emit("collapse");
@@ -97,334 +88,126 @@ function toggleLyrics() {
   player.lyricsOpen = !player.lyricsOpen;
 }
 
-function onSheetDown(e: PointerEvent) {
-  if (isDesktop()) return;
-  sheetDragY.value = e.clientY;
+function onSheetDragStart(clientY: number) {
+  sheetDragY.value = clientY;
   player.draggingSheet = true;
-  const target = e.currentTarget;
-  if (target instanceof HTMLElement) {
-    target.setPointerCapture?.(e.pointerId);
-  }
 }
 
-function onSheetMove(e: PointerEvent) {
+function onSheetDragMove(clientY: number) {
   if (sheetDragY.value == null) return;
-  player.sheetOffset = Math.max(0, e.clientY - sheetDragY.value);
+  player.sheetOffset = Math.max(0, clientY - sheetDragY.value);
 }
 
-function onSheetUp(e: PointerEvent) {
-  if (sheetDragY.value == null) return;
-  const dy = e.clientY - sheetDragY.value;
+function onSheetDragEnd(dy: number) {
   sheetDragY.value = null;
   player.draggingSheet = false;
   if (dy > 100) collapse();
   else player.sheetOffset = 0;
 }
 
-function onSeekDown() {
-  player.seeking = true;
+function onSeekDragging(dragging: boolean) {
+  player.seeking = dragging;
 }
 
-function rangeTarget(e: Event): HTMLInputElement | null {
-  return e.target instanceof HTMLInputElement ? e.target : null;
+function onSeekFraction(fraction: number) {
+  seekToFraction(fraction);
 }
 
-function onSeekUp(e: Event) {
-  player.seeking = false;
-  const el = rangeTarget(e);
-  if (!el) return;
-  const val = Number(el.value);
-  seekToFraction(val / 1000);
+function onVolume(v: number) {
+  setVolume(v);
 }
-
-function onSeekInput(e: Event) {
-  const el = rangeTarget(e);
-  if (el) setRangeFill(el);
-}
-
-function onVolInput(e: Event) {
-  const el = rangeTarget(e);
-  if (!el) return;
-  setVolume(Number(el.value));
-  setRangeFill(el);
-}
-
-watch(
-  () => [player.currentTime, player.duration, player.seeking],
-  async () => {
-    await nextTick();
-    if (!player.seeking && seekEl.value) {
-      seekEl.value.value = String(props.seekValue);
-      setRangeFill(seekEl.value);
-    }
-  },
-);
-
-watch(
-  () => player.volume,
-  async () => {
-    await nextTick();
-    if (volEl.value) {
-      volEl.value.value = String(player.volume);
-      setRangeFill(volEl.value);
-    }
-  },
-  { immediate: true },
-);
 
 function focusClose() {
-  nextTick(() => {
-    closeBtn.value?.focus?.();
-  });
+  viewRef.value?.focusClose();
 }
 
-const desktop = useDesktopViewport();
-const {
-  menuAnchor,
-  menuRestoreEl,
-  closeMenu,
-  openMenu,
-} = useRowActionMenu();
-const menuOpen = computed(() => !!menuAnchor.value);
-
-const currentTrack = computed(() => pl.current);
-
-const offerCopyLyrics = ref(true);
-
-function refreshLyricsOffer() {
-  const id = props.trackId;
-  if (!id) {
-    offerCopyLyrics.value = false;
-    return;
-  }
-  const peek = peekLyricsMemory(id);
-  offerCopyLyrics.value = !(peek && lyricsClipboardText(peek) == null);
-}
-
-async function copyLyrics() {
-  const id = props.trackId;
-  if (!id) return;
-  const payload = await resolveLyrics(id, {
-    allowNetwork: canReachServer(),
-  });
-  if (props.trackId !== id) return;
-  const text = lyricsClipboardText(payload);
-  if (!text) {
-    showToast("No lyrics to copy");
-    return;
-  }
-  await copyText(text);
-}
-
-const menuItems = computed(() => {
-  const track = currentTrack.value;
-  if (!track) return [];
-  return buildNowPlayingMenuItems({
-    track,
-    offerCopyLyrics: offerCopyLyrics.value,
-    copyLyrics,
-  });
+defineExpose({
+  focusClose,
+  get closeBtn() {
+    return viewRef.value?.closeBtn ?? ref<HTMLButtonElement | null>(null);
+  },
 });
-
-function onNowPlayingMenuClick(e: MouseEvent) {
-  const el = e.currentTarget;
-  if (!(el instanceof HTMLElement)) return;
-  if (menuOpen.value) {
-    closeMenu();
-    return;
-  }
-  refreshLyricsOffer();
-  openMenu({ kind: "el", el }, el);
-}
-
-watch(
-  () => [player.expanded, props.trackId] as const,
-  () => closeMenu(),
-);
-
-defineExpose({ focusClose, closeBtn });
 </script>
 
 <template>
-    <div
-      class="player-full"
-      :role="npModal ? 'dialog' : player.expanded ? 'complementary' : undefined"
-      :aria-modal="npModal ? 'true' : undefined"
-      :aria-label="player.expanded ? 'Now playing' : undefined"
-    >
-      <div
-        class="sheet-grab"
-        @pointerdown="onSheetDown"
-        @pointermove="onSheetMove"
-        @pointerup="onSheetUp"
+  <NowPlayingView
+    ref="viewRef"
+    :title="title"
+    :subtitle="subtitle"
+    :cover-full="coverFull"
+    :close-icon="closeIcon"
+    :np-modal="npModal"
+    :expanded="player.expanded"
+    :seek-value="seekValue"
+    :current-time="player.currentTime"
+    :duration="player.duration"
+    :volume="player.volume"
+    :track="pl.current"
+    :track-id="trackId"
+    :seek-interactive="true"
+    :lyrics-open="player.lyricsOpen"
+    :lyrics-seekable="true"
+    :show-close="true"
+    :show-status="player.expanded"
+    :show-lyrics-toggle="player.expanded"
+    :show-menu="player.expanded && !!pl.current"
+    :sheet-dismissible="true"
+    :play-state="playState"
+    :exclusive-snap="exclusiveSnap"
+    @collapse="collapse"
+    @cover-or-meta-open="onCoverOrMetaOpen"
+    @seek-fraction="onSeekFraction"
+    @seek-dragging="onSeekDragging"
+    @volume="onVolume"
+    @toggle-lyrics="toggleLyrics"
+    @sheet-drag-start="onSheetDragStart"
+    @sheet-drag-move="onSheetDragMove"
+    @sheet-drag-end="onSheetDragEnd"
+  >
+    <template #transport>
+      <button
+        type="button"
+        class="icon-btn toggle"
+        title="Shuffle"
+        :aria-pressed="pl.shuffle ? 'true' : 'false'"
+        aria-label="Shuffle"
+        @click="toggleShuffle"
+      ><Icon name="shuffle" /></button>
+      <button
+        type="button"
+        class="icon-btn"
+        title="Previous"
+        aria-label="Previous"
+        @click="playPrev"
       >
-        <button
-          type="button"
-          ref="closeBtn"
-          class="icon-btn"
-          title="Close"
-          aria-label="Close now playing"
-          @click="collapse"
-        >
-          <Icon :name="closeIcon" />
-        </button>
-        <button
-          v-if="player.expanded && currentTrack"
-          type="button"
-          class="icon-btn row-menu"
-          title="Now playing actions"
-          aria-label="Now playing actions"
-          :aria-haspopup="desktop ? 'menu' : 'dialog'"
-          @click="onNowPlayingMenuClick"
-        >
-          <Icon name="more-vert" />
-        </button>
-      </div>
-
-      <div
-        class="full-cover-wrap"
-        :class="{
-          'lyrics-open': player.expanded && player.lyricsOpen,
-          'is-open-target': !player.expanded,
-        }"
-        :role="player.expanded ? undefined : 'button'"
-        :tabindex="player.expanded ? undefined : 0"
-        :aria-label="player.expanded ? undefined : 'Open now playing'"
-        @click="onCoverOrMetaOpen"
-        @keydown.enter.space.prevent="onCoverOrMetaOpen"
+        <Icon name="prev" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn primary"
+        title="Play / Pause"
+        aria-label="Play / Pause"
+        @click="togglePlay"
       >
-        <img
-          class="full-cover"
-          :src="coverFull"
-          :alt="player.expanded ? 'Album cover' : ''"
-        />
-        <LyricsOverlay
-          v-if="player.expanded"
-          :open="player.lyricsOpen"
-          :track-id="trackId"
-          :current-time="player.currentTime"
-          :duration="player.duration"
-        />
-      </div>
-
-      <div
-        class="full-meta"
-        :class="{ 'is-open-target': !player.expanded }"
-        :role="player.expanded ? undefined : 'button'"
-        :tabindex="player.expanded ? undefined : 0"
-        :aria-label="player.expanded ? undefined : 'Open now playing'"
-        @click="onCoverOrMetaOpen"
-        @keydown.enter.space.prevent="onCoverOrMetaOpen"
+        <Icon :name="playIcon" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        title="Next"
+        aria-label="Next"
+        @click="playNext"
       >
-        <div class="np-title-line">
-          <div class="np-title">{{ title }}</div>
-          <LossyMark :kind="lossyKind" />
-        </div>
-        <div class="np-artist">{{ subtitle }}</div>
-      </div>
-
-      <div class="seek-row">
-        <span class="time">{{ formatTime(player.currentTime) }}</span>
-        <input
-          ref="seekEl"
-          type="range"
-          min="0"
-          max="1000"
-          step="1"
-          :value="seekValue"
-          aria-label="Seek"
-          @pointerdown="onSeekDown"
-          @pointerup="onSeekUp"
-          @input="onSeekInput"
-        />
-        <span class="time">{{ formatTime(player.duration) }}</span>
-      </div>
-
-      <div class="transport-buttons">
-        <button
-          type="button"
-          class="icon-btn toggle"
-          title="Shuffle"
-          :aria-pressed="pl.shuffle ? 'true' : 'false'"
-          aria-label="Shuffle"
-          @click="toggleShuffle"
-        ><Icon name="shuffle" /></button>
-        <button
-          type="button"
-          class="icon-btn"
-          title="Previous"
-          aria-label="Previous"
-          @click="playPrev"
-        >
-          <Icon name="prev" />
-        </button>
-        <button
-          type="button"
-          class="icon-btn primary"
-          title="Play / Pause"
-          aria-label="Play / Pause"
-          @click="togglePlay"
-        >
-          <Icon :name="playIcon" />
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          title="Next"
-          aria-label="Next"
-          @click="playNext"
-        >
-          <Icon name="next" />
-        </button>
-        <button
-          type="button"
-          class="icon-btn toggle"
-          title="Repeat"
-          :aria-pressed="pl.repeat !== 'off' ? 'true' : 'false'"
-          aria-label="Repeat"
-          @click="cycleRepeat"
-        ><Icon :name="repeatIcon" /></button>
-      </div>
-
-      <PlaybackStatusLine v-if="player.expanded" />
-
-      <div class="player-extras">
-        <label class="vol-label" title="Volume">
-          <Icon name="volume" />
-          <input
-            ref="volEl"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            :value="player.volume"
-            aria-label="Volume"
-            @input="onVolInput"
-          />
-        </label>
-        <button
-          type="button"
-          class="icon-btn toggle lyrics-toggle"
-          title="Lyrics"
-          aria-label="Lyrics"
-          :aria-pressed="player.lyricsOpen ? 'true' : 'false'"
-          @click="toggleLyrics"
-        ><Icon name="lyrics" /></button>
-        <button
-          type="button"
-          class="icon-btn"
-          title="Settings"
-          aria-label="Settings"
-          aria-haspopup="dialog"
-          @click="openSettings"
-        ><Icon name="settings" /></button>
-      </div>
-      <ActionMenu
-        :open="menuOpen"
-        :items="menuItems"
-        :anchor="menuAnchor"
-        :restore-el="menuRestoreEl"
-        @close="closeMenu"
-      />
-    </div>
+        <Icon name="next" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn toggle"
+        title="Repeat"
+        :aria-pressed="pl.repeat !== 'off' ? 'true' : 'false'"
+        aria-label="Repeat"
+        @click="cycleRepeat"
+      ><Icon :name="repeatIcon" /></button>
+    </template>
+  </NowPlayingView>
 </template>

@@ -11,18 +11,18 @@ import {
   type PlayStatusState,
   type ProfileMeta,
 } from "@/playbackStatus";
-import {
-  exclusiveAudio,
-  exclusiveStatusSnapshot,
-} from "@/stores/exclusiveAudio";
+import { exclusiveAudio } from "@/stores/exclusiveAudio";
 import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
 import { acquireModalLock, releaseModalLock } from "@/stores/modalLock";
-import { player } from "@/stores/player";
-import { pl } from "@/stores/playlist";
 import { settings } from "@/stores/settings";
 import Icon from "@/components/icons/Icon.vue";
 import PlaybackDetailsBody from "@/components/player/PlaybackDetailsBody.vue";
 import type { PlaybackDetailRow } from "@/components/player/PlaybackDetailsBody.vue";
+
+const props = defineProps<{
+  playState: PlayStatusState;
+  exclusiveSnap: ExclusiveFaceSnapshot | null;
+}>();
 
 const DESKTOP_BREAKPOINT = "(min-width: 900px)";
 const DETAILS_MODAL_LOCK = "playback-details";
@@ -56,41 +56,26 @@ function onDesktopMqlChange(e: MediaQueryListEvent) {
   desktopViewport.value = e.matches;
 }
 
-const playState = computed((): PlayStatusState => {
-  void pl.index;
-  void pl.tracks;
-  return {
-    playSource: player.playSource as PlayStatusState["playSource"],
-    playProfileId: player.playProfileId,
-    playBlockReason: player.playBlockReason,
-    track: pl.current,
-  };
-});
-
-const exclusiveSnap = computed(
-  () => exclusiveStatusSnapshot() as ExclusiveFaceSnapshot,
-);
-
 const primaryStatus = computed(() =>
   formatPrimaryStatus(
-    playState.value,
+    props.playState,
     settings.options as ProfileMeta[],
-    exclusiveSnap.value,
+    props.exclusiveSnap,
   ),
 );
 
 const statusAriaLabel = computed(() =>
   formatStatusAriaLabel(
-    playState.value,
+    props.playState,
     settings.options as ProfileMeta[],
-    exclusiveSnap.value,
+    props.exclusiveSnap,
   ),
 );
 
 const detailsRows = computed(
   () =>
-    buildPlaybackDetailsRows(playState.value, settings.options as ProfileMeta[], {
-      exclusiveSnap: exclusiveSnap.value,
+    buildPlaybackDetailsRows(props.playState, settings.options as ProfileMeta[], {
+      exclusiveSnap: props.exclusiveSnap,
       exclusiveFormats: exclusiveAudio.formats as ProfileMeta[],
     }) as PlaybackDetailRow[],
 );
