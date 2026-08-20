@@ -48,13 +48,14 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
 | `images/` | WebP render/store helpers |
-| `routes/` | HTTP API routers (health, scan, discovery, folders, media, playlists, diag) + SPA pages |
+| `routes/` | HTTP API routers (health, scan, discovery, folders, media, playlists, listens, diag) + SPA pages |
 
 ## Ownership rules
 
 - **HTTP surface** lives under `routes/`. Aggregate router is `routes/api.py`; page/SPA fallback is `routes/pages.py`.
 - **Index writes** go through `jobs/` (orchestration) + `scan/` phases + repositories — routes and CLI must not invent parallel SQL paths or call enrichment phases directly.
-- **ORM models** live in `db/models.py`; query helpers in `db/repositories/`.
+- **ORM models** live in `db/models.py`; query helpers in `db/repositories/` (including `listens.py`).
+- **Listen stats** HTTP is `routes/listens.py`; client cycle/outbox/chips are `frontend/src/listens/`. See `docs/systems/playback-stats.md`. Do not add `src/musicweb/listens/`.
 - **Stream encode policy** (profiles, aresample/dither rules) lives under `transcode/`. Do not reimplement encode argv in routes.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
@@ -70,5 +71,5 @@ This page describes **ownership boundaries** — where code lives and what each 
 - `docs/development/`: commands, environment, structure.
 - `docs/frontend/`: SPA conventions.
 - `docs/product/`: product and audio guidelines.
-- `docs/systems/`: cross-cutting design (scan, transcode, PWA, downloads, playback, connectivity).
+- `docs/systems/`: cross-cutting design (scan, transcode, PWA, downloads, playback, playback-stats, connectivity).
 - `docs/plans/`: in-flight multi-stage plans (`*-pending` only). Finished plans live in git history.

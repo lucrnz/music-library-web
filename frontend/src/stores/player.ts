@@ -46,6 +46,13 @@ import {
   setPlaySourceState,
 } from "@/stores/playerState";
 import { getActiveStreamCodec, openSettings, settings } from "@/stores/settings";
+import {
+  discard as discardListen,
+  onEnded as onListenEnded,
+  onRestart as onListenRestart,
+  onTime as onListenTime,
+  startCycle as startListenCycle,
+} from "@/listens/bridge";
 
 export { player };
 
@@ -126,6 +133,7 @@ function failCtx(extra?: Record<string, unknown> | null): Record<string, unknown
 
 function beginLoad() {
   playGen += 1;
+  discardListen();
   beginPlay();
   clearPlaySourceState();
   try {
@@ -278,17 +286,37 @@ function hardStopCompanion(
  */
 function onSinkEnded() {
   if (player.playSource === "none") return;
+  onListenEnded();
   if (pl.repeat === "one") {
     activeSink.seek(0);
     Promise.resolve(activeSink.resume()).catch(console.error);
+    onListenRestart();
     return;
   }
   clearPlaybackPosition();
   playNext();
 }
 
+function maybeStartListenCycle(track: Track | null | undefined) {
+  const source = player.playSource;
+  const profile = player.playProfileId;
+  if ((source !== "streaming" && source !== "downloaded") || !profile) return;
+  if (!track?.id) return;
+  startListenCycle({
+    trackId: track.id,
+    durationSec: track.duration,
+    profile,
+    playSource: source,
+  });
+}
+
 function onSinkTime(t: number, d: number) {
   if (player.seeking) return;
+  onListenTime({
+    currentTime: t,
+    duration: d,
+    playing: !activeSink.paused,
+  });
   if (Number.isFinite(d) && d > 0) player.duration = d;
   if (pendingResume && pendingResume.gen === playGen) {
     flushPendingResume();
@@ -376,6 +404,7 @@ function wireSinkHandlers() {
 
 export function stopPlayback() {
   invalidateLoads();
+  discardListen();
   clearPlaySourceState();
   try {
     activeSink.stop();
@@ -543,6 +572,7 @@ async function playExclusive(gen: number, track: Track | null | undefined) {
     );
     return;
   }
+  maybeStartListenCycle(track);
   syncTransportFlags();
 }
 
@@ -633,6 +663,7 @@ async function playHtml(gen: number, track: Track | null | undefined) {
       { play_source: player.playSource, profile: player.playProfileId },
       "info"
     );
+    maybeStartListenCycle(track);
   }
   syncTransportFlags();
 }
@@ -703,6 +734,7 @@ export function playNext() {
 export function playPrev() {
   if (activeSink.currentTime > 3) {
     activeSink.seek(0);
+    onListenRestart();
     return;
   }
   const idx = shouldSkipUnplayableQueue()

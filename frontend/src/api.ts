@@ -5,6 +5,7 @@
  */
 
 import { diagRequestHeaders } from "@/diag/log";
+import type { ListenArtist, ListenRankings, ListenTrack } from "@/listens/types";
 import { fromApiAlbum, mapAlbums, type Album } from "@/models/album";
 import { fromApiLyrics, type Lyrics } from "@/models/lyrics";
 import { fromApiTrack, mapTracks, type Track } from "@/models/track";
@@ -104,6 +105,27 @@ export async function apiPatch<T>(url: string, body?: unknown): Promise<T> {
     throw new Error(detail || res.statusText);
   }
   return (await res.json()) as T;
+}
+
+/** POST /api/listens — 204 has no JSON body; never use apiPost. */
+export async function postListen(body: {
+  id: string;
+  track_id: string;
+  profile: string;
+  play_source: string;
+  counted_at: string;
+}): Promise<{ ok: true } | { status: number }> {
+  try {
+    const res = await apiFetch("/api/listens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 204) return { ok: true };
+    return { status: res.status };
+  } catch {
+    return { status: 0 };
+  }
 }
 
 export async function apiDelete<T = Record<string, never>>(url: string): Promise<T> {
@@ -266,6 +288,44 @@ export async function fetchAlbums(
 /** GET /api/artists/{id} */
 export async function fetchArtist(artistId: string): Promise<ArtistListItem> {
   return apiGet<ArtistListItem>(`/api/artists/${encodeURIComponent(artistId)}`);
+}
+
+function mapListenTrack(raw: unknown): ListenTrack {
+  const rec =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    ...fromApiTrack(raw),
+    playCount: Number(rec.play_count) || 0,
+    lastCountedAt: String(rec.last_counted_at || ""),
+  };
+}
+
+function mapListenArtist(raw: unknown): ListenArtist {
+  const rec = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const artist = rec as unknown as ArtistListItem;
+  return {
+    ...artist,
+    play_count: Number(rec.play_count) || 0,
+    last_counted_at: String(rec.last_counted_at || ""),
+  };
+}
+
+/** GET /api/listens/rankings — wrap fromApiTrack; artists stay server-shaped. */
+export async function fetchListenRankings(range: string): Promise<ListenRankings> {
+  const data = await apiGet<{
+    range?: string;
+    timezone?: string;
+    months?: string[];
+    artists?: unknown[];
+    tracks?: unknown[];
+  }>(`/api/listens/rankings?range=${encodeURIComponent(range)}`);
+  return {
+    range: data.range || "all",
+    timezone: data.timezone || "local",
+    months: Array.isArray(data.months) ? data.months : [],
+    artists: (data.artists || []).map(mapListenArtist),
+    tracks: (data.tracks || []).map(mapListenTrack),
+  };
 }
 
 /** GET /api/albums/{id} */

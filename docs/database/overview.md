@@ -21,6 +21,7 @@ Conceptual areas:
 | Artists / albums / tracks | Normalized discovery graph and track rows with fingerprints, paths, and source audio tech |
 | Track lyrics | Cached plain/synced lyrics status and text per track |
 | Playlists | Named lists of track IDs shared across LAN clients |
+| Listen events | Household play log for Stats rankings (not the media archive; not diagnostic JSONL) |
 | FTS | Full-text search over indexed track/artist/album text |
 | Scan state | Single-row progress for the background scanner |
 

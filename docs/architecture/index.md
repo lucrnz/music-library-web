@@ -18,7 +18,8 @@ Musicweb is a single-process LAN server:
 3. **HTTP API + SPA** — FastAPI JSON API and a Vue 3 SFC + TypeScript client built by Vite; FastAPI serves `frontend/dist`.
 4. **On-demand transcoder** — ffmpeg worker produces Opus/FLAC stream profiles into a process-temp cache.
 5. **Client offline path** — optional OPFS downloads, connectivity, and play-source resolution in the browser.
-6. **Diagnostics** — structured client/server events as JSONL under the data dir; Settings cutoff + `musicweb logs`. See `docs/systems/diagnostics.md`.
+6. **Listen log** — household play events in SQLite for Stats rankings; not stream HTTP and not diagnostic JSONL. See `docs/systems/playback-stats.md`.
+7. **Diagnostics** — structured client/server events as JSONL under the data dir; Settings cutoff + `musicweb logs`. See `docs/systems/diagnostics.md`.
 
 ```text
 Browser (Vue SFC + TypeScript SPA)
@@ -45,6 +46,7 @@ FastAPI (routes → services)
 - `docs/systems/pwa.md`: installable shell and service worker scope.
 - `docs/systems/downloads.md`: client offline catalog (OPFS).
 - `docs/systems/playback.md`: play source, quality prefs, prepare.
+- `docs/systems/playback-stats.md`: household listen log and Stats browse mode.
 - `docs/systems/connectivity.md`: reachability and network cost hints.
 - `docs/database/overview.md`: what the index represents.
 - `docs/frontend/conventions.md`: client architecture.

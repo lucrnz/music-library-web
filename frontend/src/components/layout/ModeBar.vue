@@ -9,6 +9,7 @@ const BASE_MODES = [
   { id: "artists", label: "Artists", name: "artists" },
   { id: "albums", label: "Albums", name: "albums" },
   { id: "search", label: "Search", name: "search" },
+  { id: "stats", label: "Stats", name: "stats" },
 ];
 const router = useRouter();
 const { mode: activeMode } = useLibraryLocation();

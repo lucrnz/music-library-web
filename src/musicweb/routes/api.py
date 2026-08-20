@@ -10,6 +10,7 @@ from musicweb.routes import (
     folders,
     health,
     library_scan,
+    listens,
     media,
     playlists,
 )
@@ -21,4 +22,5 @@ router.include_router(discovery.router)
 router.include_router(folders.router)
 router.include_router(media.router)
 router.include_router(playlists.router)
+router.include_router(listens.router)
 router.include_router(diag.router)

@@ -52,6 +52,7 @@ import {
 } from "@/components/library/browseChrome";
 import EntityListHost from "@/components/library/EntityListHost.vue";
 import LibraryChrome from "@/components/library/LibraryChrome.vue";
+import StatsView from "@/components/stats/StatsView.vue";
 import {
   addAll as addAllAction,
   addAllForAlbum,
@@ -185,6 +186,18 @@ const router = useRouter();
     }
 
     async function load() {
+      if (mode.value === "stats") {
+        title.value = "Stats";
+        showBack.value = false;
+        backArtistId.value = null;
+        body.value = INITIAL_BODY;
+        headerArtist.value = null;
+        headerAlbum.value = null;
+        hasLoadedOnce.value = true;
+        loading.value = false;
+        error.value = "";
+        return;
+      }
       if (showTree.value) {
         applyTreeChrome();
         hasLoadedOnce.value = true;
@@ -233,7 +246,9 @@ const router = useRouter();
       route,
       isActivePane: () => route.meta.pane === "library",
       isTreeActive: () =>
-        ui.libraryLayout === "tree" && mode.value !== "search",
+        ui.libraryLayout === "tree" &&
+        mode.value !== "search" &&
+        mode.value !== "stats",
       onNavigate: () => {
         if (route.meta.pane !== "library") {
           if (!hasLoadedOnce.value) load();
@@ -582,6 +597,7 @@ const router = useRouter();
       </template>
 
       <LibraryTreePane v-if="showTree" :mode="mode" />
+      <StatsView v-else-if="mode === 'stats'" />
       <EntityListHost
         v-else
         :body="body"
