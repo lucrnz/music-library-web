@@ -113,3 +113,17 @@ Open the diff for the esds walker, the TrackMetadata bitrate drop bugfix, and th
 ```bash
 git show f1ba93d1525d072efac69d1cdcc93df88968e26b
 ```
+
+## 2026-08-18-urbovyrn-resume-pause-position-done
+
+**Title:** Resume playback position
+
+**Commit:** `a68a905e3a7e9fd3adc6a3bb19d5272231846bf8`
+
+On pause, page hide, or a paused seek, the current track position is stored; the next cold Play seeks there and does not auto-play.
+
+Open the diff for the dedicated localStorage key, near-end-is-0 clamp, invalidation on skip/stop, and companion pending-resume until duration is known.
+
+```bash
+git show a68a905e3a7e9fd3adc6a3bb19d5272231846bf8
+```
