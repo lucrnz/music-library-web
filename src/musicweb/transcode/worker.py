@@ -42,6 +42,11 @@ class TranscodeCanceled(Exception):
     """Internal: a running encode was preempted by an urgent request."""
 
 
+def job_log_label(job: _Job) -> str:
+    """Path for on-demand jobs; radio uses ``log_label`` (never a path)."""
+    return job.log_label or job.relative_path
+
+
 @dataclass
 class _Job:
     """One encode request (play or prewarm), tracked until completion."""
@@ -52,6 +57,7 @@ class _Job:
     profile: StreamProfile
     urgent: bool
     source_tech: SourceAudioTech | None = None
+    log_label: str | None = None
     done: threading.Event = field(default_factory=threading.Event)
     error: Exception | None = None
     out_path: Path | None = None
@@ -239,6 +245,7 @@ class Transcoder:
         profile_tag: str = DEFAULT_PROFILE_TAG,
         source_tech: SourceAudioTech | None = None,
         urgent: bool = False,
+        log_label: str | None = None,
     ) -> tuple[str, _Job | None]:
         """
         Queue encode work (or promote an existing job). Never waits on ffmpeg.
@@ -264,6 +271,8 @@ class Transcoder:
 
             job = self._jobs.get(key)
             if job is not None:
+                if log_label and job.log_label is None:
+                    job.log_label = log_label
                 if urgent:
                     self._promote_to_urgent(job, source_tech)
                 return "already", job
@@ -276,6 +285,7 @@ class Transcoder:
                     profile=profile,
                     urgent=True,
                     source_tech=source_tech,
+                    log_label=log_label,
                 )
                 self._jobs[key] = job
                 self._urgent.appendleft(job)
@@ -292,6 +302,7 @@ class Transcoder:
                 profile=profile,
                 urgent=False,
                 source_tech=source_tech,
+                log_label=log_label,
             )
             self._jobs[key] = job
             self._prewarm.append(job)
@@ -328,6 +339,7 @@ class Transcoder:
         profile_tag: str = DEFAULT_PROFILE_TAG,
         source_tech: SourceAudioTech | None = None,
         urgent: bool = False,
+        log_label: str | None = None,
     ) -> str:
         """
         Queue a background encode; never blocks on ffmpeg.
@@ -346,6 +358,7 @@ class Transcoder:
             profile_tag=profile_tag,
             source_tech=source_tech,
             urgent=urgent,
+            log_label=log_label,
         )
         return status
 
@@ -444,7 +457,7 @@ class Transcoder:
         if proc is not None and proc.poll() is None:
             logger.info(
                 "Preempting prewarm transcode of %s (pid=%s)",
-                job.relative_path,
+                job_log_label(job),
                 proc.pid,
             )
             proc.terminate()
@@ -490,7 +503,7 @@ class Transcoder:
             except Exception as exc:
                 logger.warning(
                     "Transcode failed for %s (%s): %s",
-                    job.relative_path,
+                    job_log_label(job),
                     job.profile.tag,
                     exc,
                 )
@@ -519,7 +532,7 @@ class Transcoder:
         logger.info(
             "Transcode %s → profile=%s encoder=%s ar=%s bit=%s "
             "src=%s/%s resample=%s dither=%s%s",
-            job.relative_path,
+            job_log_label(job),
             profile.tag,
             profile.encoder_label(),
             profile.sample_rate,

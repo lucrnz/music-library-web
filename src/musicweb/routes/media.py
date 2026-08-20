@@ -42,6 +42,7 @@ from musicweb.transcode import (
     get_profile,
     tech_from_track,
 )
+from musicweb.transcode.enqueue import enqueue_prepare
 from musicweb.transcode.null_tech_log import warn_null_track_tech
 from musicweb.diag.emit import emit
 from musicweb.transcode.passthrough import (
@@ -244,35 +245,14 @@ def transcode_prepare(
     if payload.replace:
         tc.drop_pending_prewarm()
 
-    counts = {"queued": 0, "already": 0, "ready": 0, "skipped": 0}
-    if not payload.ids:
-        _emit_prepare(request, payload, counts)
-        return counts
-
-    for t in tracks_repo.get_many(db, payload.ids):
-        if t.is_missing or not t.rel_path:
-            counts["skipped"] += 1
-            continue
-        if t.is_lossy:
-            counts["skipped"] += 1
-            continue
-        try:
-            resolved = lib.resolve(t.rel_path)
-        except Exception:
-            counts["skipped"] += 1
-            continue
-        if not resolved.is_file() or not lib.is_audio(resolved):
-            counts["skipped"] += 1
-            continue
-        warn_null_track_tech(t)
-        result = tc.prepare(
-            resolved,
-            t.rel_path,
-            profile_tag=payload.codec,
-            source_tech=tech_from_track(t),
-            urgent=payload.urgent,
-        )
-        counts[result] += 1
+    counts = enqueue_prepare(
+        db,
+        lib,
+        tc,
+        payload.ids,
+        profile_tag=payload.codec,
+        urgent=payload.urgent,
+    )
     _emit_prepare(request, payload, counts)
     return counts
 

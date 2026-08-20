@@ -1,4 +1,4 @@
-"""Startup checks for ffmpeg encoders and libsoxr."""
+"""Startup checks for ffmpeg, ffprobe, encoders, and libsoxr."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ class DependencyReport:
 
 def check_dependencies() -> DependencyReport:
     """
-    Ensure ffmpeg has libsoxr, libopus, and flac.
+    Ensure ffmpeg and ffprobe are on PATH, and ffmpeg has libsoxr, libopus, and flac.
 
     Raises RuntimeError on any missing requirement (fail fast).
     """
@@ -113,6 +113,11 @@ def check_dependencies() -> DependencyReport:
         "ffmpeg",
         ["-version"],
         hint="Install ffmpeg with libsoxr, libopus, and flac.",
+    )
+    ffprobe_ver = _require_tool(
+        "ffprobe",
+        ["-version"],
+        hint="Install ffmpeg (includes ffprobe) with libsoxr, libopus, and flac.",
     )
     soxr_label = _require_libsoxr()
     encoders = _ffmpeg_encoder_names()
@@ -134,6 +139,7 @@ def check_dependencies() -> DependencyReport:
     return DependencyReport(
         tools={
             "ffmpeg": ffmpeg_ver,
+            "ffprobe": ffprobe_ver,
             "libsoxr": soxr_label,
             "opus encoder": "libopus",
             "flac encoder": "flac",
