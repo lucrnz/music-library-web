@@ -99,3 +99,17 @@ Open the diff for the sprite mark and the builder tests that lock the icon field
 ```bash
 git show 501577ce650930a88410b477436a22f63c39f26d
 ```
+
+## 2026-08-18-pwjs1lf2-lossy-source-codec-details-done
+
+**Title:** Lossy source codec details
+
+**Commit:** `f1ba93d1525d072efac69d1cdcc93df88968e26b`
+
+Scan now actually persists bitrate_kbps and a new bitrate_mode (MP3 via mutagen, AAC via an esds walk); Playback details shows Encoding and Sample rate for lossy originals without inventing CBR/VBR.
+
+Open the diff for the esds walker, the TrackMetadata bitrate drop bugfix, and the catalog/queue snapshot fields needed offline.
+
+```bash
+git show f1ba93d1525d072efac69d1cdcc93df88968e26b
+```
