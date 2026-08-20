@@ -29,3 +29,17 @@ Open the diff to see how Jinja/import-map serving was deleted and how /sw.js fin
 ```bash
 git show 45ef5c1af6fff2a4bf34e89c73f61ea0c841d844
 ```
+
+## 2026-08-16-n0sv0eq7-vue-sfc-typescript-done
+
+**Title:** Vue SFC + TypeScript frontend
+
+**Commit:** `76724e2e9ad8a0361dd5d1d42b09580939fb929e`
+
+Converted the Vue 3 SPA from defineComponent JS modules with string templates to <script setup lang="ts"> SFCs under frontend/src/, with vue-tsc as the type gate.
+
+Open the diff for the freeze-and-convert recipe, hand-written API types (no OpenAPI codegen), and the runtime-only Vue / Options-API-off cutover.
+
+```bash
+git show 76724e2e9ad8a0361dd5d1d42b09580939fb929e
+```
