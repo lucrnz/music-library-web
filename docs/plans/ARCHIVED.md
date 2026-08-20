@@ -43,3 +43,17 @@ Open the diff for the freeze-and-convert recipe, hand-written API types (no Open
 ```bash
 git show 76724e2e9ad8a0361dd5d1d42b09580939fb929e
 ```
+
+## 2026-08-17-fzzscc2t-mobile-tabs-done
+
+**Title:** Fix mobile tabs
+
+**Commit:** `1503c53c13a682586b97ac1121f842fa5a1a3e37`
+
+Restored single-pane mobile switching by giving LibraryView a real root so .hidden fallthrough lands, made mode chips scroll and light from last library location (including on /queue), and collapsed queue header actions to icons below 900px.
+
+Open the diff to see the fragment-class leak and the ModeBar selection source that must not use raw route.meta.mode on the queue.
+
+```bash
+git show 1503c53c13a682586b97ac1121f842fa5a1a3e37
+```
