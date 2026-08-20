@@ -57,3 +57,17 @@ Open the diff to see the fragment-class leak and the ModeBar selection source th
 ```bash
 git show 1503c53c13a682586b97ac1121f842fa5a1a3e37
 ```
+
+## 2026-08-17-htxyxcq5-selection-copy-menus-done
+
+**Title:** Selection and copy menus
+
+**Commit:** `4537e82d11f11dd1d9726ad25471432f147c0df1`
+
+Locked chrome text selection app-wide and put a ⋯ overflow menu on every music entity (list, grid, tree, page headers, now-playing) that copies names and lyrics instead of relying on native selection.
+
+Open the diff for the builder/host split, downloadsMenuMap projections, and the lyrics flatten / memory-peek Copy lyrics contract.
+
+```bash
+git show 4537e82d11f11dd1d9726ad25471432f147c0df1
+```
