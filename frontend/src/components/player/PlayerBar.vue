@@ -3,12 +3,14 @@
  * Player shell: mini bar + full now-playing (NowPlayingFull).
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { pl } from "@/stores/playlist";
 import { setExpanded } from "@/stores/playerPrefs";
 import { player, playNext, togglePlay } from "@/stores/player";
 import { settings } from "@/stores/settings";
 import { downloads } from "@/downloads/state";
 import { kindForTrack } from "@/lossyKind";
+import { useDesktopViewport } from "@/layout";
 import Icon from "@/components/icons/Icon.vue";
 import LossyMark from "@/components/lossy/LossyMark.vue";
 import NowPlayingFull from "@/components/player/NowPlayingFull.vue";
@@ -17,18 +19,9 @@ import RadioMini from "@/components/radio/RadioMini.vue";
 import RadioNowPlaying from "@/components/radio/RadioNowPlaying.vue";
 import { radioChromeActive } from "@/stores/radio";
 
-const DESKTOP_BREAKPOINT = "(min-width: 900px)";
-
-function isDesktop() {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia(DESKTOP_BREAKPOINT).matches
-  );
-}
-
 const root = ref<HTMLElement | null>(null);
     const fullRef = ref<NowPlayingFullExpose | null>(null);
-    const desktopViewport = ref(isDesktop());
+    const desktopViewport = useDesktopViewport();
     /** Element to restore focus to after collapse (nice-to-have). */
     let focusRestoreEl: HTMLElement | null = null;
 
@@ -36,9 +29,13 @@ const root = ref<HTMLElement | null>(null);
       () => player.expanded && !desktopViewport.value
     );
 
+    const route = useRoute();
+    const onRadio = computed(() => route.meta.pane === "radio");
     const radioOn = computed(() => radioChromeActive());
     const visible = computed(
-      () => radioOn.value || Boolean(pl.current) || pl.length > 0,
+      () =>
+        !onRadio.value &&
+        (radioOn.value || Boolean(pl.current) || pl.length > 0),
     );
     const track = computed(() => pl.current);
     const title = computed(() => (track.value ? track.value.title : "—"));
@@ -100,24 +97,16 @@ const root = ref<HTMLElement | null>(null);
       collapse();
     }
 
-    let mq: MediaQueryList | null = null;
-    function onBreakpointChange(e: MediaQueryListEvent) {
-      desktopViewport.value = e.matches;
+    watch(desktopViewport, () => {
       collapse();
-    }
+    });
 
     onMounted(() => {
       window.addEventListener("keydown", onKeydown);
-      if (typeof window !== "undefined") {
-        mq = window.matchMedia(DESKTOP_BREAKPOINT);
-        desktopViewport.value = mq.matches;
-        mq.addEventListener("change", onBreakpointChange);
-      }
     });
 
     onUnmounted(() => {
       window.removeEventListener("keydown", onKeydown);
-      mq?.removeEventListener("change", onBreakpointChange);
     });
 
     const rootStyle = computed(() => {
@@ -140,8 +129,8 @@ const root = ref<HTMLElement | null>(null);
       <div v-if="player.playNotice" class="player-notice" role="status">
         {{ player.playNotice }}
       </div>
-      <RadioMini v-if="radioOn" />
-      <div v-else class="player-mini">
+      <RadioMini v-if="radioOn && !desktopViewport" />
+      <div v-else-if="!radioOn" class="player-mini">
         <img class="mini-cover" :src="coverThumb" alt="" />
         <button
           type="button"
@@ -173,9 +162,9 @@ const root = ref<HTMLElement | null>(null);
         </button>
       </div>
 
-      <RadioNowPlaying v-if="radioOn" layout="bar" />
+      <RadioNowPlaying v-if="radioOn && desktopViewport" layout="bar" />
       <NowPlayingFull
-        v-else
+        v-else-if="!radioOn"
         ref="fullRef"
         :title="title"
         :subtitle="subtitle"

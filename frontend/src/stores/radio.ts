@@ -16,6 +16,8 @@ import { createRadioAudio } from "@/radio/audio";
 import { createFailureCap } from "@/radio/failures";
 import { needsReseek } from "@/radio/sync";
 import { connectivity } from "@/stores/connectivity";
+import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
+import type { PlayStatusState } from "@/playbackStatus";
 import { readVolume } from "@/stores/playerPrefs";
 import { getActiveStreamCodec } from "@/stores/settings";
 import { showToast } from "@/stores/ui";
@@ -75,6 +77,25 @@ export function radioSubtitle(track: Track | null | undefined): string {
   return [track.artist, track.album].filter(Boolean).join(" — ");
 }
 
+/** HTML radio is never exclusive; do not let Settings hog-enabled relabel the badge. */
+export const RADIO_EXCLUSIVE_SNAP: ExclusiveFaceSnapshot = {
+  enabled: false,
+  connection: "disconnected",
+  role: null,
+  preferenceId: null,
+  liveId: null,
+};
+
+export function radioPlayState(): PlayStatusState {
+  return {
+    playSource: "streaming",
+    playProfileId: radio.isLossy
+      ? null
+      : radio.tunerProfile || getActiveStreamCodec(),
+    track: radio.track,
+  };
+}
+
 export function interpolatedPosition(now = performance.now()): number {
   if (radio.face !== "current") return 0;
   const elapsed = (now - radio.snapshotAt) / 1000;
@@ -82,6 +103,11 @@ export function interpolatedPosition(now = performance.now()): number {
   const dur = radio.officialDuration;
   if (dur > 0) return Math.max(0, Math.min(pos, dur));
   return Math.max(0, pos);
+}
+
+export function heardPosition(now = performance.now()): number {
+  if (radio.chrome === "tuned") return audio.currentTime;
+  return interpolatedPosition(now);
 }
 
 export function applySnapshot(raw: unknown, now = performance.now()): void {

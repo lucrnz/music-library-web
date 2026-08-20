@@ -22,9 +22,12 @@ import {
   applySnapshot,
   connect,
   exitToQueue,
+  heardPosition,
   interpolatedPosition,
   radio,
+  RADIO_EXCLUSIVE_SNAP,
   radioChromeActive,
+  radioPlayState,
   radioSubtitle,
   resetRadioStore,
   setTabOpen,
@@ -81,6 +84,13 @@ describe("radio store", () => {
     expect(interpolatedPosition(10_000 + 200_000)).toBe(180);
   });
 
+  it("heardPosition follows the official clock until tuned", () => {
+    applySnapshot(currentPayload, 1_000);
+    expect(heardPosition(1_000)).toBe(12);
+    radio.chrome = "tuned";
+    expect(heardPosition(1_000)).toBe(0);
+  });
+
   it("connect hydrates via GET and does not send tune_in", async () => {
     vi.mocked(fetchRadioNow).mockResolvedValue(currentPayload);
     await connect();
@@ -106,6 +116,18 @@ describe("radio store", () => {
     expect(radioChromeActive()).toBe(false);
     setTabOpen(false);
     expect(radio.connected).toBe(false);
+  });
+
+  it("radioPlayState is streaming with the tuner profile, never exclusive", () => {
+    applySnapshot(currentPayload);
+    radio.tunerProfile = "opus_192_48000";
+    const state = radioPlayState();
+    expect(state.playSource).toBe("streaming");
+    expect(state.playProfileId).toBe("opus_192_48000");
+    expect(state.track?.isLossy).toBe(false);
+    expect(RADIO_EXCLUSIVE_SNAP.enabled).toBe(false);
+    applySnapshot({ ...currentPayload, is_lossy: true });
+    expect(radioPlayState().playProfileId).toBeNull();
   });
 
   it("tune_in codec is the streaming profile, never source", () => {

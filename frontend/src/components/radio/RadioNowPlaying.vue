@@ -2,22 +2,20 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { coverUrl } from "@/api";
 import Icon from "@/components/icons/Icon.vue";
-import LossyMark from "@/components/lossy/LossyMark.vue";
-import LyricsOverlay from "@/components/player/LyricsOverlay.vue";
-import { formatLossyCodecText, kindForTrack } from "@/lossyKind";
+import NowPlayingView from "@/components/player/NowPlayingView.vue";
+import { router } from "@/router";
 import { player } from "@/stores/playerState";
 import {
-  interpolatedPosition,
+  heardPosition,
   radio,
-  radioChromeActive,
+  RADIO_EXCLUSIVE_SNAP,
+  radioPlayState,
   radioSubtitle,
   setVolume as setRadioVolume,
   tuneIn,
   tuneOut,
 } from "@/stores/radio";
 import { writeVolume } from "@/stores/playerPrefs";
-import { getActiveStreamCodec, settings } from "@/stores/settings";
-import { formatTime } from "@/util";
 
 const props = withDefaults(
   defineProps<{
@@ -41,22 +39,21 @@ onUnmounted(() => {
 });
 
 function displayPosition(): number {
-  if (radio.chrome === "tuned") return heardFromAudio();
-  return interpolatedPosition();
-}
-
-function heardFromAudio(): number {
-  return interpolatedPosition();
+  return heardPosition();
 }
 
 const title = computed(() => radio.track?.title || "");
 const subtitle = computed(() => radioSubtitle(radio.track));
-const lossyKind = computed(() => kindForTrack(radio.track));
-const cover = computed(() => coverUrl(radio.track, props.layout === "bar" ? "thumb" : "full", false));
+const cover = computed(() =>
+  coverUrl(radio.track, props.layout === "bar" ? "thumb" : "full", false),
+);
 const waiting = computed(
   () => radio.face === "catching_up" || radio.face === "skip_pending",
 );
-const idle = computed(() => radio.face === "idle");
+const showSurface = computed(
+  () => radio.face === "current" && !!radio.track,
+);
+const compact = computed(() => props.layout === "bar");
 const progress = computed(() => {
   const dur = radio.officialDuration;
   if (!dur) return 0;
@@ -72,28 +69,32 @@ const statusLabel = computed(() => {
 const tuneDisabled = computed(
   () => radio.chrome === "tuning" || (radio.face !== "current" && radio.chrome !== "stopped"),
 );
-const codecLabel = computed(() => {
-  if (radio.isLossy) return formatLossyCodecText(radio.track) || "Lossy source";
-  const tag = getActiveStreamCodec();
-  return settings.options.find((o) => o.id === tag)?.label || tag;
-});
+const tunedOrTuning = computed(
+  () => radio.chrome === "tuned" || radio.chrome === "tuning",
+);
+const tuneIcon = computed(() => (tunedOrTuning.value ? "tune-out" : "tune-in"));
+const tuneLabel = computed(() => (tunedOrTuning.value ? "Tune out" : "Tune in"));
+const playState = computed(() => radioPlayState());
 
 function onTune() {
-  if (radio.chrome === "tuned" || radio.chrome === "tuning") tuneOut();
+  if (tunedOrTuning.value) tuneOut();
   else void tuneIn();
 }
 
-function onVolume(ev: Event) {
-  const el = ev.target as HTMLInputElement;
-  const v = Number(el.value);
+function onVolume(v: number) {
   player.volume = v;
   writeVolume(v);
   setRadioVolume(v);
+}
+
+function openRadio() {
+  void router.push({ name: "radio" });
 }
 </script>
 
 <template>
   <section
+    v-if="!showSurface"
     class="radio-now"
     :class="'radio-now--' + props.layout"
     :aria-label="props.layout === 'room' ? 'Radio' : 'Now playing'"
@@ -102,36 +103,10 @@ function onVolume(ev: Event) {
       <span class="radio-spinner" aria-hidden="true" />
       <p>{{ statusLabel }}</p>
     </div>
-    <div v-else-if="idle" class="radio-now-status radio-now-status--idle">
+    <div v-else class="radio-now-status radio-now-status--idle">
       <Icon name="radio" />
       <p>{{ statusLabel }}</p>
     </div>
-    <template v-else>
-      <div class="radio-now-cover-wrap">
-        <img class="radio-now-cover" :src="cover" alt="" />
-      </div>
-      <div class="radio-now-meta">
-        <div class="np-title-line">
-          <div class="np-title">{{ title }}</div>
-          <LossyMark :kind="lossyKind" />
-        </div>
-        <div class="np-artist">{{ subtitle }}</div>
-        <p v-if="props.layout === 'room'" class="radio-codec">{{ codecLabel }}</p>
-      </div>
-      <div class="radio-now-clock">
-        <span class="time">{{ formatTime(heard) }}</span>
-        <input
-          type="range"
-          min="0"
-          max="1000"
-          step="1"
-          :value="progress"
-          disabled
-          aria-label="Station position"
-        />
-        <span class="time">{{ formatTime(radio.officialDuration) }}</span>
-      </div>
-    </template>
     <div class="radio-now-transport">
       <button
         type="button"
@@ -139,27 +114,48 @@ function onVolume(ev: Event) {
         :disabled="tuneDisabled"
         @click="onTune"
       >
-        {{ radio.chrome === "tuned" || radio.chrome === "tuning" ? "Tune out" : "Tune in" }}
+        <Icon :name="tuneIcon" />
+        {{ tuneLabel }}
       </button>
-      <input
-        v-if="radioChromeActive() && props.layout === 'bar'"
-        type="range"
-        class="radio-volume"
-        min="0"
-        max="1"
-        step="0.01"
-        :value="player.volume"
-        aria-label="Volume"
-        @input="onVolume"
-      />
     </div>
-    <LyricsOverlay
-      v-if="props.layout === 'room' && radio.track?.id"
-      :open="lyricsOpen"
-      :track-id="radio.track.id"
-      :current-time="heard"
-      :duration="radio.officialDuration"
-      :seekable="false"
-    />
   </section>
+  <NowPlayingView
+    v-else
+    :title="title"
+    :subtitle="subtitle"
+    :cover-full="cover"
+    :expanded="!compact"
+    :seek-value="progress"
+    :current-time="heard"
+    :duration="radio.officialDuration"
+    :volume="player.volume"
+    :track="radio.track"
+    :track-id="radio.track?.id ?? null"
+    :seek-interactive="false"
+    :lyrics-open="!compact && lyricsOpen"
+    :lyrics-seekable="false"
+    :show-close="false"
+    :show-status="!compact"
+    :show-lyrics-toggle="!compact"
+    :show-menu="!compact"
+    :sheet-dismissible="false"
+    :open-label="compact ? 'Open radio' : 'Open now playing'"
+    :play-state="playState"
+    :exclusive-snap="RADIO_EXCLUSIVE_SNAP"
+    @volume="onVolume"
+    @toggle-lyrics="lyricsOpen = !lyricsOpen"
+    @cover-or-meta-open="openRadio"
+  >
+    <template #transport>
+      <button
+        type="button"
+        class="radio-tune-in"
+        :disabled="tuneDisabled"
+        @click="onTune"
+      >
+        <Icon :name="tuneIcon" />
+        {{ tuneLabel }}
+      </button>
+    </template>
+  </NowPlayingView>
 </template>
