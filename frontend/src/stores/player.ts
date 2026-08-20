@@ -53,6 +53,15 @@ import {
   onTime as onListenTime,
   startCycle as startListenCycle,
 } from "@/listens/bridge";
+import {
+  bindOnDemandControl,
+  installOnDemandMediaSession,
+} from "@/playback/onDemandControl";
+import {
+  exitToQueue,
+  radioChromeActive,
+  setVolume as setRadioVolume,
+} from "@/stores/radio";
 
 export { player };
 
@@ -403,6 +412,7 @@ function wireSinkHandlers() {
 }
 
 export function stopPlayback() {
+  exitToQueue();
   invalidateLoads();
   discardListen();
   clearPlaySourceState();
@@ -669,6 +679,7 @@ async function playHtml(gen: number, track: Track | null | undefined) {
 }
 
 export async function playIndex(index: number) {
+  exitToQueue();
   if (index < 0 || index >= pl.length) return;
   const cold = player.playSource === "none";
   const nextTrack = pl.tracks[index];
@@ -805,6 +816,7 @@ export function setVolume(v: number) {
   const n = Math.min(1, Math.max(0, Number(v)));
   player.volume = n;
   activeSink.setVolume(n);
+  if (radioChromeActive()) setRadioVolume(n);
   writeVolume(n);
 }
 
@@ -812,6 +824,7 @@ export function applyVolume() {
   const stored = readVolume();
   if (stored != null) player.volume = stored;
   activeSink.setVolume(player.volume);
+  if (radioChromeActive()) setRadioVolume(player.volume);
 }
 
 export function initAudioListeners() {
@@ -819,15 +832,29 @@ export function initAudioListeners() {
   // Ensure html sink element is in the document for first non-exclusive play.
   selectSink("htmlAudio");
   activeSink.setVolume(player.volume);
-
-  if (msSupported) {
-    navigator.mediaSession.setActionHandler("play", () => {
+  bindOnDemandControl({
+    bumpLoadGeneration: invalidateLoads,
+    stopSinks: () => {
+      try {
+        htmlSink.stop();
+      } catch {
+        /* ignore */
+      }
+      try {
+        companionSink.stop();
+      } catch {
+        /* ignore */
+      }
+    },
+  });
+  installOnDemandMediaSession({
+    play: () => {
       ensureAudible();
-    });
-    navigator.mediaSession.setActionHandler("pause", () => activeSink.pause());
-    navigator.mediaSession.setActionHandler("previoustrack", playPrev);
-    navigator.mediaSession.setActionHandler("nexttrack", playNext);
-    navigator.mediaSession.setActionHandler("seekto", (details) => {
+    },
+    pause: () => activeSink.pause(),
+    previous: playPrev,
+    next: playNext,
+    seekto: (details) => {
       if (
         details.seekTime != null &&
         Number.isFinite(activeSink.duration) &&
@@ -837,8 +864,8 @@ export function initAudioListeners() {
         onSinkTime(activeSink.currentTime, activeSink.duration);
         if (activeSink.paused) persistCurrentPosition();
       }
-    });
-  }
+    },
+  });
 
   const persistOnHide = () => persistCurrentPosition();
   window.addEventListener("pagehide", persistOnHide);

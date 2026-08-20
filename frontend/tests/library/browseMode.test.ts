@@ -20,4 +20,8 @@ describe("effectiveLibraryMode", () => {
   it("defaults to folders when a library route has no mode", () => {
     expect(effectiveLibraryMode({ pane: "library" }, "artists")).toBe("folders");
   });
+
+  it("does not treat radio as a library mode", () => {
+    expect(effectiveLibraryMode({ pane: "radio" }, "artists")).toBe("folders");
+  });
 });

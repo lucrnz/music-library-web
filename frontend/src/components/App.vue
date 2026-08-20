@@ -11,21 +11,27 @@ import DownloadsLibraryView from "@/components/downloads/DownloadsLibraryView.vu
 import AppDialog from "@/components/dialog/AppDialog.vue";
 import ImageCropper from "@/components/artistArt/ImageCropper.vue";
 import TabBar from "@/components/layout/TabBar.vue";
+import RadioView from "@/components/radio/RadioView.vue";
 
 /**
  * Shell: dual-pane library + queue (desktop CSS forces both visible).
  * Mobile hides the non-active pane via .hidden; /queue selects queue tab.
+ * /radio unmounts both panes (do not CSS-hide a still-mounted LibraryView).
  */
 const route = useRoute();
     const onQueue = computed(() => route.meta.pane === "queue");
+    const onRadio = computed(() => route.meta.pane === "radio");
     const onDownloads = computed(() => route.meta.mode === "downloads");
 </script>
 
 <template>
     <main>
-      <DownloadsLibraryView v-if="onDownloads" :class="{ hidden: onQueue }" />
-      <LibraryView v-else :class="{ hidden: onQueue }" />
-      <PlaylistView :class="{ hidden: !onQueue }" />
+      <RadioView v-if="onRadio" />
+      <template v-else>
+        <DownloadsLibraryView v-if="onDownloads" :class="{ hidden: onQueue }" />
+        <LibraryView v-else :class="{ hidden: onQueue }" />
+        <PlaylistView :class="{ hidden: !onQueue }" />
+      </template>
     </main>
     <PlayerBar />
     <SettingsModal />

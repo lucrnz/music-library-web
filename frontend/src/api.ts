@@ -194,6 +194,11 @@ export function artistImageUrl(
   return url;
 }
 
+/** GET /api/radio/now — raw station snapshot (normalize in the radio store). */
+export function fetchRadioNow(): Promise<unknown> {
+  return apiGet("/api/radio/now");
+}
+
 /** Stream URL — track id required. */
 export function streamUrl(
   track: { id?: string } | null | undefined,

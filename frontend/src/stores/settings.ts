@@ -50,7 +50,7 @@ export interface SettingsState {
 export interface StreamChangeCtx {
   tracks: Track[];
   index: number;
-  playIndex: (i: number) => void;
+  playIndex?: (i: number) => void;
 }
 
 interface ApplyStreamOpts {

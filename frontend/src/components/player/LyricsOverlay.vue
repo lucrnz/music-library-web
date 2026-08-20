@@ -29,8 +29,9 @@ const props = withDefaults(
     trackId?: string | null;
     currentTime?: number;
     duration?: number;
+    seekable?: boolean;
   }>(),
-  { open: false, trackId: null, currentTime: 0, duration: 0 },
+  { open: false, trackId: null, currentTime: 0, duration: 0, seekable: true },
 );
 
 const loading = ref(false);
@@ -98,6 +99,7 @@ async function load() {
 }
 
 function onLineClick(line: LrcLine) {
+  if (!props.seekable) return;
   const dur = props.duration;
   if (!dur || !Number.isFinite(line.t)) return;
   seekToFraction(line.t / dur);
@@ -148,6 +150,7 @@ watch(activeIdx, async (idx) => {
             :class="{
               active: i === activeIdx,
               past: i < activeIdx,
+              'is-seekable': seekable,
             }"
             @click="onLineClick(line)"
           >{{ line.text || '♪' }}</li>

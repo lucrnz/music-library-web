@@ -3,7 +3,7 @@
 
 @media (min-width: 900px) {
   #tab-bar {
-    display: none;
+    display: flex;
   }
 
   main {

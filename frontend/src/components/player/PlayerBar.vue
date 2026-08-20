@@ -13,6 +13,9 @@ import Icon from "@/components/icons/Icon.vue";
 import LossyMark from "@/components/lossy/LossyMark.vue";
 import NowPlayingFull from "@/components/player/NowPlayingFull.vue";
 import type { NowPlayingFullExpose } from "@/components/player/NowPlayingFull.vue";
+import RadioMini from "@/components/radio/RadioMini.vue";
+import RadioNowPlaying from "@/components/radio/RadioNowPlaying.vue";
+import { radioChromeActive } from "@/stores/radio";
 
 const DESKTOP_BREAKPOINT = "(min-width: 900px)";
 
@@ -33,7 +36,10 @@ const root = ref<HTMLElement | null>(null);
       () => player.expanded && !desktopViewport.value
     );
 
-    const visible = computed(() => Boolean(pl.current) || pl.length > 0);
+    const radioOn = computed(() => radioChromeActive());
+    const visible = computed(
+      () => radioOn.value || Boolean(pl.current) || pl.length > 0,
+    );
     const track = computed(() => pl.current);
     const title = computed(() => (track.value ? track.value.title : "—"));
     const lossyKind = computed(() => kindForTrack(track.value));
@@ -134,7 +140,8 @@ const root = ref<HTMLElement | null>(null);
       <div v-if="player.playNotice" class="player-notice" role="status">
         {{ player.playNotice }}
       </div>
-      <div class="player-mini">
+      <RadioMini v-if="radioOn" />
+      <div v-else class="player-mini">
         <img class="mini-cover" :src="coverThumb" alt="" />
         <button
           type="button"
@@ -166,7 +173,9 @@ const root = ref<HTMLElement | null>(null);
         </button>
       </div>
 
+      <RadioNowPlaying v-if="radioOn" layout="bar" />
       <NowPlayingFull
+        v-else
         ref="fullRef"
         :title="title"
         :subtitle="subtitle"

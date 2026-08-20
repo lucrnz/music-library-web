@@ -5,7 +5,7 @@ import Icon from "@/components/icons/Icon.vue";
 import { rememberLibraryRoute, ui } from "@/stores/ui";
 const route = useRoute();
     const router = useRouter();
-    const onQueue = computed(() => route.meta.pane === "queue");
+    const pane = computed(() => String(route.meta.pane || "library"));
 
     watch(
       () => route.fullPath,
@@ -25,6 +25,10 @@ const route = useRoute();
     function goQueue() {
       router.push({ name: "queue" });
     }
+
+    function goRadio() {
+      router.push({ name: "radio" });
+    }
 </script>
 
 <template>
@@ -32,7 +36,7 @@ const route = useRoute();
       <button
         type="button"
         class="tab"
-        :class="{ active: !onQueue }"
+        :class="{ active: pane === 'library' }"
         aria-label="Library"
         @click="goLibrary"
       >
@@ -41,11 +45,20 @@ const route = useRoute();
       <button
         type="button"
         class="tab"
-        :class="{ active: onQueue }"
+        :class="{ active: pane === 'queue' }"
         aria-label="Playlist"
         @click="goQueue"
       >
         <Icon name="queue" /><span>Playlist</span>
+      </button>
+      <button
+        type="button"
+        class="tab"
+        :class="{ active: pane === 'radio' }"
+        aria-label="Radio"
+        @click="goRadio"
+      >
+        <Icon name="radio" /><span>Radio</span>
       </button>
     </nav>
 </template>

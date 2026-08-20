@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { pl } from "@/stores/playlist";
 import { playIndex } from "@/stores/player";
+import { onStreamProfileChanged, radioChromeActive } from "@/stores/radio";
 import { canReachServer } from "@/connectivity";
 import { connectivity } from "@/stores/connectivity";
 import {
@@ -64,18 +65,21 @@ const playbackPolicies = PLAYBACK_POLICIES;
       return hit?.hint || "";
     });
 
-    const playbackCtx = () => ({
-      tracks: pl.tracks,
-      index: pl.index,
-      playIndex,
-    });
+    const playbackCtx = () => {
+      if (radioChromeActive()) {
+        return { tracks: pl.tracks, index: pl.index };
+      }
+      return { tracks: pl.tracks, index: pl.index, playIndex };
+    };
 
     function toggleMenu(id: string) {
       openMenu.value = openMenu.value === id ? null : id;
     }
 
     function chooseStream(id: string) {
+      const radioOn = radioChromeActive();
       setStreamCodec(id, playbackCtx());
+      if (radioOn) void onStreamProfileChanged();
     }
 
     function chooseDownload(id: string) {
