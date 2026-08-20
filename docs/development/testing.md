@@ -60,4 +60,4 @@ Tiny production seams only (export an already-pure helper). Do not add `httpx`, 
 - Prefer `tmp_path` empty files by suffix over committed audio binaries.
 - Patch I/O at the import site the unit uses (`musicweb.scan.fingerprint.FLAC`, `subprocess.run`).
 - `LibraryJobRunner` tests patch `_execute`; they do not walk a real library.
-- Frontend store tests mock `@/api` and `networkConstraints`; they do not import `player.ts`.
+- Frontend store tests mock `@/api`; they do not import `player.ts`.

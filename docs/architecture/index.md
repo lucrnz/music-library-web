@@ -47,7 +47,7 @@ FastAPI (routes → services)
 - `docs/systems/downloads.md`: client offline catalog (OPFS).
 - `docs/systems/playback.md`: play source, quality prefs, prepare.
 - `docs/systems/playback-stats.md`: household listen log and Stats browse mode.
-- `docs/systems/connectivity.md`: reachability and network cost hints.
+- `docs/systems/connectivity.md`: reachability.
 - `docs/database/overview.md`: what the index represents.
 - `docs/frontend/conventions.md`: client architecture.
 - `docs/product/core-guidelines.md`: UX and audio quality product rules.

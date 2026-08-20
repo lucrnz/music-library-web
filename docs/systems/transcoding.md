@@ -42,7 +42,7 @@ Client quality prefs, play-source resolution, and prepare timing are owned by `d
 
 - Stream by stable track id (preferred) with a codec/profile tag.
 - Settings UI should only offer profiles the browser can decode (client probes).
-- Client may pick different profile tags for Wi‑Fi vs cellular streaming and for offline downloads; `/api/codecs` exposes bitrate/depth/rate so the client can rank quality. Network detection is browser-side only.
+- Client may pick one stream tag and one download tag; `/api/codecs` exposes bitrate/depth/rate so the client can rank quality.
 - Optional prepare endpoint prewarms encodes without blocking the main UX path.
 - Client may send prepare with `urgent: true` (near end of the current track, once per playback load) so the next queue item is promoted to the urgent encode tier before natural advance.
 

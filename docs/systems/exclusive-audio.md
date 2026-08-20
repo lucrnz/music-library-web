@@ -161,7 +161,7 @@ Mac volume keys usually do nothing while hogged. The in-app slider is exclusive 
 
 ## Prepare while exclusive
 
-- `getActiveStreamCodec()` remains **browser Wi‑Fi/cellular only**.
+- `getActiveStreamCodec()` is the browser Streaming setting and is unused for exclusive play/prepare.
 - Exclusive prepare uses `getExclusiveProfileTag(track)` only; multi-tag queues call prepare **per tag group**.
 - Near-end prepare uses the **next** track’s exclusive tag.
 - Do not prewarm browser Opus/FLAC marketing codecs for the queue while exclusive is on.

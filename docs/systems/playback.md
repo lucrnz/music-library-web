@@ -51,17 +51,16 @@ Apply only when the saved id matches the current track. Clear on stop, skip, tra
 
 Independent client preferences (exact storage keys and defaults live in `settings.js`):
 
-- **Wi‑Fi / unrestricted** stream profile
-- **Cellular** stream profile (when connection type is detectable; otherwise stream uses the unrestricted choice)
+- **Streaming** profile
 - **Download** profile used when enqueueing offline copies
 - **Playback policy** when a download exists while online:
-  - Prefer higher quality (use local when at least as good as the active stream profile)
+  - Prefer higher quality (use local when it is at least as good as the stream profile)
   - Prefer downloaded file
   - Prefer live stream when the server is reachable (`canUseRemoteMedia()`) (local only when unreachable / stream unavailable)
 
 The browser catalog is fetched at boot when the server answers and stored locally as the raw `/api/codecs` payload (`musicweb.codecCatalog.v1` in `settings.js`). That boot GET is a live probe (`cache: "no-store"`) so HTTP cache cannot confirm reachability. Offline or failed fetch reuses that cache; stored quality tags are not rewritten against the hardcoded one-row stub. Decode probes still run locally after hydrate and after a successful fetch.
 
-Active stream profile for prepare and play follows the current network constraint state when type detection works. Network cost hints never replace an explicit user setting.
+The Streaming setting is the active stream profile for prepare and play. Changing it restarts the current track.
 
 ## Honest codecs
 
@@ -82,5 +81,4 @@ Exact lead time and API flags live in source.
 - Keep play-source and block-reason writes atomic on the player store so UI never sees mixed fields from a half-failed load.
 - Prefer stable track IDs for stream, prepare, and download keys over paths.
 - Do not claim a codec is playable without a successful probe path for that browser.
-- Network Information API absence is normal on desktop — UI and policy must degrade gracefully (hide cellular-only options; treat connection as unrestricted).
 - Do not use `isHardOffline()` alone to decide stream vs download — play-source online is `canUseRemoteMedia()`.

@@ -21,7 +21,7 @@
 - **Downloads** (`frontend/src/downloads/`) own client-side offline catalog (OPFS + IndexedDB). Keep offline concerns out of server index code. Design, storage split, queue policy, and import-surface rules: `docs/systems/downloads.md`.
 - **Playback / quality** (play source, stream vs download policy, prepare): `docs/systems/playback.md`.
 - **Exclusive audio** (Mac PWA + companion sinks; optional): `docs/systems/exclusive-audio.md`. Player transport goes through sinks — do not re-export a shared `HTMLAudioElement` from `player.ts`.
-- **Connectivity** (online / offline / server_down, network cost hints): `docs/systems/connectivity.md`.
+- **Connectivity** (online / offline / server_down): `docs/systems/connectivity.md`.
 - **Diagnostics** (`frontend/src/diag/`): always-on emit with an Errors only / Everything cutoff in Settings. Same-origin `/api` fetches share the helper in `api.ts`. Design: `docs/systems/diagnostics.md`.
 
 ## Frontend package

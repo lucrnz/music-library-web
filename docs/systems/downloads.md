@@ -14,8 +14,8 @@ Optional client-side offline music: users can download stream-profile audio to t
   - IndexedDB metadata: `db.ts`
   - Play / cover resolution: `resolve.ts`
   - Hierarchy / storage formatters: `hierarchy.ts`, `storageInfo.ts`
-- Settings that affect downloads: `frontend/src/stores/settings.ts` (download profile, only-on-Wi‑Fi)
-- Connectivity signals consumed by queue policy: `frontend/src/connectivity.ts`, `networkConstraints.ts`
+- Settings that affect downloads: `frontend/src/stores/settings.ts` (download profile)
+- Connectivity signals consumed by queue policy: `frontend/src/connectivity.ts`
 - PWA shell boundary: `docs/systems/pwa.md`
 - Playback resolution: `docs/systems/playback.md`
 
@@ -38,7 +38,7 @@ OPFS is mandatory for resumable Range downloads and partials. Exact object-store
 1. **Optional.** Downloads start disabled until the user enables them; enabling needs OPFS support. A failed cold-start boot (`initDownloads`) must not persist the enable flag off — only explicit disable, or a failed explicit enable, writes it false.
 2. **Enqueue.** Pure enqueue / lifecycle lives in `index.js`. User-facing `downloadTrack(s)` in `ui.js` may confirm near-quota, then call enqueue.
 3. **Queue.** Background workers fetch the chosen **download** stream profile from the server and write OPFS; catalog records track status (including broken/orphan cases). Lossy-indexed tracks always download the original file (`source`); the download quality picker applies to lossless only. Original-file extension and MIME are defined for MP3 and AAC only.
-4. **Network policy.** Auto-pause when hard offline, server unreachable, or (when “only download on Wi‑Fi” is on and connection type is detectable) on constrained/cellular links. User pause is separate from auto-pause.
+4. **Network policy.** Auto-pause when hard offline or server unreachable. User pause is separate from auto-pause.
 5. **Catalog projection.** In-memory projection of downloaded tracks feeds UI icons, prepare skip, and tree/list browse of local content. `trackDownloadState` `ready` / `other` means a playable local file — playback uses that join to gray and skip undownloaded queue rows when `connectivity.canUseRemote` is false (see `docs/systems/playback.md`).
 6. **Play path.** Delivery choice (local blob vs stream) is owned by playback resolution (`resolve.js` + player), not by re-encoding on the client.
 7. **Artist thumbs.** Offline thumbs follow `GET /api/artist-image` (preferred bytes first). After a local preferred upload (online submit or flush), `applyPreferredServerResult` overwrites the OPFS artist thumb, publishes a new object URL on `urlCache` (`artist:${id}:thumb`), then revokes the old one. List/tree read that cache. `artistImageUrl` busts on nonzero `preferred_rev` even after revert. A queued revert does not change GET bytes until DELETE succeeds.

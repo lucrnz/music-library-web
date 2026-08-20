@@ -1,13 +1,12 @@
 # Connectivity
 
-Client model for **reachability** (can we talk to this origin’s server?) and **connection cost hints** (cellular vs unrestricted). Consumers — downloads queue, player, loaders — own their reactions; this system owns state and signals.
+Client model for **reachability** (can we talk to this origin’s server?). Consumers — downloads queue, player, loaders — own their reactions; this system owns state and signals.
 
 ## Source of truth
 
 - Platform state and probes: `frontend/src/connectivity.ts`
 - Reactive SPA mirror: `frontend/src/stores/connectivity.ts`
 - Quiet transition toasts: `frontend/src/connectivityUi.ts`
-- Connection type / Data Saver hints: `frontend/src/networkConstraints.ts`
 - Consumers: `frontend/src/downloads/queuePolicy.ts`, `frontend/src/stores/player.ts`, `frontend/src/stores/settings.ts`
 - Related: `docs/systems/downloads.md`, `docs/systems/playback.md`, `docs/systems/pwa.md`
 
@@ -31,15 +30,7 @@ A backoff health loop runs when **any** `setHealthWork` source has work (`"downl
 
 ### Auto-pause signal
 
-`autoPauseReason()` (and downloads’ extension for metered links) answers whether background download work should freeze for offline, server-down, or constrained network — not whether the user pressed pause.
-
-## Connection constraints
-
-Separate from reachability: the Network Information API (when `connection.type` is available) reports cellular / Data Saver-style constraints.
-
-- Used to pick cellular vs Wi‑Fi stream quality and to honor “only download on Wi‑Fi.”
-- When type is not detectable (typical desktop), treat as unrestricted and hide cellular-only UI.
-- Never a substitute for explicit quality or download settings.
+`autoPauseReason()` answers whether background download work should freeze for offline or server-down — not whether the user pressed pause.
 
 ## UX policy
 
