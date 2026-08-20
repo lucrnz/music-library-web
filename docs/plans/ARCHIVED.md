@@ -127,3 +127,17 @@ Open the diff for the dedicated localStorage key, near-end-is-0 clamp, invalidat
 ```bash
 git show a68a905e3a7e9fd3adc6a3bb19d5272231846bf8
 ```
+
+## 2026-08-19-21vzgiyq-exclusive-hw-volume-done
+
+**Title:** Exclusive hardware volume
+
+**Commit:** `12d991d182992165c1dd5439a4a4bf9db474d4ef`
+
+Exclusive hog now writes Core Audio analog gain when a hardware volume selector succeeds, keeps mpv at unity on that path, and restores the pre-hog snapshot after unhog — including companion process stop.
+
+Open the diff for ExclusiveVolume tenure, HAL selector order, and the unhog-then-restore player sequence.
+
+```bash
+git show 12d991d182992165c1dd5439a4a4bf9db474d4ef
+```
