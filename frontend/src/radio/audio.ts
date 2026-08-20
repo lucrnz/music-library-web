@@ -6,12 +6,21 @@ export function shouldIgnoreTransport(loadInFlight: boolean, seekInFlight: boole
   return loadInFlight || seekInFlight;
 }
 
+export function shouldIgnorePause(
+  loadInFlight: boolean,
+  seekInFlight: boolean,
+  ended: boolean,
+): boolean {
+  return shouldIgnoreTransport(loadInFlight, seekInFlight) || ended;
+}
+
 export interface RadioAudio {
   readonly el: HTMLAudioElement | null;
   loadInFlight: boolean;
   seekInFlight: boolean;
   currentTime: number;
   paused: boolean;
+  ended: boolean;
   load(url: string): Promise<void>;
   seek(seconds: number): Promise<void>;
   play(): Promise<void>;
@@ -35,7 +44,7 @@ export function createRadioAudio(): RadioAudio {
 
   if (el) {
     el.addEventListener("pause", () => {
-      if (shouldIgnoreTransport(loadInFlight, seekInFlight)) return;
+      if (shouldIgnorePause(loadInFlight, seekInFlight, el.ended)) return;
       onPauseFn?.();
     });
     el.addEventListener("ended", () => {
@@ -67,6 +76,9 @@ export function createRadioAudio(): RadioAudio {
     },
     get paused() {
       return el?.paused ?? true;
+    },
+    get ended() {
+      return el?.ended ?? false;
     },
     async load(url: string) {
       if (!el) return;

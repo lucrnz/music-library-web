@@ -144,6 +144,15 @@ describe("radio store", () => {
     expect(radioChromeActive()).toBe(false);
   });
 
+  it("stays tuned when the official current id changes", async () => {
+    applySnapshot(currentPayload);
+    radio.chrome = "tuned";
+    applySnapshot({ ...currentPayload, id: "t2", title: "Next" });
+    await Promise.resolve();
+    expect(radio.chrome).toBe("tuned");
+    expect(radio.track?.id).toBe("t2");
+  });
+
   it("socket stays required after tuneOut off the tab", async () => {
     vi.mocked(fetchRadioNow).mockResolvedValue(currentPayload);
     setTabOpen(true);

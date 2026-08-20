@@ -390,7 +390,7 @@ export async function tuneIn(): Promise<void> {
   radio.chrome = "tuning";
   audio.setVolume(readVolume() ?? 1);
   audio.onPause(() => {
-    if (radio.chrome === "tuned") tuneOut();
+    if (radio.chrome === "tuned" && !audio.ended) tuneOut();
   });
   audio.onEnded(() => {
     /* station clock owns advance */
