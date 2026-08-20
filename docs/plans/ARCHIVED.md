@@ -141,3 +141,17 @@ Open the diff for ExclusiveVolume tenure, HAL selector order, and the unhog-then
 ```bash
 git show 12d991d182992165c1dd5439a4a4bf9db474d4ef
 ```
+
+## 2026-08-20-46mun4bs-playback-stats-done
+
+**Title:** Playback stats
+
+**Commit:** `f38df6b3cecaebb1a75cc40cb23a5008ef63c875`
+
+Every successful play cycle that hears 70% of duration records a household listen_event; the Stats browse mode ranks top artists and tracks over all-time / 7d / 30d / calendar months.
+
+Open the diff for the 70% accumulator (resume seek does not count skipped time), the localStorage outbox + idempotent POST, and listen_events ranking SQL.
+
+```bash
+git show f38df6b3cecaebb1a75cc40cb23a5008ef63c875
+```
