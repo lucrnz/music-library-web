@@ -3,7 +3,7 @@
  * Presentational now-playing surface. Transport is a slot.
  * Does not import player.ts or radio.ts.
  */
-import { computed, nextTick, ref, watch, type Ref } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch, type Ref } from "vue";
 import { canReachServer } from "@/connectivity";
 import { copyText } from "@/clipboard";
 import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
@@ -12,6 +12,7 @@ import { lyricsClipboardText } from "@/lyrics/plainText";
 import { kindForTrack } from "@/lossyKind";
 import type { Track } from "@/models/track";
 import type { PlayStatusState } from "@/playbackStatus";
+import { connectivity } from "@/stores/connectivity";
 import { openSettings } from "@/stores/settings";
 import { showToast } from "@/stores/ui";
 import { formatTime, setRangeFill } from "@/util";
@@ -20,9 +21,12 @@ import { useRowActionMenu } from "@/components/menu/useRowActionMenu";
 import { useDesktopViewport } from "@/layout";
 import Icon from "@/components/icons/Icon.vue";
 import LossyMark from "@/components/lossy/LossyMark.vue";
+import { resolveCoverFlip } from "@/components/player/coverFlip";
 import LyricsOverlay from "@/components/player/LyricsOverlay.vue";
 import { buildNowPlayingMenuItems } from "@/components/player/nowPlayingMenuItems";
 import PlaybackStatusLine from "@/components/player/PlaybackStatusLine.vue";
+
+const FLIP_MS = 500;
 
 const props = withDefaults(
   defineProps<{
@@ -111,12 +115,97 @@ const {
 const menuOpen = computed(() => !!menuAnchor.value);
 const offerCopyLyrics = ref(true);
 
+const showingArtist = ref(false);
+const flipAllowed = ref(false);
+const artistUrl = ref<string | null>(null);
+const flipping = ref(false);
+let resolveGen = 0;
+let flipTimer: ReturnType<typeof setTimeout> | null = null;
+
+const flipInteractive = computed(
+  () =>
+    !!props.expanded &&
+    flipAllowed.value &&
+    !props.lyricsOpen,
+);
+
+const coverRole = computed(() => {
+  if (!props.expanded || flipInteractive.value) return "button";
+  return undefined;
+});
+
+const coverTabindex = computed(() => {
+  if (!props.expanded || flipInteractive.value) return 0;
+  return undefined;
+});
+
+const coverAriaLabel = computed(() => {
+  if (!props.expanded) return props.openLabel;
+  if (!flipInteractive.value) return undefined;
+  return showingArtist.value ? "Show album cover" : "Show artist photo";
+});
+
+const coverAriaPressed = computed(() => {
+  if (!flipInteractive.value) return undefined;
+  return showingArtist.value ? "true" : "false";
+});
+
+function prefersReducedMotion(): boolean {
+  return !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+}
+
+function clearFlipTimer() {
+  if (flipTimer != null) {
+    clearTimeout(flipTimer);
+    flipTimer = null;
+  }
+}
+
+function resetPeek() {
+  showingArtist.value = false;
+  flipping.value = false;
+  clearFlipTimer();
+}
+
+function denyFlip() {
+  flipAllowed.value = false;
+  artistUrl.value = null;
+  showingArtist.value = false;
+  flipping.value = false;
+  clearFlipTimer();
+}
+
+function preloadImage(url: string) {
+  const img = new Image();
+  img.src = url;
+}
+
+function onArtistImgError() {
+  denyFlip();
+}
+
 function collapse() {
   emit("collapse");
 }
 
 function onCoverOrMetaOpen(ev?: MouseEvent | KeyboardEvent) {
   emit("cover-or-meta-open", ev);
+}
+
+function onCoverActivate(ev?: MouseEvent | KeyboardEvent) {
+  if (!props.expanded) {
+    emit("cover-or-meta-open", ev);
+    return;
+  }
+  if (!flipAllowed.value || props.lyricsOpen || flipping.value) return;
+  showingArtist.value = !showingArtist.value;
+  if (prefersReducedMotion()) return;
+  flipping.value = true;
+  clearFlipTimer();
+  flipTimer = setTimeout(() => {
+    flipping.value = false;
+    flipTimer = null;
+  }, FLIP_MS);
 }
 
 function onSheetDown(e: PointerEvent) {
@@ -252,6 +341,46 @@ watch(
   () => closeMenu(),
 );
 
+watch(
+  () =>
+    [
+      props.expanded,
+      props.trackId,
+      props.track?.albumArtistId,
+      props.track?.artistId,
+      connectivity.state,
+    ] as const,
+  async ([expanded, trackId], previous) => {
+    const wasExpanded = previous?.[0];
+    const prevTrackId = previous?.[1];
+    if (!expanded) {
+      denyFlip();
+      return;
+    }
+    if (!wasExpanded || trackId !== prevTrackId) {
+      resetPeek();
+      artistUrl.value = null;
+      flipAllowed.value = false;
+    }
+    const gen = ++resolveGen;
+    const result = await resolveCoverFlip(props.track);
+    if (gen !== resolveGen || props.trackId !== trackId) return;
+    if (!result.ok) {
+      denyFlip();
+      return;
+    }
+    preloadImage(result.imageUrl);
+    artistUrl.value = result.imageUrl;
+    flipAllowed.value = true;
+  },
+  { immediate: true },
+);
+
+onUnmounted(() => {
+  resolveGen += 1;
+  clearFlipTimer();
+});
+
 defineExpose({ focusClose, closeBtn });
 </script>
 
@@ -297,18 +426,34 @@ defineExpose({ focusClose, closeBtn });
       :class="{
         'lyrics-open': expanded && lyricsOpen,
         'is-open-target': !expanded,
+        'is-flip-target': flipInteractive,
       }"
-      :role="expanded ? undefined : 'button'"
-      :tabindex="expanded ? undefined : 0"
-      :aria-label="expanded ? undefined : openLabel"
-      @click="onCoverOrMetaOpen"
-      @keydown.enter.space.prevent="onCoverOrMetaOpen"
+      :role="coverRole"
+      :tabindex="coverTabindex"
+      :aria-label="coverAriaLabel"
+      :aria-pressed="coverAriaPressed"
+      @click="onCoverActivate"
+      @keydown.enter.space.prevent="onCoverActivate"
     >
-      <img
-        class="full-cover"
-        :src="coverFull"
-        :alt="expanded ? 'Album cover' : ''"
-      />
+      <div class="full-cover-card">
+        <div
+          class="full-cover-inner"
+          :class="{ 'is-flipped': showingArtist }"
+        >
+          <img
+            class="full-cover full-cover-front"
+            :src="coverFull"
+            :alt="expanded ? 'Album cover' : ''"
+          />
+          <img
+            v-if="artistUrl"
+            class="full-cover full-cover-back"
+            :src="artistUrl"
+            alt="Artist photo"
+            @error="onArtistImgError"
+          />
+        </div>
+      </div>
       <LyricsOverlay
         v-if="expanded"
         :open="lyricsOpen"

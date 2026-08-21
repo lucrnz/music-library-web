@@ -208,6 +208,11 @@
     width: min(100%, 320px);
   }
 
+  #player.expanded .full-cover.full-cover-back {
+    width: 100%;
+    height: 100%;
+  }
+
   .modal {
     align-items: center;
   }
