@@ -4,18 +4,17 @@ from musicweb.radio.protocol import (
     ACTION_CLOSE,
     ACTION_TUNE_IN,
     ACTION_TUNE_OUT,
-    client_payload_action,
     is_browser_listed_profile,
     parse_client_payload,
 )
 
 
 def test_unknown_payload_closes():
-    assert client_payload_action(None) == ACTION_CLOSE
-    assert client_payload_action("") == ACTION_CLOSE
-    assert client_payload_action("{}") == ACTION_CLOSE
-    assert client_payload_action('{"type":"hello"}') == ACTION_CLOSE
-    assert client_payload_action(b"ping") == ACTION_CLOSE
+    assert parse_client_payload(None)[0] == ACTION_CLOSE
+    assert parse_client_payload("")[0] == ACTION_CLOSE
+    assert parse_client_payload("{}")[0] == ACTION_CLOSE
+    assert parse_client_payload('{"type":"hello"}')[0] == ACTION_CLOSE
+    assert parse_client_payload(b"ping")[0] == ACTION_CLOSE
 
 
 def test_tune_in_and_tune_out_are_allowlisted():

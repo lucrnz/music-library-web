@@ -10,6 +10,13 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def format_iso_utc(dt: datetime) -> str:
+    """Timezone-aware ISO-8601; keep microseconds (radio persist)."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
 def parse_iso_utc(value: str | None) -> datetime | None:
     """Parse an ISO-8601 timestamp; treat naive values as UTC."""
     if not value:

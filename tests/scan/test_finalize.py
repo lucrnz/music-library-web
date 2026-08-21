@@ -175,3 +175,58 @@ def test_recount_ignores_missing(db):
         assert album.track_count == 1
         assert album.lossy_kind is None
         assert artist.track_count == 1
+
+
+def test_recount_all_aac(db):
+    with db.session() as session:
+        _track(
+            session,
+            track_id="aac",
+            rel_path="a.m4a",
+            source_codec="aac",
+            is_lossy=True,
+        )
+        recount_entities(session)
+        session.commit()
+        assert session.get(Album, "alb").lossy_kind == "aac"
+
+
+def test_recount_unknown_lossy(db):
+    with db.session() as session:
+        _track(
+            session,
+            track_id="opus",
+            rel_path="a.opus",
+            source_codec="opus",
+            is_lossy=True,
+        )
+        recount_entities(session)
+        session.commit()
+        assert session.get(Album, "alb").lossy_kind == "lossy"
+
+    with db.session() as session:
+        session.get(Track, "opus").source_codec = None
+        recount_entities(session)
+        session.commit()
+        assert session.get(Album, "alb").lossy_kind == "lossy"
+
+
+def test_recount_mp3_plus_unknown_is_mixed(db):
+    with db.session() as session:
+        _track(
+            session,
+            track_id="mp3",
+            rel_path="a.mp3",
+            source_codec="mp3",
+            is_lossy=True,
+        )
+        _track(
+            session,
+            track_id="unk",
+            rel_path="b.bin",
+            source_codec=None,
+            is_lossy=True,
+        )
+        recount_entities(session)
+        session.commit()
+        assert session.get(Album, "alb").lossy_kind == "mixed"

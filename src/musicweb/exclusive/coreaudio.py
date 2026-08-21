@@ -11,18 +11,9 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-logger = logging.getLogger(__name__)
+from musicweb.transcode.profiles import EXCLUSIVE_DEPTHS, EXCLUSIVE_RATES_HZ
 
-# Align with exclusive FLAC allowlist (profiles.EXCLUSIVE_*).
-ALLOWLIST_RATES: tuple[int, ...] = (
-    44100,
-    48000,
-    88200,
-    96000,
-    176400,
-    192000,
-)
-ALLOWLIST_DEPTHS: tuple[int, ...] = (16, 24)
+logger = logging.getLogger(__name__)
 
 
 def fourcc(code: str) -> int:
@@ -506,8 +497,8 @@ def _list_devices_mpv_fallback() -> list[AudioDevice]:
                 name=name,
                 # Unknown caps: advertise full allowlist; formatPolicy still
                 # intersects with exclusive-formats server catalog.
-                sample_rates=list(ALLOWLIST_RATES),
-                bit_depths=list(ALLOWLIST_DEPTHS),
+                sample_rates=list(EXCLUSIVE_RATES_HZ),
+                bit_depths=list(EXCLUSIVE_DEPTHS),
                 mpv_device=mpv_id,
             )
         )
@@ -557,7 +548,7 @@ def _list_devices_coreaudio() -> list[AudioDevice]:
             for j in range(n_ranges):
                 lo = float(ranges[j].mMinimum)
                 hi = float(ranges[j].mMaximum)
-                for ar in ALLOWLIST_RATES:
+                for ar in EXCLUSIVE_RATES_HZ:
                     if lo - 0.5 <= ar <= hi + 0.5:
                         rates.add(ar)
         if not rates:
@@ -571,15 +562,15 @@ def _list_devices_coreaudio() -> list[AudioDevice]:
             )
             if st == 0:
                 nearest = min(
-                    ALLOWLIST_RATES,
+                    EXCLUSIVE_RATES_HZ,
                     key=lambda r: abs(r - rate_v.value),
                 )
                 if abs(nearest - rate_v.value) < 1.0:
                     rates.add(nearest)
             if not rates:
-                rates = set(ALLOWLIST_RATES)
+                rates = set(EXCLUSIVE_RATES_HZ)
 
-        depths = list(ALLOWLIST_DEPTHS)
+        depths = list(EXCLUSIVE_DEPTHS)
         devices.append(
             AudioDevice(
                 id=str(dev_id),

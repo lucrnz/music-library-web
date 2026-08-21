@@ -27,19 +27,13 @@ from musicweb.radio.types import (
     SnapshotTrack,
     StationSnapshot,
 )
-from musicweb.timeutil import parse_iso_utc
+from musicweb.timeutil import format_iso_utc, parse_iso_utc
 
 logger = logging.getLogger(__name__)
 
 CatalogBuilder = Callable[[Session], CatalogSnapshot]
 Probe = Callable[[Path], bool]
 LoopListener = Callable[[], None]
-
-
-def _iso(dt: datetime) -> str:
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).isoformat()
 
 
 def _snapshot_track(row: Track) -> SnapshotTrack:
@@ -286,7 +280,9 @@ class RadioStation:
             radio_repo.PersistedStation(
                 current_track_id=self._current_track_id,
                 track_started_at=(
-                    _iso(self._track_started_at) if self._track_started_at else None
+                    format_iso_utc(self._track_started_at)
+                    if self._track_started_at
+                    else None
                 ),
                 current_batch_seq=self._current_batch_seq,
                 queue=queue,

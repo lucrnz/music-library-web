@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from musicweb.routes import (
+    artist_images,
     diag,
     discovery,
     folders,
@@ -22,6 +23,7 @@ router.include_router(library_scan.router)
 router.include_router(discovery.router)
 router.include_router(folders.router)
 router.include_router(media.router)
+router.include_router(artist_images.router)
 router.include_router(playlists.router)
 router.include_router(listens.router)
 router.include_router(diag.router)

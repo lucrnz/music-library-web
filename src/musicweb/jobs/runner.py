@@ -9,17 +9,17 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from musicweb.artist_image import ArtistImageStore
 from musicweb.artist_images import ArtistImageFetcher
 from musicweb.config import Settings
 from musicweb.cover import CoverStore
 from musicweb.db.engine import Database
 from musicweb.db.fts import fts_rebuild
 from musicweb.db.models import ScanState
+from musicweb.images import WebpAssetStore
 from musicweb.library import Library
 from musicweb.lyrics import LyricsFetcher
 from musicweb.scan.artist_images import fetch_artist_images
-from musicweb.scan.batch import process_batch
+from musicweb.scan.batch import ScanMode, process_batch
 from musicweb.scan.covers import album_cover_sources, extract_covers
 from musicweb.scan.finalize import mark_missing, recount_entities
 from musicweb.scan.lyrics import fetch_track_lyrics
@@ -28,7 +28,6 @@ from musicweb.timeutil import utc_now_iso
 
 logger = logging.getLogger(__name__)
 
-ScanMode = Literal["quick", "full"]
 JobKind = Literal[
     "scan",
     "regen-covers",
@@ -46,7 +45,7 @@ class LibraryJobRunner:
         database: Database,
         library: Library,
         cover_store: CoverStore,
-        artist_image_store: ArtistImageStore,
+        artist_image_store: WebpAssetStore,
         settings: Settings,
     ) -> None:
         self._db = database

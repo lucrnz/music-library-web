@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from musicweb.artist_image import ArtistImageStore
 from musicweb.config import Settings, load_settings
 from musicweb.cover import CoverStore
 from musicweb.db.engine import Database, init_database
@@ -21,7 +20,7 @@ class RuntimeServices:
     database: Database
     library: Library
     cover_store: CoverStore
-    artist_image_store: ArtistImageStore
+    artist_image_store: WebpAssetStore
     preferred_artist_image_store: WebpAssetStore
     jobs: LibraryJobRunner
 
@@ -56,7 +55,9 @@ def bootstrap_services(
         index_lossy=settings.index_lossy,
     )
     cover_store = CoverStore(settings.musicweb_data_dir)
-    artist_image_store = ArtistImageStore(settings.musicweb_data_dir)
+    artist_image_store = WebpAssetStore(
+        settings.musicweb_data_dir / "covers" / "artists"
+    )
     preferred_artist_image_store = WebpAssetStore(
         settings.musicweb_data_dir / "covers" / "artists-preferred"
     )

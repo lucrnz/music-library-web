@@ -6,8 +6,8 @@ import threading
 
 import pytest
 
-from musicweb.artist_image import ArtistImageStore
 from musicweb.cover import CoverStore
+from musicweb.images import WebpAssetStore
 from musicweb.db.models import ScanState
 from musicweb.jobs.runner import LibraryJobRunner
 from musicweb.library import Library
@@ -18,7 +18,7 @@ def _runner(tmp_home, db) -> LibraryJobRunner:
         db,
         Library(tmp_home.lib),
         CoverStore(tmp_home.data),
-        ArtistImageStore(tmp_home.data),
+        WebpAssetStore(tmp_home.data / "covers" / "artists"),
         tmp_home.settings,
     )
 

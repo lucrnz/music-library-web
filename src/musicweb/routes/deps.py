@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from fastapi import Request
 
-from musicweb.artist_image import ArtistImageStore
 from musicweb.cover import CoverStore
 from musicweb.images import WebpAssetStore
 from musicweb.jobs import LibraryJobRunner
@@ -23,7 +22,7 @@ def cover_store(request: Request) -> CoverStore:
     return request.app.state.cover_store
 
 
-def artist_image_store(request: Request) -> ArtistImageStore:
+def artist_image_store(request: Request) -> WebpAssetStore:
     return request.app.state.artist_image_store
 
 

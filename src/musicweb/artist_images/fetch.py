@@ -7,7 +7,6 @@ from typing import Callable
 
 from sqlalchemy.orm import Session
 
-from musicweb.artist_image import ArtistImageStore
 from musicweb.artist_images.local import find_local_artist_file, sample_audio_dir
 from musicweb.artist_images.providers import (
     ImageProvider,
@@ -24,6 +23,7 @@ from musicweb.config import (
 )
 from musicweb.db.models import Artist
 from musicweb.http_client import RateLimitedHttp, looks_like_image
+from musicweb.images import WebpAssetStore
 from musicweb.library import Library
 from musicweb.timeutil import in_retry_cooldown, utc_now_iso
 
@@ -47,7 +47,7 @@ class ArtistImageFetcher:
 
     def __init__(
         self,
-        store: ArtistImageStore,
+        store: WebpAssetStore,
         library: Library,
         settings: Settings,
         *,
@@ -68,9 +68,9 @@ class ArtistImageFetcher:
             return False
         if force:
             return True
-        if artist.has_image and self._store.has_image(artist.id):
+        if artist.has_image and self._store.has(artist.id):
             return False
-        if artist.has_image and not self._store.has_image(artist.id):
+        if artist.has_image and not self._store.has(artist.id):
             return True
         if _in_retry_cooldown(artist):
             return False
@@ -88,13 +88,13 @@ class ArtistImageFetcher:
         if cancel and cancel():
             return FetchResult(ok=False, status="error", detail="canceled")
 
-        if force and self._store.has_image(artist.id):
+        if force and self._store.has(artist.id):
             self._store.delete(artist.id)
             artist.has_image = False
             artist.image_source = None
             artist.image_status = None
 
-        if not force and self._store.has_image(artist.id):
+        if not force and self._store.has(artist.id):
             artist.has_image = True
             if artist.image_status != "ok":
                 artist.image_status = "ok"
@@ -238,7 +238,7 @@ class ArtistImageFetcher:
         *,
         mbid: str | None = None,
     ) -> FetchResult:
-        ok = self._store.ensure_from_bytes(artist.id, data)
+        ok = self._store.write_from_bytes(artist.id, data)
         if not ok:
             artist.has_image = False
             artist.image_source = None

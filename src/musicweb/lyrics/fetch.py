@@ -147,7 +147,7 @@ class LyricsFetcher:
         result = LyricsResult(ok=False, status="not_found")
         existing = session.get(TrackLyrics, track.id)
 
-        if abs_path is not None and abs_path.is_file():
+        if abs_path is not None:
             local = read_local_lyrics(abs_path)
             if local is not None:
                 result = LyricsResult(

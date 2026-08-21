@@ -34,11 +34,6 @@ def parse_client_payload(raw: str | bytes | None) -> tuple[str, dict]:
     return ACTION_CLOSE, {}
 
 
-def client_payload_action(raw: str | bytes | None) -> str:
-    action, _fields = parse_client_payload(raw)
-    return action
-
-
 def is_browser_listed_profile(tag: object) -> bool:
     if not isinstance(tag, str) or not tag or tag == SOURCE_TAG:
         return False

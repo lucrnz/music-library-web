@@ -5,34 +5,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from musicweb.cover import placeholder_webp
-from musicweb.db.models import Album, Artist, Track
+from musicweb.db.models import Album
 from musicweb.db.repositories import tracks as tracks_repo
 from musicweb.db.session import get_db
-from musicweb.library import Library
-from musicweb.artist_images.preferred import (
-    PreferredImageTooLarge,
-    PreferredImageUndecodable,
-    apply_preferred_upload,
-    revert_preferred,
-)
-from musicweb.artist_images.resolve import (
-    pick_artist_image_path,
-    reconcile_artist_image_flags,
-)
-from musicweb.config import ARTIST_IMAGE_MAX_BYTES
-from musicweb.routes.serializers import artist_dict
 from musicweb.routes.deps import (
-    artist_image_store,
     cover_store,
     library,
-    preferred_artist_image_store,
     transcoder,
 )
 from musicweb.transcode import (
@@ -46,7 +31,7 @@ from musicweb.transcode.enqueue import enqueue_prepare
 from musicweb.transcode.forget import resolve_forget
 from musicweb.transcode.null_tech_log import warn_null_track_tech
 from musicweb.diag.emit import emit
-from musicweb.transcode.passthrough import passthrough_media, stream_intent
+from musicweb.transcode.passthrough import SOURCE_TAG, passthrough_media, stream_intent
 
 router = APIRouter(prefix="/api", tags=["media"])
 
@@ -220,9 +205,11 @@ def transcode_prepare(
 ) -> dict:
     lib = library(request)
     tc = transcoder(request)
-    probe = stream_intent(is_lossy=False, codec=payload.codec)
-    if probe.kind == "reject" and probe.status == 400:
-        raise HTTPException(status_code=400, detail=probe.detail)
+    if payload.codec != SOURCE_TAG:
+        try:
+            get_profile(payload.codec)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if payload.replace:
         tc.drop_pending_prewarm()
@@ -291,7 +278,7 @@ async def cover(
     if hit is not None:
         return FileResponse(hit, media_type="image/webp", headers=_COVER_HEADERS)
 
-    if audio_path is not None and audio_path.is_file():
+    if audio_path is not None:
         result = await run_in_threadpool(
             store.get_or_fill, resolved_album_id, audio_path
         )
@@ -309,69 +296,3 @@ async def cover(
         )
 
     return _placeholder_response(size)
-
-
-@router.get("/artist-image")
-async def artist_image(
-    request: Request,
-    artist_id: str = Query(...),
-    size: Literal["full", "thumb"] = Query(default="full"),
-    db: Session = Depends(get_db),
-) -> Response:
-    scanned = artist_image_store(request)
-    preferred = preferred_artist_image_store(request)
-    artist = db.get(Artist, artist_id)
-    if artist is None:
-        raise HTTPException(status_code=404, detail="Artist not found")
-
-    reconcile_artist_image_flags(
-        artist,
-        preferred.has(artist_id),
-        scanned.has_image(artist_id),
-    )
-    hit = pick_artist_image_path(
-        preferred.get_path(artist_id, size),
-        scanned.image_path(artist_id, size),
-    )
-    if hit is not None:
-        return FileResponse(hit, media_type="image/webp", headers=_COVER_HEADERS)
-
-    return _placeholder_response(size)
-
-
-@router.post("/artist-image")
-async def artist_image_upload(
-    request: Request,
-    artist_id: str = Query(...),
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-) -> dict:
-    store = preferred_artist_image_store(request)
-    artist = db.get(Artist, artist_id)
-    if artist is None:
-        raise HTTPException(status_code=404, detail="Artist not found")
-
-    if file.size is not None and file.size > ARTIST_IMAGE_MAX_BYTES:
-        raise HTTPException(status_code=413, detail="Image too large")
-    data = await file.read(ARTIST_IMAGE_MAX_BYTES + 1)
-    try:
-        apply_preferred_upload(store, artist, data)
-    except PreferredImageTooLarge as exc:
-        raise HTTPException(status_code=413, detail="Image too large") from exc
-    except PreferredImageUndecodable as exc:
-        raise HTTPException(status_code=400, detail="Could not decode image") from exc
-    return artist_dict(artist)
-
-
-@router.delete("/artist-image")
-def artist_image_delete(
-    request: Request,
-    artist_id: str = Query(...),
-    db: Session = Depends(get_db),
-) -> dict:
-    store = preferred_artist_image_store(request)
-    artist = db.get(Artist, artist_id)
-    if artist is None:
-        raise HTTPException(status_code=404, detail="Artist not found")
-    revert_preferred(store, artist)
-    return artist_dict(artist)

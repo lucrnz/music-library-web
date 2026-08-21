@@ -4,7 +4,6 @@ from io import BytesIO
 
 from PIL import Image
 
-from musicweb.artist_image import ArtistImageStore
 from musicweb.artist_images import ArtistImageFetcher
 from musicweb.db.models import Artist
 from musicweb.images import WebpAssetStore
@@ -39,7 +38,7 @@ def test_force_regen_leaves_preferred_store_and_flags(tmp_home, db):
         session.commit()
 
     fetcher = ArtistImageFetcher(
-        ArtistImageStore(tmp_home.data),
+        WebpAssetStore(tmp_home.data / "covers" / "artists"),
         Library(tmp_home.lib),
         tmp_home.settings,
         providers=[],
