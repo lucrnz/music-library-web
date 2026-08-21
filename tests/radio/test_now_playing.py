@@ -63,6 +63,7 @@ def test_current_includes_track_and_position_seconds():
     assert body["face"] == "current"
     assert body["id"] == "t1"
     assert body["title"] == "Song"
+    assert body["path"] == "a.flac"
     assert body["artist"] == "Artist"
     assert body["album"] == "Album"
     assert body["is_lossy"] is False

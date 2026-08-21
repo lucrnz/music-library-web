@@ -2,10 +2,39 @@
 
 from __future__ import annotations
 
-from musicweb.db.models import Album, Artist, Track, TrackLyrics
+from typing import Protocol
+
+from musicweb.db.models import Album, Artist, TrackLyrics
 
 
-def track_dict(track: Track) -> dict:
+class _AlbumTitle(Protocol):
+    title: str
+
+
+class TrackPayload(Protocol):
+    id: str
+    rel_path: str | None
+    is_missing: bool
+    title: str
+    artist_name: str
+    album: _AlbumTitle | None
+    album_id: str | None
+    artist_id: str | None
+    album_artist_name: str
+    album_artist_id: str | None
+    track_no: int | None
+    disc_no: int | None
+    year: int | None
+    duration_ms: int | None
+    sample_rate_hz: int | None
+    bit_depth: int | None
+    is_lossy: bool
+    source_codec: str | None
+    bitrate_kbps: int | None
+    bitrate_mode: str | None
+
+
+def track_dict(track: TrackPayload) -> dict:
     return {
         "id": track.id,
         "path": track.rel_path if not track.is_missing else None,
