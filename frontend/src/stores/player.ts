@@ -24,6 +24,7 @@ import {
   type PlayIntent,
 } from "@/playback/playIntent";
 import { prepareTracks } from "@/playback/prepare";
+import { needsCompanionStop } from "@/playback/teardown";
 import { showToast } from "@/stores/ui";
 import {
   consumeMissingTechToast,
@@ -204,6 +205,21 @@ function revokeLocalPlayUrl() {
   }
 }
 
+function stopSink(sink: PlaybackSink) {
+  try {
+    sink.stop();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Leave on-demand media: both sinks + revoke the local blob. */
+function teardownOnDemandMedia() {
+  stopSink(htmlSink);
+  stopSink(companionSink);
+  revokeLocalPlayUrl();
+}
+
 function selectSink(kind: "htmlAudio" | "companion") {
   const next = kind === "companion" ? companionSink : htmlSink;
   if (next === activeSink) return;
@@ -344,16 +360,8 @@ function wireSinkHandlers() {
       code?: string | null,
       details?: SinkErrorDetails | null,
     ) => {
+      if (player.playSource === "none") return;
       if (code === "exclusive_needs_device") {
-        if (player.playSource === "none") {
-          if (pl.index < 0) {
-            showToast(
-              message || PLAY_BLOCK_MESSAGES.exclusive_needs_device
-            );
-            openSettings();
-          }
-          return;
-        }
         hardStopCompanion(
           message || PLAY_BLOCK_MESSAGES.exclusive_needs_device,
           "exclusive_needs_device",
@@ -361,7 +369,6 @@ function wireSinkHandlers() {
         );
         return;
       }
-      if (player.playSource === "none") return;
       if (activeSink.kind === "companion" || isExclusiveEnabled()) {
         hardStopCompanion(message, "exclusive_failed");
         return;
@@ -397,19 +404,7 @@ export function stopPlayback() {
   invalidateLoads();
   discardListen();
   clearPlaySourceState();
-  try {
-    activeSink.stop();
-  } catch {
-    /* ignore */
-  }
-  if (activeSink !== htmlSink) {
-    try {
-      htmlSink.stop();
-    } catch {
-      /* ignore */
-    }
-  }
-  revokeLocalPlayUrl();
+  teardownOnDemandMedia();
   setPlayNotice(null);
   nearEndPrepareSent = false;
   pl.index = -1;
@@ -517,6 +512,10 @@ async function loadIntent(
   intent: PlayIntent,
 ) {
   applyIntent(intent);
+  if (needsCompanionStop(intent, activeSink.kind)) {
+    stopSink(companionSink);
+    revokeLocalPlayUrl();
+  }
   if (intent.source === "unavailable") {
     const title = track?.title || "Track";
     const exclusive = intent.block.startsWith("exclusive");
@@ -560,6 +559,10 @@ async function loadIntent(
     const retry = await intentForTrack(track, gen, { localBroken: true });
     if (!retry || !still(gen)) return;
     applyIntent(retry);
+    if (needsCompanionStop(retry, activeSink.kind)) {
+      stopSink(companionSink);
+      revokeLocalPlayUrl();
+    }
     if (retry.source === "unavailable") {
       const title = track?.title || "Track";
       setPlayNotice(retry.message ? `${title}: ${retry.message}` : retry.message);
@@ -757,18 +760,7 @@ export function initAudioListeners() {
   activeSink.setVolume(player.volume);
   bindOnDemandControl({
     bumpLoadGeneration: invalidateLoads,
-    stopSinks: () => {
-      try {
-        htmlSink.stop();
-      } catch {
-        /* ignore */
-      }
-      try {
-        companionSink.stop();
-      } catch {
-        /* ignore */
-      }
-    },
+    stopSinks: teardownOnDemandMedia,
   });
   installOnDemandMediaSession({
     play: () => {
