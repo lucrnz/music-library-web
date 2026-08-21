@@ -40,8 +40,6 @@ vi.mock("@/downloads/catalog", () => ({
 }));
 vi.mock("@/api", () => ({
   apiGet: vi.fn(),
-  requestPrepare: vi.fn(),
-  preparedKeys: () => [],
 }));
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
 

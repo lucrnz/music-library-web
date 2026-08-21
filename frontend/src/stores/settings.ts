@@ -3,8 +3,8 @@
  * when a download exists.
  */
 import { reactive } from "vue";
-import { apiGet, preparedKeys } from "@/api";
-import { prepareTracks } from "@/playback/prepare";
+import { apiGet } from "@/api";
+import { preparedKeys, prepareTracks } from "@/playback/prepare";
 import { reportFailure, reportSuccess } from "@/connectivity";
 import { emit } from "@/diag/log";
 import {

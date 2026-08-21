@@ -7,13 +7,16 @@ vi.mock("@/api", () => ({
   apiDelete: vi.fn(),
   fetchPlaylistTracks: vi.fn(),
   fetchTracksMeta: vi.fn(),
-  requestPrepare: vi.fn(),
+}));
+vi.mock("@/playback/prepare", () => ({
+  prepareTracks: vi.fn(),
   preparedKeys: new Set<string>(),
   requestForget: vi.fn(),
+  requestPrepare: vi.fn(),
 }));
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
 
-import { requestForget } from "@/api";
+import { requestForget } from "@/playback/prepare";
 import {
   clearPlaylist,
   computeNextIndex,

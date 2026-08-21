@@ -340,59 +340,6 @@ export async function fetchAlbum(albumId: string): Promise<Album> {
   );
 }
 
-/** Keys already prepared: "id|codec" */
-export const preparedKeys = new Set<string>();
-
-const FORGET_CHUNK = 1000;
-
-/** POST /api/transcode/forget — fire-and-forget discarded queue ids. */
-export function requestForget(ids: string[]): void {
-  const unique = [...new Set(ids.filter((id) => !!id))];
-  if (!unique.length) return;
-  for (const id of unique) {
-    const prefix = `${id}|`;
-    for (const key of [...preparedKeys]) {
-      if (key.startsWith(prefix)) preparedKeys.delete(key);
-    }
-  }
-  for (let i = 0; i < unique.length; i += FORGET_CHUNK) {
-    const chunk = unique.slice(i, i + FORGET_CHUNK);
-    void apiPost("/api/transcode/forget", { ids: chunk }).catch(() => {});
-  }
-}
-
-/**
- * Prewarm by track ids (or track objects with .id).
- * urgent: near-end / play-priority prepare. Always POSTs (even if already
- * in preparedKeys) so a pending prewarm job can be promoted server-side.
- */
-export function requestPrepare(
-  tracksOrIds: Array<string | { id?: string }> | null | undefined,
-  codec: string,
-  { replace = false, urgent = false }: { replace?: boolean; urgent?: boolean } = {},
-): void {
-  const ids: string[] = [];
-  for (const item of tracksOrIds || []) {
-    if (typeof item === "string") ids.push(item);
-    else if (item?.id) ids.push(item.id);
-  }
-  let use: string[];
-  if (urgent) {
-    use = ids;
-  } else {
-    const fresh = ids.filter((id) => !preparedKeys.has(`${id}|${codec}`));
-    if (!fresh.length && !replace) return;
-    use = replace ? ids : fresh;
-  }
-  if (!use.length) return;
-  use.forEach((id) => preparedKeys.add(`${id}|${codec}`));
-  void apiFetch("/api/transcode/prepare", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids: use, codec, replace, urgent: !!urgent }),
-  }).catch(() => {});
-}
-
 export { fromApiAlbum, mapAlbums } from "@/models/album";
 export {
   fromApiTrack,

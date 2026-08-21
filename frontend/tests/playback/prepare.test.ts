@@ -1,16 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/api", () => ({
-  requestPrepare: vi.fn(),
-}));
 vi.mock("@/stores/exclusiveAudio", () => ({
   isExclusiveEnabled: vi.fn(() => false),
   getExclusiveProfileTag: vi.fn(() => null),
 }));
 
-import { requestPrepare } from "@/api";
 import { catalogIndex } from "@/downloads/catalog";
-import { prepareTracks, tracksToPrepare } from "@/playback/prepare";
+import {
+  preparedKeys,
+  prepareTracks,
+  tracksToPrepare,
+} from "@/playback/prepare";
 import {
   getExclusiveProfileTag,
   isExclusiveEnabled,
@@ -45,9 +45,28 @@ function track(id: string, extra: Partial<Track> = {}): Track {
   };
 }
 
+function prepareBodies() {
+  return vi.mocked(fetch).mock.calls.map(([, init]) =>
+    JSON.parse(String(init?.body)) as {
+      ids: string[];
+      codec: string;
+      replace: boolean;
+      urgent: boolean;
+    },
+  );
+}
+
 describe("prepareTracks", () => {
   beforeEach(() => {
-    vi.mocked(requestPrepare).mockClear();
+    preparedKeys.clear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+        text: async () => "",
+      }),
+    );
     vi.mocked(isExclusiveEnabled).mockReturnValue(false);
     vi.mocked(getExclusiveProfileTag).mockReturnValue(null);
     catalogIndex.byTrack = {};
@@ -59,14 +78,18 @@ describe("prepareTracks", () => {
     settings.streamCodec = "opus_192_48000";
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("exclusive groups by tag and does not pass the browser codec", () => {
     vi.mocked(isExclusiveEnabled).mockReturnValue(true);
     vi.mocked(getExclusiveProfileTag).mockImplementation((t) =>
       t?.id === "a" ? "flac_16_44100" : "flac_24_96000",
     );
     prepareTracks([track("a"), track("b")]);
-    expect(requestPrepare).toHaveBeenCalledTimes(2);
-    const tags = vi.mocked(requestPrepare).mock.calls.map((c) => c[1]);
+    const tags = prepareBodies().map((b) => b.codec);
+    expect(tags).toHaveLength(2);
     expect(tags).toContain("flac_16_44100");
     expect(tags).toContain("flac_24_96000");
     expect(tags).not.toContain("opus_192_48000");
@@ -82,10 +105,9 @@ describe("prepareTracks", () => {
     );
     expect(need.map((t) => t.id)).toEqual(["b"]);
     prepareTracks([track("a"), track("b")]);
-    expect(requestPrepare).toHaveBeenCalledOnce();
-    expect(vi.mocked(requestPrepare).mock.calls[0][0]).toEqual([
-      expect.objectContaining({ id: "b" }),
-    ]);
-    expect(vi.mocked(requestPrepare).mock.calls[0][1]).toBe("opus_192_48000");
+    const bodies = prepareBodies();
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].ids).toEqual(["b"]);
+    expect(bodies[0].codec).toBe("opus_192_48000");
   });
 });

@@ -10,11 +10,9 @@ import {
   apiDelete,
   fetchPlaylistTracks,
   fetchTracksMeta,
-  preparedKeys,
-  requestForget,
 } from "@/api";
 import { coerceTrack, isTrack, mapTracks, type Track } from "@/models/track";
-import { prepareTracks } from "@/playback/prepare";
+import { preparedKeys, prepareTracks, requestForget } from "@/playback/prepare";
 
 const STORAGE_KEY = "musicweb.playlist.v1";
 

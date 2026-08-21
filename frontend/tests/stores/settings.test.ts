@@ -2,9 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/api", () => ({
   apiGet: vi.fn(),
-  requestPrepare: vi.fn(),
-  preparedKeys: { clear: vi.fn() },
+  apiFetch: vi.fn(),
+  apiPost: vi.fn(),
 }));
+vi.mock("@/playback/prepare", async () => {
+  const actual = await vi.importActual<typeof import("@/playback/prepare")>(
+    "@/playback/prepare",
+  );
+  return {
+    ...actual,
+    prepareTracks: vi.fn(),
+    preparedKeys: { clear: vi.fn() },
+  };
+});
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
 vi.mock("@/connectivity", () => ({
   reportFailure: vi.fn(),

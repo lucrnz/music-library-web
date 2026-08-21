@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { preparedKeys, requestForget } from "@/api";
+import { preparedKeys, requestForget } from "@/playback/prepare";
 
 describe("requestForget", () => {
   beforeEach(() => {
