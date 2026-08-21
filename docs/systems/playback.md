@@ -41,6 +41,8 @@ The reactive `player` record lives in `playerState.js`. Cover / Media Session me
 
 Household radio is **not** stream-vs-download resolve. The radio element loads `/api/stream` for the current official id and instructed-seeks to the station clock. Display clocks: not tuned / tuning follow the official snapshot; tuned follows `audio.currentTime` (re-seek if drift > 2s). Radio now-playing reuses `NowPlayingView` (`setRangeFill`, injected `PlaybackStatusLine`) — not a second badge. On `/radio` the codec line mounts only while tuned; the status wrap stays reserved. After Tune out the stopped radio face stays on the off-radio mini or compact bar. A library/queue play calls `exitToQueue()` and takes the player. See `docs/systems/radio.md`.
 
+The **expanded** now-playing cover (mobile sheet, desktop panel) can 3D-flip to the album-artist photo. Eligible when `GET /api/artists/{id}` reports `has_image` or `has_preferred_image` and `canReachServer()` is true; otherwise the cover is not a toggle. The peek resets on track change, collapse, or unmount. The lyrics overlay blocks the flip and does not change the face. An unreachable server disables the feature until the server is reachable again. Mini and compact-bar covers stay open-targets (expand now-playing); they do not flip. Helper: `frontend/src/components/player/coverFlip.ts`.
+
 ## Resume position
 
 The current track’s last paused (or page-hidden) time is one `{ trackId, seconds }` slot in `musicweb.playbackPosition.v1`, not the playlist blob.
