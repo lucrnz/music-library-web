@@ -26,6 +26,7 @@ export type { ProfileMeta };
 const KNOWN_BITRATE_MODES = new Set(["cbr", "vbr", "abr"]);
 
 export interface PlayStatusState {
+  session: "none" | "queue" | "radio";
   playSource: PlaySourceState;
   playProfileId?: string | null;
   playBlockReason?: PlayBlockReason | string | null;
@@ -111,14 +112,14 @@ export function sourceIconName(playSource: PlaySourceState): string | null {
 
 /**
  * Primary status-line face text (without icon).
- * When exclusive is enabled, exclusive face always wins (never Streaming·codec).
+ * Exclusive face wins only for on-demand session (never radio).
  */
 export function formatPrimaryStatus(
   state: PlayStatusState,
   catalog: ProfileMeta[] = [],
   exclusiveSnap: ExclusiveFaceSnapshot | null = null,
 ): PlaybackStatusFace {
-  if (exclusiveSnap?.enabled) {
+  if (state.session !== "radio" && exclusiveSnap?.enabled) {
     const face = formatExclusiveFace(exclusiveSnap);
     if (face) {
       return {
@@ -180,7 +181,7 @@ export function buildPlaybackDetailsRows(
 ): PlaybackDetailRow[] {
   const exclusiveSnap = opts.exclusiveSnap || null;
   const exclusiveFormats = opts.exclusiveFormats || [];
-  const exclusiveOn = !!exclusiveSnap?.enabled;
+  const exclusiveOn = state.session !== "radio" && !!exclusiveSnap?.enabled;
 
   const playSource = state?.playSource || "none";
 

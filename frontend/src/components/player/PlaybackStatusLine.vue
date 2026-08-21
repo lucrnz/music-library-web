@@ -15,6 +15,7 @@ import { exclusiveAudio } from "@/stores/exclusiveAudio";
 import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
 import { acquireModalLock, releaseModalLock } from "@/stores/modalLock";
 import { settings } from "@/stores/settings";
+import { useDesktopViewport } from "@/layout";
 import Icon from "@/components/icons/Icon.vue";
 import PlaybackDetailsBody from "@/components/player/PlaybackDetailsBody.vue";
 import type { PlaybackDetailRow } from "@/components/player/PlaybackDetailsBody.vue";
@@ -24,7 +25,6 @@ const props = defineProps<{
   exclusiveSnap: ExclusiveFaceSnapshot | null;
 }>();
 
-const DESKTOP_BREAKPOINT = "(min-width: 900px)";
 const DETAILS_MODAL_LOCK = "playback-details";
 
 function isCoarsePointer() {
@@ -41,20 +41,12 @@ const popoverEl = ref<HTMLElement | null>(null);
 
 /** Single open flag — chrome is modal vs popover by breakpoint. */
 const detailsOpen = ref(false);
-const desktopViewport = ref(
-  typeof window !== "undefined" &&
-    window.matchMedia(DESKTOP_BREAKPOINT).matches,
-);
+const desktopViewport = useDesktopViewport();
 
 let hoverInside = false;
 let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null;
 /** True while we hold the body scroll lock for the mobile modal. */
 let heldModalLock = false;
-
-let desktopMql: MediaQueryList | null = null;
-function onDesktopMqlChange(e: MediaQueryListEvent) {
-  desktopViewport.value = e.matches;
-}
 
 const primaryStatus = computed(() =>
   formatPrimaryStatus(
@@ -173,15 +165,11 @@ watch(detailsOpen, (open) => {
 });
 
 onMounted(() => {
-  desktopMql = window.matchMedia(DESKTOP_BREAKPOINT);
-  desktopViewport.value = desktopMql.matches;
-  desktopMql.addEventListener("change", onDesktopMqlChange);
   document.addEventListener("pointerdown", onDocPointer, true);
   document.addEventListener("keydown", onDocKey);
 });
 
 onUnmounted(() => {
-  desktopMql?.removeEventListener("change", onDesktopMqlChange);
   document.removeEventListener("pointerdown", onDocPointer, true);
   document.removeEventListener("keydown", onDocKey);
   if (heldModalLock) releaseModalLock(DETAILS_MODAL_LOCK);

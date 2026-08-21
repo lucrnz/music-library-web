@@ -26,7 +26,6 @@ import {
   heardPosition,
   interpolatedPosition,
   radio,
-  RADIO_EXCLUSIVE_SNAP,
   radioChromeActive,
   radioPlayState,
   radioSubtitle,
@@ -124,10 +123,10 @@ describe("radio store", () => {
     applySnapshot(currentPayload);
     radio.tunerProfile = "opus_192_48000";
     const state = radioPlayState();
+    expect(state.session).toBe("radio");
     expect(state.playSource).toBe("streaming");
     expect(state.playProfileId).toBe("opus_192_48000");
     expect(state.track?.isLossy).toBe(false);
-    expect(RADIO_EXCLUSIVE_SNAP.enabled).toBe(false);
     applySnapshot({ ...currentPayload, is_lossy: true });
     expect(radioPlayState().playProfileId).toBeNull();
   });

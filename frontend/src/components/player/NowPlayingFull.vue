@@ -64,6 +64,7 @@ const playState = computed((): PlayStatusState => {
   void pl.index;
   void pl.tracks;
   return {
+    session: "queue",
     playSource: player.playSource as PlayStatusState["playSource"],
     playProfileId: player.playProfileId,
     playBlockReason: player.playBlockReason,

@@ -8,7 +8,6 @@ import { player } from "@/stores/playerState";
 import {
   heardPosition,
   radio,
-  RADIO_EXCLUSIVE_SNAP,
   radioPlayState,
   radioSubtitle,
   tuneIn,
@@ -139,7 +138,7 @@ function openRadio() {
     :sheet-dismissible="false"
     :open-label="compact ? 'Open radio' : 'Open now playing'"
     :play-state="playState"
-    :exclusive-snap="RADIO_EXCLUSIVE_SNAP"
+    :exclusive-snap="null"
     @volume="onVolume"
     @toggle-lyrics="lyricsOpen = !lyricsOpen"
     @cover-or-meta-open="openRadio"

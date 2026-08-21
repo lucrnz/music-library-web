@@ -25,6 +25,7 @@ function lossyState(
   trackOverrides: Partial<NonNullable<PlayStatusState["track"]>> = {},
 ): PlayStatusState {
   return {
+    session: "queue",
     playSource: "streaming",
     track: lossyTrack(trackOverrides),
     ...overrides,
@@ -84,6 +85,7 @@ describe("buildPlaybackDetailsRows lossy", () => {
 
   it("does not add lossy encoding rows for lossless profile playback", () => {
     const rows = buildPlaybackDetailsRows({
+      session: "queue",
       playSource: "streaming",
       playProfileId: "flac_16_44100",
       track: {
@@ -132,5 +134,28 @@ describe("formatPrimaryStatus", () => {
   it("keeps the compact lossy face without encoding or sample rate", () => {
     const face = formatPrimaryStatus(lossyState());
     expect(face.text).toBe("Streaming · MP3 320k");
+  });
+
+  it("radio session ignores an enabled exclusive snap", () => {
+    const exclusive: ExclusiveFaceSnapshot = {
+      enabled: true,
+      connection: "connected",
+      role: "controller",
+      preferenceId: "dev",
+      liveId: "dev",
+    };
+    const face = formatPrimaryStatus(
+      lossyState({ session: "radio" }),
+      [],
+      exclusive,
+    );
+    expect(face.text).toBe("Streaming · MP3 320k");
+    const rows = buildPlaybackDetailsRows(
+      lossyState({ session: "radio" }),
+      [],
+      { exclusiveSnap: exclusive },
+    );
+    expect(value(rows, "output")).toBeUndefined();
+    expect(value(rows, "source")).toBe("Streaming");
   });
 });
