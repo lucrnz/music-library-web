@@ -264,7 +264,6 @@ export async function refreshQueue(opts: { includeStorage?: boolean } = {}) {
  * Safe to call when already booted (idempotent open/bind guards).
  */
 async function bootDownloadsRuntime() {
-  await import("./worker.js");
   await requireOpfs();
   await openDownloadsDb();
   downloads.persistent = await requestPersistentStorage();

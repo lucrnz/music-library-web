@@ -9,7 +9,7 @@ import {
   isNetworkClassError,
   reportFailure,
 } from "@/connectivity";
-import { codecExt, codecMediaType } from "@/downloads/catalog";
+import { codecExt, codecMediaType } from "@/downloads/media";
 import { deleteOne, getOne, putOne } from "@/downloads/db";
 import {
   DownloadWriteAbortError,
@@ -20,7 +20,7 @@ import {
   removePartial,
   writeResponseToFile,
 } from "@/downloads/opfs";
-import { commitTrackDownload } from "@/downloads/catalog";
+import { finalizeTrackDownload } from "@/downloads/catalog";
 import {
   activeIds,
   clearLiveProgress,
@@ -161,13 +161,19 @@ const outcomeHandlers: Record<JobOutcomeKind, OutcomeHandler> = {
       return;
     }
     if (ctx.track && ctx.codec != null) {
-      await commitTrackDownload(ctx.track, ctx.codec, {
-        bytes: ctx.bytes || 0,
-        mediaType: ctx.mediaType,
-        ext: ctx.ext,
-      });
+      await finalizeTrackDownload(
+        ctx.track,
+        ctx.codec,
+        {
+          bytes: ctx.bytes || 0,
+          mediaType: ctx.mediaType,
+          ext: ctx.ext,
+        },
+        id,
+      );
+    } else if (current) {
+      await deleteOne("queue", id);
     }
-    if (current) await deleteOne("queue", id);
     await finishQueueRow(id);
   },
 
@@ -254,7 +260,17 @@ async function applyJobOutcome(
     kind = "canceled";
   }
   const handler = outcomeHandlers[kind] || outcomeHandlers.paused;
-  await handler(id, outcome, ctx, current);
+  try {
+    await handler(id, outcome, ctx, current);
+  } catch (err: unknown) {
+    const row = await getOne<QueueRecord>("queue", id).catch(() => undefined);
+    if (row && row.state === QueueState.ACTIVE) {
+      const message = err instanceof Error ? err.message : String(err ?? "");
+      markFailed(row, message || "Download failed");
+      await putOne("queue", row);
+    }
+    await finishQueueRow(id);
+  }
 }
 
 /**

@@ -1,10 +1,10 @@
 /**
- * IndexedDB for download metadata (tracks, albums, artists, queue).
- * Binary audio/art lives in OPFS (or blobs store as fallback).
+ * IndexedDB for download metadata (tracks, albums, artists, queue, lyrics).
+ * Binary audio and art live in OPFS.
  */
 
 const DB_NAME = "musicweb-downloads";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbOpen: Promise<IDBDatabase> | null = null;
 
@@ -46,8 +46,8 @@ export function openDownloadsDb(): Promise<IDBDatabase> {
         queue.createIndex("trackCodec", "trackCodec", { unique: true });
         queue.createIndex("state", "state", { unique: false });
       }
-      if (!db.objectStoreNames.contains("blobs")) {
-        db.createObjectStore("blobs", { keyPath: "key" });
+      if (db.objectStoreNames.contains("blobs")) {
+        db.deleteObjectStore("blobs");
       }
       if (!db.objectStoreNames.contains("meta")) {
         db.createObjectStore("meta", { keyPath: "key" });
@@ -161,7 +161,6 @@ export async function wipeDownloadsDb() {
     "albums",
     "artists",
     "queue",
-    "blobs",
     "meta",
     "lyrics",
   ]) {

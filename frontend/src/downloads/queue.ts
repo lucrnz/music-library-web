@@ -6,7 +6,7 @@
 import { canReachServer, isHardOffline } from "@/connectivity";
 import { deliveryCodec } from "@/lossyKind";
 import { normalizeTrack, type Track } from "@/models/track";
-import { codecExt } from "@/downloads/catalog";
+import { codecExt } from "@/downloads/media";
 import {
   clearStore,
   deleteOne,

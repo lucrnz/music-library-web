@@ -11,7 +11,7 @@ import {
   requestHealthProbe,
   setHealthContext,
 } from "@/connectivity";
-import { codecExt } from "@/downloads/catalog";
+import { codecExt } from "@/downloads/media";
 import { getOne, putOne, type MetaRecord } from "@/downloads/db";
 import {
   audioDirParts,

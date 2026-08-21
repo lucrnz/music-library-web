@@ -1,10 +1,10 @@
 /**
- * Offline download catalog: codec helpers, projection/status, art, IDB records.
+ * Offline download catalog: projection/status, art, IDB records.
  */
 
 import { reactive } from "vue";
 import { artistImageUrl, type ArtistListItem } from "@/api";
-import { SOURCE_TAG, sourceFileMedia } from "@/lossyKind";
+import { SOURCE_TAG } from "@/lossyKind";
 import {
   artistIdsOf,
   normalizeTrack,
@@ -23,6 +23,7 @@ import {
   withStores,
 } from "@/downloads/db";
 import { deleteLyricsRecord } from "@/downloads/lyricsStore";
+import { codecExt, codecMediaType } from "@/downloads/media";
 import {
   albumCoverDirParts,
   albumCoverFileName,
@@ -36,25 +37,6 @@ import {
   writeFromResponse,
 } from "@/downloads/opfs";
 import { downloads } from "@/downloads/state";
-
-// ---------------------------------------------------------------------------
-// Codec helpers
-// ---------------------------------------------------------------------------
-
-export function codecExt(codec: string, sourceCodec?: string | null) {
-  if (codec === SOURCE_TAG) return sourceFileMedia(sourceCodec).ext;
-  if (typeof codec === "string" && codec.startsWith("flac")) return "flac";
-  return "opus";
-}
-
-export function codecMediaType(codec: string, sourceCodec?: string | null) {
-  if (codec === SOURCE_TAG) return sourceFileMedia(sourceCodec).mediaType;
-  if (typeof codec === "string" && codec.startsWith("flac")) return "audio/flac";
-  return "audio/ogg";
-}
-
-export { audioDirParts, audioFileName } from "@/downloads/opfs";
-export { normalizeTrack } from "@/models/track";
 
 // ---------------------------------------------------------------------------
 // Catalog projection + UI status join
@@ -391,6 +373,28 @@ export async function ensureArtistArtFile(artistId: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Catalog write lock + pin math
+// ---------------------------------------------------------------------------
+
+let catalogTail: Promise<void> = Promise.resolve();
+
+export function withCatalogLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = catalogTail.then(fn, fn);
+  catalogTail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+function pinArtistIdsOf(n: Track): string[] {
+  const aIds = artistIdsOf(n);
+  if (aIds.length) return aIds;
+  const pArtistId = primaryArtistIdOf(n);
+  return pArtistId === "_unknown" ? ["_unknown"] : aIds;
+}
+
+// ---------------------------------------------------------------------------
 // Track / album / artist IDB records
 // ---------------------------------------------------------------------------
 
@@ -413,25 +417,6 @@ export async function listArtistRecords(): Promise<CatalogArtistRecord[]> {
 }
 
 /**
- * Catalog status vs preferred download codec (async wrapper over record fetch).
- * @param {string} trackId
- * @param {string} [preferredCodec]
- * @returns {Promise<'ready'|'other'|'none'|'failed'>}
- */
-export async function downloadStatusFor(
-  trackId: string,
-  preferredCodec?: string,
-): Promise<"ready" | "other" | "none" | "failed"> {
-  const rec = await getTrackRecord(trackId);
-  const st = catalogUiStatus(
-    rec,
-    preferredCodec != null ? preferredCodec : rec?.codec
-  );
-  if (st == null) return "none";
-  return st;
-}
-
-/**
  * Open blob URL for a playable track record. Caller owns the URL and must revoke it.
  * @param {{ trackId: string, codec: string, ext?: string, status?: string }} rec
  * @returns {Promise<string|null>}
@@ -450,17 +435,6 @@ export async function getLocalAudioUrlForRecord(
   return URL.createObjectURL(blob);
 }
 
-/**
- * Caller owns the URL and must revoke it.
- * @param {string} trackId
- * @param {string} codec
- */
-export async function getLocalAudioUrl(trackId: string, codec: string) {
-  const rec = await getTrackRecord(trackId);
-  if (!rec || rec.codec !== codec || rec.status === "broken") return null;
-  return getLocalAudioUrlForRecord(rec);
-}
-
 export async function markTrackBroken(trackId: string) {
   const rec = await getTrackRecord(trackId);
   if (!rec) return;
@@ -477,51 +451,13 @@ export async function markTrackOrphan(trackId: string) {
   syncCatalogProjection(trackId, rec);
 }
 
-/**
- * Finalize a successful audio download into the catalog.
- * @param {import("../models/track.js").Track|object} track
- * @param {string} codec
- * @param {{ bytes: number, mediaType?: string, ext?: string }} audioMeta
- */
-export async function commitTrackDownload(
-  track: Track,
+function buildCatalogRecord(
+  n: Track,
   codec: string,
   audioMeta: CatalogTrackAudioMeta,
-) {
-  const n = normalizeTrack(track);
-  const existing = await getTrackRecord(n.id);
-  const pArtistId = primaryArtistIdOf(n);
-  const pArtistName = primaryArtistNameOf(n);
-  const aIds = artistIdsOf(n);
-  const pinArtists = aIds.length
-    ? aIds
-    : pArtistId === "_unknown"
-      ? ["_unknown"]
-      : aIds;
-
-  if (existing && existing.codec && existing.codec !== codec) {
-    const oldName = audioFileName(
-      n.id,
-      existing.codec,
-      existing.ext || codecExt(existing.codec, existing.sourceCodec)
-    );
-    await deleteBinary(audioDirParts(), oldName);
-  }
-
-  const firstPin = !existing;
-  const albumArt = n.albumId
-    ? await ensureAlbumArtFiles(n.albumId)
-    : { hasThumb: false, hasFull: false };
-  const artistArt: Record<string, boolean> = {};
-  for (const aid of pinArtists) {
-    if (aid === "_unknown") {
-      artistArt[aid] = false;
-      continue;
-    }
-    artistArt[aid] = await ensureArtistArtFile(aid);
-  }
-
-  const rec: CatalogTrackRecord = {
+  pinArtists: string[],
+): CatalogTrackRecord {
+  return {
     trackId: n.id,
     codec,
     ext: audioMeta.ext || codecExt(codec, n.sourceCodec),
@@ -534,8 +470,8 @@ export async function commitTrackDownload(
     bytes: audioMeta.bytes || 0,
     albumId: n.albumId,
     artistIds: pinArtists,
-    primaryArtistId: pArtistId,
-    primaryArtistName: pArtistName,
+    primaryArtistId: primaryArtistIdOf(n),
+    primaryArtistName: primaryArtistNameOf(n),
     title: n.title,
     artist: n.artist,
     album: n.album,
@@ -546,8 +482,43 @@ export async function commitTrackDownload(
     downloadedAt: Date.now(),
     status: "ready",
   };
+}
 
-  await withStores(["tracks", "albums", "artists"], "readwrite", async (stores) => {
+/** IDB upsert + optional queue delete. Caller holds the catalog lock. */
+async function persistCatalogTrack(
+  n: Track,
+  codec: string,
+  audioMeta: CatalogTrackAudioMeta,
+  queueId?: number,
+): Promise<CatalogTrackRecord> {
+  const pinArtists = pinArtistIdsOf(n);
+  const rec = buildCatalogRecord(n, codec, audioMeta, pinArtists);
+  const pArtistName = primaryArtistNameOf(n);
+  const storeNames =
+    queueId != null
+      ? ["tracks", "albums", "artists", "queue"]
+      : ["tracks", "albums", "artists"];
+  const replaced: {
+    audio: {
+      codec: string;
+      ext?: string;
+      sourceCodec?: string | null;
+    } | null;
+  } = { audio: null };
+
+  await withStores(storeNames, "readwrite", async (stores) => {
+    const existing = await reqToPromise<CatalogTrackRecord | undefined>(
+      stores.tracks.get(n.id),
+    );
+    if (existing?.codec && existing.codec !== codec) {
+      replaced.audio = {
+        codec: existing.codec,
+        ext: existing.ext,
+        sourceCodec: existing.sourceCodec,
+      };
+    }
+    const firstPin = !existing;
+
     if (n.albumId) {
       const album =
         (await reqToPromise<CatalogAlbumRecord | undefined>(
@@ -562,8 +533,6 @@ export async function commitTrackDownload(
         };
       album.title = n.album || album.title;
       album.artistName = pArtistName || album.artistName;
-      album.hasThumb = album.hasThumb || albumArt.hasThumb;
-      album.hasFull = album.hasFull || albumArt.hasFull;
       if (firstPin) album.refCount = (album.refCount || 0) + 1;
       stores.albums.put(album);
     }
@@ -582,27 +551,96 @@ export async function commitTrackDownload(
         if (aid === n.albumArtistId) artist.name = n.albumArtist || artist.name;
         else if (aid === n.artistId) artist.name = n.artist || artist.name;
         else if (!artist.name) artist.name = pArtistName;
-        if (artistArt[aid]) artist.hasThumb = true;
         artist.refCount = (artist.refCount || 0) + 1;
         stores.artists.put(artist);
-      }
-    } else {
-      for (const aid of pinArtists) {
-        if (aid === "_unknown") continue;
-        const artist = await reqToPromise<CatalogArtistRecord | undefined>(
-          stores.artists.get(aid),
-        );
-        if (artist && artistArt[aid] && !artist.hasThumb) {
-          artist.hasThumb = true;
-          stores.artists.put(artist);
-        }
       }
     }
 
     stores.tracks.put(rec);
+    if (queueId != null) stores.queue.delete(queueId);
   });
 
+  if (replaced.audio) {
+    const name = audioFileName(
+      n.id,
+      replaced.audio.codec,
+      replaced.audio.ext ||
+        codecExt(replaced.audio.codec, replaced.audio.sourceCodec),
+    );
+    try {
+      await deleteBinary(audioDirParts(), name);
+    } catch {
+      /* best-effort unlink of replaced codec */
+    }
+  }
+  return rec;
+}
+
+async function refreshCatalogArt(n: Track) {
+  const pinArtists = pinArtistIdsOf(n);
+  const albumArt = n.albumId
+    ? await ensureAlbumArtFiles(n.albumId)
+    : { hasThumb: false, hasFull: false };
+  const artistArt: Record<string, boolean> = {};
+  for (const aid of pinArtists) {
+    if (aid === "_unknown") {
+      artistArt[aid] = false;
+      continue;
+    }
+    artistArt[aid] = await ensureArtistArtFile(aid);
+  }
+  await withCatalogLock(async () => {
+    await withStores(["albums", "artists"], "readwrite", async (stores) => {
+      if (n.albumId) {
+        const album = await reqToPromise<CatalogAlbumRecord | undefined>(
+          stores.albums.get(n.albumId),
+        );
+        if (album) {
+          album.hasThumb = album.hasThumb || albumArt.hasThumb;
+          album.hasFull = album.hasFull || albumArt.hasFull;
+          stores.albums.put(album);
+        }
+      }
+      for (const aid of pinArtists) {
+        if (aid === "_unknown" || !artistArt[aid]) continue;
+        const artist = await reqToPromise<CatalogArtistRecord | undefined>(
+          stores.artists.get(aid),
+        );
+        if (artist && !artist.hasThumb) {
+          artist.hasThumb = true;
+          stores.artists.put(artist);
+        }
+      }
+    });
+  });
+}
+
+export async function commitTrackDownload(
+  track: Track,
+  codec: string,
+  audioMeta: CatalogTrackAudioMeta,
+) {
+  const n = normalizeTrack(track);
+  const rec = await withCatalogLock(() =>
+    persistCatalogTrack(n, codec, audioMeta),
+  );
   syncCatalogProjection(n.id, rec);
+  await refreshCatalogArt(n);
+  return rec;
+}
+
+export async function finalizeTrackDownload(
+  track: Track,
+  codec: string,
+  audioMeta: CatalogTrackAudioMeta,
+  queueId: number,
+) {
+  const n = normalizeTrack(track);
+  const rec = await withCatalogLock(() =>
+    persistCatalogTrack(n, codec, audioMeta, queueId),
+  );
+  syncCatalogProjection(n.id, rec);
+  await refreshCatalogArt(n);
   return rec;
 }
 
@@ -610,78 +648,93 @@ export async function commitTrackDownload(
  * @param {string} trackId
  */
 export async function deleteTrackDownload(trackId: string) {
-  const rec = await getTrackRecord(trackId);
-  if (!rec || !rec.codec) return;
+  const dropped = await withCatalogLock(async () => {
+    const rec = await getTrackRecord(trackId);
+    if (!rec || !rec.codec) return null;
 
+    const cleanup: {
+      rec: CatalogTrackRecord;
+      albumId: string | null;
+      dropAlbum: boolean;
+      dropArtists: string[];
+      albumHadThumb: boolean;
+      albumHadFull: boolean;
+      artistHadThumb: Record<string, boolean>;
+    } = {
+      rec,
+      albumId: rec.albumId || null,
+      dropAlbum: false,
+      dropArtists: [],
+      albumHadThumb: false,
+      albumHadFull: false,
+      artistHadThumb: {},
+    };
+
+    await withStores(["tracks", "albums", "artists"], "readwrite", async (stores) => {
+      stores.tracks.delete(trackId);
+
+      if (rec.albumId) {
+        const album = await reqToPromise<CatalogAlbumRecord | undefined>(
+          stores.albums.get(rec.albumId),
+        );
+        if (album) {
+          album.refCount = Math.max(0, (album.refCount || 1) - 1);
+          if (album.refCount === 0) {
+            cleanup.dropAlbum = true;
+            cleanup.albumHadThumb = !!album.hasThumb;
+            cleanup.albumHadFull = !!album.hasFull;
+            stores.albums.delete(rec.albumId);
+          } else {
+            stores.albums.put(album);
+          }
+        }
+      }
+
+      const ids = rec.artistIds?.length
+        ? rec.artistIds
+        : rec.primaryArtistId
+          ? [rec.primaryArtistId]
+          : [];
+      for (const aid of ids) {
+        const artist = await reqToPromise<CatalogArtistRecord | undefined>(
+          stores.artists.get(aid),
+        );
+        if (!artist) continue;
+        artist.refCount = Math.max(0, (artist.refCount || 1) - 1);
+        if (artist.refCount === 0) {
+          cleanup.dropArtists.push(aid);
+          cleanup.artistHadThumb[aid] = !!artist.hasThumb;
+          stores.artists.delete(aid);
+        } else {
+          stores.artists.put(artist);
+        }
+      }
+    });
+
+    syncCatalogProjection(trackId, null);
+    return cleanup;
+  });
+
+  if (!dropped) return;
+
+  const rec = dropped.rec;
   const name = audioFileName(
     trackId,
-    rec.codec,
-    rec.ext || codecExt(rec.codec, rec.sourceCodec)
+    rec.codec!,
+    rec.ext || codecExt(rec.codec!, rec.sourceCodec),
   );
-  await deleteBinary(audioDirParts(), name);
+  try {
+    await deleteBinary(audioDirParts(), name);
+  } catch {
+    /* catalog row is already gone */
+  }
   try {
     await deleteLyricsRecord(trackId);
   } catch {
     /* optional store */
   }
 
-  const cleanup: {
-    albumId: string | null;
-    dropAlbum: boolean;
-    dropArtists: string[];
-    albumHadThumb: boolean;
-    albumHadFull: boolean;
-    artistHadThumb: Record<string, boolean>;
-  } = {
-    albumId: rec.albumId || null,
-    dropAlbum: false,
-    dropArtists: [],
-    albumHadThumb: false,
-    albumHadFull: false,
-    artistHadThumb: {},
-  };
-
-  await withStores(["tracks", "albums", "artists"], "readwrite", async (stores) => {
-    stores.tracks.delete(trackId);
-
-    if (rec.albumId) {
-      const album = await reqToPromise<CatalogAlbumRecord | undefined>(
-        stores.albums.get(rec.albumId),
-      );
-      if (album) {
-        album.refCount = Math.max(0, (album.refCount || 1) - 1);
-        if (album.refCount === 0) {
-          cleanup.dropAlbum = true;
-          cleanup.albumHadThumb = !!album.hasThumb;
-          cleanup.albumHadFull = !!album.hasFull;
-          stores.albums.delete(rec.albumId);
-        } else {
-          stores.albums.put(album);
-        }
-      }
-    }
-
-    const ids = rec.artistIds?.length
-      ? rec.artistIds
-      : rec.primaryArtistId
-        ? [rec.primaryArtistId]
-        : [];
-    for (const aid of ids) {
-      const artist = await reqToPromise<CatalogArtistRecord | undefined>(
-        stores.artists.get(aid),
-      );
-      if (!artist) continue;
-      artist.refCount = Math.max(0, (artist.refCount || 1) - 1);
-      if (artist.refCount === 0) {
-        cleanup.dropArtists.push(aid);
-        cleanup.artistHadThumb[aid] = !!artist.hasThumb;
-        stores.artists.delete(aid);
-      } else {
-        stores.artists.put(artist);
-      }
-    }
-  });
-
+  const cleanup = dropped;
   if (cleanup.dropAlbum && cleanup.albumId) {
     if (cleanup.albumHadThumb) {
       revokeArtCached(`cover:${cleanup.albumId}:thumb`);
@@ -707,8 +760,6 @@ export async function deleteTrackDownload(trackId: string) {
       );
     }
   }
-
-  syncCatalogProjection(trackId, null);
 }
 
 export async function deleteAlbumDownloads(albumId: string) {
