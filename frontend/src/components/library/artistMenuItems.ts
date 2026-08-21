@@ -10,7 +10,7 @@ import { downloadTracks } from "@/downloads/ui";
 import { confirmDialog } from "@/stores/dialog";
 import { showToast } from "@/stores/ui";
 import type { ActionItem } from "@/components/menu/actionItem";
-import type { ArtistListItem } from "@/api";
+import type { Artist } from "@/models/artist";
 
 export function downloadAllOutcome(
   remaining: number,
@@ -22,7 +22,7 @@ export function downloadAllOutcome(
 }
 
 /** Online host passes this as downloadAll. Downloads hosts omit it. */
-export async function runArtistDownloadAll(artist: ArtistListItem): Promise<void> {
+export async function runArtistDownloadAll(artist: Artist): Promise<void> {
   const { remaining, playableCount } = await collectArtistDownloadTracks(
     artist.id,
   );
@@ -51,7 +51,7 @@ export function buildArtistMenuItems({
   addAll,
   downloadAll,
 }: {
-  artist: ArtistListItem;
+  artist: Artist;
   includePhoto: boolean;
   addAll: () => void | Promise<void>;
   downloadAll?: () => void | Promise<void>;

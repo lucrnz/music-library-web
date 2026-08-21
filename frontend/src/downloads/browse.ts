@@ -55,7 +55,7 @@ export async function loadDownloadsView(
     }
     if (found.hasThumb) {
       const u = await getLocalCoverUrl(found.albumId, "thumb");
-      if (u) artUrls[`al:${found.albumId}`] = u;
+      if (u) artUrls[`cover:${found.albumId}:thumb`] = u;
     }
     return page(
       {
@@ -90,12 +90,12 @@ export async function loadDownloadsView(
     }
     if (ar.hasThumb) {
       const u = await getLocalArtistImageUrl(ar.artistId, "thumb");
-      if (u) artUrls[`a:${ar.artistId}`] = u;
+      if (u) artUrls[`artist:${ar.artistId}:thumb`] = u;
     }
     for (const al of ar.albums) {
       if (al.hasThumb) {
         const u = await getLocalCoverUrl(al.albumId, "thumb");
-        if (u) artUrls[`al:${al.albumId}`] = u;
+        if (u) artUrls[`cover:${al.albumId}:thumb`] = u;
       }
     }
     return page(
@@ -115,8 +115,12 @@ export async function loadDownloadsView(
         headerArtist: {
           id: ar.artistId,
           name: ar.name,
-          album_count: ar.albums.length,
-          track_count: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
+          sortName: null,
+          albumCount: ar.albums.length,
+          trackCount: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
+          hasImage: false,
+          hasPreferredImage: false,
+          preferredRev: 0,
         },
       },
     );
@@ -125,7 +129,7 @@ export async function loadDownloadsView(
   for (const ar of tree.artists) {
     if (ar.hasThumb) {
       const u = await getLocalArtistImageUrl(ar.artistId, "thumb");
-      if (u) artUrls[`a:${ar.artistId}`] = u;
+      if (u) artUrls[`artist:${ar.artistId}:thumb`] = u;
     }
   }
   if (!tree.artists.length) {
@@ -145,8 +149,12 @@ export async function loadDownloadsView(
       artists: tree.artists.map((ar) => ({
         id: ar.artistId,
         name: ar.name,
-        album_count: ar.albums.length,
-        track_count: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
+        sortName: null,
+        albumCount: ar.albums.length,
+        trackCount: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
+        hasImage: false,
+        hasPreferredImage: false,
+        preferredRev: 0,
       })),
     },
     { artUrls },

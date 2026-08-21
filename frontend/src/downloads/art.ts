@@ -3,7 +3,8 @@
  */
 
 import { reactive } from "vue";
-import { artistImageUrl, type ArtistListItem } from "@/api";
+import { artistImageUrl } from "@/api";
+import type { Artist } from "@/models/artist";
 import { getOne } from "@/downloads/db";
 import {
   albumCoverDirParts,
@@ -54,7 +55,7 @@ async function blobUrlFor(
 /** Overwrite OPFS + publish a new blob URL when this artist is in Downloads. */
 export async function refreshArtistArtFile(
   id: string,
-  artistDict: ArtistListItem,
+  artistDict: Artist,
 ) {
   if (!id || id === "_unknown") return;
   const existing = await getOne<CatalogArtistRecord>("artists", id);

@@ -3,7 +3,7 @@ import type { BrowseSource } from "@/components/library/browseSource";
 import { entityActionsFor } from "@/components/library/entityActions";
 import { onlineBrowse } from "@/components/library/sources/onlineBrowse";
 import { downloadsBrowse } from "@/components/library/sources/downloadsBrowse";
-import type { ArtistListItem } from "@/api";
+import type { Artist } from "@/models/artist";
 import type { LibraryAlbum } from "@/components/library/loaders";
 
 vi.mock("@/router", () => ({ router: { push: vi.fn() } }));
@@ -11,13 +11,15 @@ vi.mock("@/components/library/rows", () => ({
   queueOnly: vi.fn(),
 }));
 
-const artist: ArtistListItem = {
+const artist: Artist = {
   id: "ar1",
   name: "A",
-  album_count: 1,
-  track_count: 2,
-  has_preferred_image: false,
-  preferred_rev: 0,
+  sortName: null,
+  albumCount: 1,
+  trackCount: 2,
+  hasImage: false,
+  hasPreferredImage: false,
+  preferredRev: 0,
 };
 
 const album: LibraryAlbum = {
@@ -30,7 +32,7 @@ function idsFor(
   source: BrowseSource,
   ctx: { downloadsEnabled: boolean; includePhoto: boolean },
   target:
-    | { kind: "artist"; artist: ArtistListItem }
+    | { kind: "artist"; artist: Artist }
     | { kind: "album"; album: LibraryAlbum },
 ) {
   return entityActionsFor(source, ctx)(target).map((i) => i.id);

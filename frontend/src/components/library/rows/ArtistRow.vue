@@ -4,19 +4,19 @@ import { artistImageUrl } from "@/api";
 import { resolveRowCover } from "@/components/library/rowCover";
 import { useDesktopViewport } from "@/layout";
 import Icon from "@/components/icons/Icon.vue";
-import type { ArtistListItem } from "@/api";
+import type { Artist } from "@/models/artist";
 const props = withDefaults(defineProps<{
-  artist: ArtistListItem;
+  artist: Artist;
   coverSrc?: string | null;
   showCounts?: boolean;
   showMenu?: boolean;
   includePhoto?: boolean;
 }>(), { coverSrc: null, showCounts: true, showMenu: false, includePhoto: false });
 const emit = defineEmits<{
-  open: [artist: ArtistListItem];
-  "menu-click": [artist: ArtistListItem, e: MouseEvent];
-  "row-contextmenu": [artist: ArtistListItem, e: MouseEvent];
-  "thumb-drop": [artist: ArtistListItem, file: File];
+  open: [artist: Artist];
+  "menu-click": [artist: Artist, e: MouseEvent];
+  "row-contextmenu": [artist: Artist, e: MouseEvent];
+  "thumb-drop": [artist: Artist, file: File];
 }>();
 const desktop = useDesktopViewport();
 const cover = computed(() =>
@@ -28,9 +28,9 @@ const cover = computed(() =>
     const sub = computed(() => {
       if (!props.showCounts) return "";
       const a = props.artist;
-      const n = a.album_count;
+      const n = a.albumCount;
       const albums = `${n} album${n === 1 ? "" : "s"}`;
-      return `${albums} · ${a.track_count} tracks`;
+      return `${albums} · ${a.trackCount} tracks`;
     });
     function onClick() {
       emit("open", props.artist);

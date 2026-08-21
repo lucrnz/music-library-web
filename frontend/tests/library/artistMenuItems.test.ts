@@ -2,16 +2,18 @@ import { describe, expect, it } from "vitest";
 import { downloadAllOutcome } from "@/components/library/artistMenuItems";
 import { artistArtOverlays, menuHasPreferred } from "@/artistArt/state";
 import { buildArtistMenuItems } from "@/components/library/artistMenuItems";
-import type { ArtistListItem } from "@/api";
+import type { Artist } from "@/models/artist";
 
-function artist(partial: Partial<ArtistListItem> = {}): ArtistListItem {
+function artist(partial: Partial<Artist> = {}): Artist {
   return {
     id: "a1",
     name: "A",
-    album_count: 1,
-    track_count: 2,
-    has_preferred_image: false,
-    preferred_rev: 0,
+    sortName: null,
+    albumCount: 1,
+    trackCount: 2,
+    hasImage: false,
+    hasPreferredImage: false,
+    preferredRev: 0,
     ...partial,
   };
 }
@@ -43,7 +45,7 @@ describe("buildArtistMenuItems", () => {
   it("includes download and use-library when enabled / preferred", () => {
     artistArtOverlays.clear();
     const items = buildArtistMenuItems({
-      artist: artist({ has_preferred_image: true }),
+      artist: artist({ hasPreferredImage: true }),
       includePhoto: true,
       addAll: () => {},
       downloadAll: () => {},
@@ -55,12 +57,12 @@ describe("buildArtistMenuItems", () => {
       "change-photo",
       "use-library",
     ]);
-    expect(menuHasPreferred(artist({ has_preferred_image: true }))).toBe(true);
+    expect(menuHasPreferred(artist({ hasPreferredImage: true }))).toBe(true);
   });
 
   it("drops photo items when includePhoto is false", () => {
     const items = buildArtistMenuItems({
-      artist: artist({ has_preferred_image: true }),
+      artist: artist({ hasPreferredImage: true }),
       includePhoto: false,
       addAll: () => {},
       downloadAll: () => {},

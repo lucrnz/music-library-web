@@ -7,7 +7,7 @@ import {
   resolveCoverFlip,
 } from "@/components/player/coverFlip";
 import { fromApiTrack, type Track } from "@/models/track";
-import type { ArtistListItem } from "@/api";
+import type { Artist } from "@/models/artist";
 
 afterEach(() => {
   clearCoverFlipCache();
@@ -17,12 +17,16 @@ function track(partial: Record<string, unknown> = {}): Track {
   return fromApiTrack({ id: "t1", title: "Song", ...partial });
 }
 
-function artist(partial: Partial<ArtistListItem> = {}): ArtistListItem {
+function artist(partial: Partial<Artist> = {}): Artist {
   return {
     id: "art1",
     name: "Artist",
-    album_count: 1,
-    track_count: 1,
+    sortName: null,
+    albumCount: 1,
+    trackCount: 1,
+    hasImage: false,
+    hasPreferredImage: false,
+    preferredRev: 0,
     ...partial,
   };
 }
@@ -51,10 +55,10 @@ describe("coverFlipArtistId", () => {
 
 describe("artistHasFlipPhoto", () => {
   it("is true for scanned or preferred", () => {
-    expect(artistHasFlipPhoto({ has_image: true })).toBe(true);
-    expect(artistHasFlipPhoto({ has_preferred_image: true })).toBe(true);
+    expect(artistHasFlipPhoto({ hasImage: true })).toBe(true);
+    expect(artistHasFlipPhoto({ hasPreferredImage: true })).toBe(true);
     expect(
-      artistHasFlipPhoto({ has_image: false, has_preferred_image: false }),
+      artistHasFlipPhoto({ hasImage: false, hasPreferredImage: false }),
     ).toBe(false);
   });
 });
@@ -62,7 +66,7 @@ describe("artistHasFlipPhoto", () => {
 describe("flipImageUrl", () => {
   it("uses size=full and preferred_rev", () => {
     const url = flipImageUrl(
-      artist({ id: "a1", preferred_rev: 3, has_preferred_image: true }),
+      artist({ id: "a1", preferredRev: 3, hasPreferredImage: true }),
     );
     expect(url).toContain("artist_id=a1");
     expect(url).toContain("size=full");
@@ -103,7 +107,7 @@ describe("resolveCoverFlip", () => {
 
   it("allows has_image and returns a full image URL", async () => {
     const fetchArtist = vi.fn().mockResolvedValue(
-      artist({ id: "aa", has_image: true }),
+      artist({ id: "aa", hasImage: true }),
     );
     const result = await resolveCoverFlip(track({ album_artist_id: "aa" }), {
       fetchArtist,
@@ -122,9 +126,9 @@ describe("resolveCoverFlip", () => {
     const fetchArtist = vi.fn().mockResolvedValue(
       artist({
         id: "aa",
-        has_image: false,
-        has_preferred_image: true,
-        preferred_rev: 4,
+        hasImage: false,
+        hasPreferredImage: true,
+        preferredRev: 4,
       }),
     );
     const result = await resolveCoverFlip(track({ album_artist_id: "aa" }), {
@@ -139,7 +143,7 @@ describe("resolveCoverFlip", () => {
 
   it("denies when both photo flags are false", async () => {
     const fetchArtist = vi.fn().mockResolvedValue(
-      artist({ has_image: false, has_preferred_image: false }),
+      artist({ hasImage: false, hasPreferredImage: false }),
     );
     const result = await resolveCoverFlip(track({ album_artist_id: "aa" }), {
       fetchArtist,
@@ -152,7 +156,7 @@ describe("resolveCoverFlip", () => {
     const fetchArtist = vi
       .fn()
       .mockRejectedValueOnce(new Error("network"))
-      .mockResolvedValueOnce(artist({ id: "aa", has_image: true }));
+      .mockResolvedValueOnce(artist({ id: "aa", hasImage: true }));
     const t = track({ album_artist_id: "aa" });
     const deps = { fetchArtist, canReachServer: () => true };
     expect(await resolveCoverFlip(t, deps)).toEqual({ ok: false });
@@ -163,7 +167,7 @@ describe("resolveCoverFlip", () => {
 
   it("caches a successful payload (one fetch for two resolves)", async () => {
     const fetchArtist = vi.fn().mockResolvedValue(
-      artist({ id: "aa", has_image: true }),
+      artist({ id: "aa", hasImage: true }),
     );
     const t = track({ album_artist_id: "aa" });
     const deps = { fetchArtist, canReachServer: () => true };
@@ -176,7 +180,7 @@ describe("resolveCoverFlip", () => {
 
   it("denies after a cache hit when the server becomes unreachable", async () => {
     const fetchArtist = vi.fn().mockResolvedValue(
-      artist({ id: "aa", has_image: true }),
+      artist({ id: "aa", hasImage: true }),
     );
     const t = track({ album_artist_id: "aa" });
     expect(

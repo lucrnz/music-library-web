@@ -7,7 +7,7 @@ import {
 import type { CatalogTrackRecord } from "@/models/track";
 
 describe("downloads tree projectors", () => {
-  it("maps artistId to ArtistListItem.id", () => {
+  it("maps artistId to Artist.id", () => {
     const artist = artistFromDl({
       artistId: "ar-1",
       name: "A",
@@ -23,9 +23,9 @@ describe("downloads tree projectors", () => {
     });
     expect(artist.id).toBe("ar-1");
     expect(artist.name).toBe("A");
-    expect(artist.album_count).toBe(1);
-    expect(artist.track_count).toBe(2);
-    expect(artist.has_preferred_image).toBe(false);
+    expect(artist.albumCount).toBe(1);
+    expect(artist.trackCount).toBe(2);
+    expect(artist.hasPreferredImage).toBe(false);
   });
 
   it("maps albumId and parent artist name", () => {

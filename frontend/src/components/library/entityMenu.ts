@@ -1,12 +1,13 @@
 /**
  * Discriminated open target for library / downloads entity menus.
  */
-import type { ArtistListItem, BrowseDir } from "@/api";
+import type { BrowseDir } from "@/api";
+import type { Artist } from "@/models/artist";
 import type { FileRowModel, LibraryAlbum } from "@/components/library/loaders";
 import type { Track } from "@/models/track";
 
 export type OpenMenu =
-  | { kind: "artist"; artist: ArtistListItem }
+  | { kind: "artist"; artist: Artist }
   | { kind: "album"; album: LibraryAlbum }
   | { kind: "track"; track: Track }
   | { kind: "file"; file: FileRowModel }

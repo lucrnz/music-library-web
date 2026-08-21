@@ -3,7 +3,8 @@
  */
 import type { Router } from "vue-router";
 import { coverSrc } from "@/artistArt/state";
-import type { ArtistListItem, BrowseDir } from "@/api";
+import type { BrowseDir } from "@/api";
+import type { Artist } from "@/models/artist";
 import { runArtistDownloadAll } from "@/components/library/artistMenuItems";
 import type { BrowseSource } from "@/components/library/browseSource";
 import {
@@ -18,6 +19,16 @@ import {
   type LibraryAlbum,
   type LibraryPage,
 } from "@/components/library/loaders";
+import { listAlbumRoots, loadAlbumChildren } from "@/components/tree/sources/albumsSource";
+import {
+  listArtistRoots,
+  loadArtistChildren,
+  type TreeNode,
+} from "@/components/tree/sources/artistsSource";
+import {
+  listFolderRoots,
+  loadFolderNodeChildren,
+} from "@/components/tree/sources/foldersSource";
 
 export interface OnlineBrowseLoc {
   mode: string;
@@ -78,6 +89,36 @@ export const onlineBrowse: BrowseSource = {
     return loadLibraryPage(loc);
   },
 
+  async loadRoots(loc) {
+    if (loc.mode === "artists") {
+      return { roots: await listArtistRoots(), artUrls: {} };
+    }
+    if (loc.mode === "albums") {
+      return { roots: await listAlbumRoots(), artUrls: {} };
+    }
+    if (loc.mode === "folders") {
+      return { roots: await listFolderRoots(), artUrls: {} };
+    }
+    return { roots: [], artUrls: {} };
+  },
+
+  loadChildren(node: TreeNode) {
+    if (node.kind === "artist") return loadArtistChildren(node);
+    if (node.kind === "album") return loadAlbumChildren(node);
+    if (node.kind === "dir") return loadFolderNodeChildren(node);
+    return Promise.resolve([] as TreeNode[]);
+  },
+
+  resolveCover(node: TreeNode) {
+    if (node.kind === "artist") {
+      const data = node.data;
+      if (data && typeof data === "object" && "id" in data) {
+        return coverSrc(data as Artist);
+      }
+    }
+    return node.cover || "";
+  },
+
   goBack,
 
   openArtist(router, artist) {
@@ -92,7 +133,7 @@ export const onlineBrowse: BrowseSource = {
     void router.push({ name: "folders", query: { path: dir.path } });
   },
 
-  artistCover(artist: ArtistListItem) {
+  artistCover(artist: Artist) {
     return coverSrc(artist);
   },
 

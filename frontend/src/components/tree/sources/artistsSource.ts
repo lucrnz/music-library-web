@@ -2,12 +2,11 @@
  * Artists tree: artist → album → tracks.
  */
 import {
-  apiGet,
   artistImageUrl,
   coverUrl,
   fetchAlbumTracks,
   fetchArtistAlbums,
-  type ArtistListItem,
+  fetchArtists,
 } from "@/api";
 import { kindForAlbum, kindForTrack } from "@/lossyKind";
 
@@ -50,19 +49,16 @@ export function treeNodePath(node: TreeNode): string {
 }
 
 export async function listArtistRoots(): Promise<TreeNode[]> {
-  const data = await apiGet<{ items?: ArtistListItem[] }>(
-    "/api/artists?limit=500",
-  );
-  const items = data.items || [];
-  return items.map((a: ArtistListItem): TreeNode => {
-    const n = a.album_count;
+  const items = await fetchArtists();
+  return items.map((a): TreeNode => {
+    const n = a.albumCount;
     const albums = `${n} album${n === 1 ? "" : "s"}`;
     return {
       key: `artist:${a.id}`,
       isLeaf: false,
       kind: "artist",
       title: a.name || "Unknown artist",
-      subtitle: `${albums} · ${a.track_count ?? 0} tracks`,
+      subtitle: `${albums} · ${a.trackCount ?? 0} tracks`,
       cover: artistImageUrl(a, "thumb", false),
       data: a,
     };

@@ -4,7 +4,16 @@ import type { OpenMenu } from "@/components/library/entityMenu";
 
 const artist: OpenMenu = {
   kind: "artist",
-  artist: { id: "a1", name: "A", album_count: 1, track_count: 2 },
+  artist: {
+    id: "a1",
+    name: "A",
+    sortName: null,
+    albumCount: 1,
+    trackCount: 2,
+    hasImage: false,
+    hasPreferredImage: false,
+    preferredRev: 0,
+  },
 };
 
 describe("useEntityMenu", () => {

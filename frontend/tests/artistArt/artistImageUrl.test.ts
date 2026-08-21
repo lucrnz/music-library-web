@@ -4,7 +4,7 @@ import { artistImageUrl } from "@/api";
 describe("artistImageUrl", () => {
   it("adds rev when preferred is on", () => {
     const url = artistImageUrl(
-      { id: "a1", preferred_rev: 1, has_preferred_image: true },
+      { id: "a1", preferredRev: 1, hasPreferredImage: true },
       "thumb",
     );
     expect(url).toContain("rev=1");
@@ -13,7 +13,7 @@ describe("artistImageUrl", () => {
 
   it("still busts after revert (flag false, rev nonzero)", () => {
     const url = artistImageUrl(
-      { id: "a1", preferred_rev: 2, has_preferred_image: false },
+      { id: "a1", preferredRev: 2, hasPreferredImage: false },
       "thumb",
     );
     expect(url).toContain("rev=2");
@@ -25,7 +25,7 @@ describe("artistImageUrl", () => {
 
   it("bust still adds t=", () => {
     const url = artistImageUrl(
-      { id: "a1", preferred_rev: 1 },
+      { id: "a1", preferredRev: 1 },
       "thumb",
       true,
     );

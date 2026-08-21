@@ -5,7 +5,6 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { openCropFromFile } from "@/artistArt/pickFile";
-import { coverSrc } from "@/artistArt/state";
 import { submitPreferredCrop } from "@/artistArt/submit";
 import { browseSourceFor } from "@/components/library/browseSource";
 import { type OpenMenu } from "@/components/library/entityMenu";
@@ -16,9 +15,8 @@ import { onlineBrowse } from "@/components/library/sources/onlineBrowse";
 import type { LibraryAlbum } from "@/components/library/loaders";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
 import { isDesktopContextMenu } from "@/components/menu/rowActionMenu";
-import { artUrlCache } from "@/downloads/catalog";
 import { downloads } from "@/downloads/state";
-import type { ArtistListItem } from "@/api";
+import type { Artist } from "@/models/artist";
 import {
   clearLibSelection,
   toggleLibSelection,
@@ -30,23 +28,14 @@ import TrackRow from "@/components/library/rows/TrackRow.vue";
 
 import type { Track } from "@/models/track";
 import { playOrQueueTrack } from "@/components/library/rows";
-import { listAlbumRoots, loadAlbumChildren } from "@/components/tree/sources/albumsSource";
 import {
-  listArtistRoots,
-  loadArtistChildren,
   treeNodePath,
   type TreeNode,
 } from "@/components/tree/sources/artistsSource";
 import {
-  loadDownloadsChildren,
-  loadDownloadsTree,
   resolveDownloadsFocusPath,
   type DownloadsHierarchy,
 } from "@/components/tree/sources/downloadsSource";
-import {
-  listFolderRoots,
-  loadFolderNodeChildren,
-} from "@/components/tree/sources/foldersSource";
 import TreeView from "@/components/tree/TreeView.vue";
 import type { TreeViewExpose } from "@/components/tree/TreeView.vue";
 import {
@@ -62,10 +51,14 @@ const props = defineProps<{
 }>();
 
 const route = useRoute();
-const artistsMode = computed(() => props.mode === "artists");
-const downloadsMode = computed(() => props.mode === "downloads");
 const source = computed(() =>
   browseSourceFor(props.mode, onlineBrowse, downloadsBrowse),
+);
+const includeArtistPhoto = computed(() =>
+  source.value.includeArtistPhoto({
+    mode: props.mode,
+    isSearch: false,
+  }),
 );
 const {
   menuOpen,
@@ -78,32 +71,19 @@ const {
   itemsFor: (target) =>
     entityActionsFor(source.value, {
       downloadsEnabled: downloads.enabled,
-      includePhoto:
-        source.value.includeArtistPhoto({
-          mode: props.mode,
-          isSearch: false,
-        }) && target.kind === "artist",
+      includePhoto: includeArtistPhoto.value && target.kind === "artist",
     })(target),
 });
 
-function artistFromNode(node: TreeNode): ArtistListItem | null {
+function artistFromNode(node: TreeNode): Artist | null {
   if (node.kind !== "artist") return null;
   const data = node.data;
   if (!data || typeof data !== "object" || !("id" in data)) return null;
-  return data as ArtistListItem;
+  return data as Artist;
 }
 
 function resolveCover(node: TreeNode): string {
-  if (props.mode === "artists" && node.kind === "artist") {
-    const artist = artistFromNode(node);
-    return artist ? coverSrc(artist) : node.cover || "";
-  }
-  if (props.mode === "downloads" && node.kind === "artist") {
-    const artist = artistFromNode(node);
-    const id = artist?.id;
-    return (id && artUrlCache.urls[`artist:${id}:thumb`]) || node.cover || "";
-  }
-  return node.cover || "";
+  return source.value.resolveCover(node, artUrls.value);
 }
 
 function targetFromNode(node: TreeNode): OpenMenu | null {
@@ -178,7 +158,7 @@ async function onThumbDrop(node: TreeNode, file: File) {
 
 const treeListeners = computed(() => ({
   "row-contextmenu": onRowContextMenu,
-  ...(artistsMode.value ? { "thumb-drop": onThumbDrop } : {}),
+  ...(includeArtistPhoto.value ? { "thumb-drop": onThumbDrop } : {}),
 }));
 
 watch(
@@ -205,14 +185,10 @@ const emptyMessage = computed(() => {
   return "Nothing here yet";
 });
 
-const showTrackDownload = computed(() => props.mode !== "downloads");
+const showTrackDownload = computed(() => source.value.showTrackDownload);
 
 function loadChildren(node: TreeNode) {
-  if (props.mode === "artists") return loadArtistChildren(node);
-  if (props.mode === "albums") return loadAlbumChildren(node);
-  if (props.mode === "folders") return loadFolderNodeChildren(node);
-  if (props.mode === "downloads") return loadDownloadsChildren(node);
-  return Promise.resolve([] as TreeNode[]);
+  return source.value.loadChildren(node);
 }
 
 function nodeIndex() {
@@ -251,33 +227,25 @@ async function loadRoots() {
   error.value = "";
   clearLibSelection();
   try {
-    let next: TreeNode[] = [];
-    artUrls.value = {};
-    downloadsHierarchy = null;
-    if (props.mode === "artists") {
-      next = await listArtistRoots();
-    } else if (props.mode === "albums") {
-      next = await listAlbumRoots();
-    } else if (props.mode === "folders") {
-      next = await listFolderRoots();
-    } else if (props.mode === "downloads") {
-      if (!downloads.enabled) {
-        next = [];
-      } else {
-        const packed = await loadDownloadsTree();
-        next = packed.roots;
-        artUrls.value = packed.artUrls;
-        downloadsHierarchy = packed.hierarchy;
-        for (const ar of next) {
-          session.value.primeChildren(ar.key, ar.children || []);
-          for (const al of ar.children || []) {
-            session.value.primeChildren(al.key, al.children || []);
-          }
+    const packed = await source.value.loadRoots({
+      mode: props.mode,
+      routeName: route.name,
+      folderPath: "",
+      searchQuery: "",
+      downloadsEnabled: downloads.enabled,
+    });
+    if (seq !== loadSeq) return;
+    artUrls.value = packed.artUrls || {};
+    downloadsHierarchy = packed.hierarchy ?? null;
+    if (packed.hierarchy) {
+      for (const ar of packed.roots) {
+        session.value.primeChildren(ar.key, ar.children || []);
+        for (const al of ar.children || []) {
+          session.value.primeChildren(al.key, al.children || []);
         }
       }
     }
-    if (seq !== loadSeq) return;
-    roots.value = next;
+    roots.value = packed.roots;
     await applyFocusPath();
   } catch (err: unknown) {
     if (seq !== loadSeq) return;
@@ -362,8 +330,8 @@ onMounted(loadRoots);
       :loading="loading"
       :error="error"
       :empty-message="emptyMessage"
-      :resolve-cover="props.mode === 'artists' || props.mode === 'downloads' ? resolveCover : null"
-      :thumb-drop-enabled="artistsMode"
+      :resolve-cover="resolveCover"
+      :thumb-drop-enabled="includeArtistPhoto"
       v-on="treeListeners"
       @activate-leaf="onActivateLeaf"
     >
@@ -388,9 +356,9 @@ onMounted(loadRoots);
       </template>
       <template #leaf="{ node }">
         <TrackRow
-          v-if="node.kind === 'track' && !downloadsMode"
+          v-if="node.kind === 'track' && showTrackDownload"
           :track="node.data as Track"
-          :show-download="showTrackDownload"
+          :show-download="true"
           :show-menu="true"
           @menu-click="(t, e) => onLeafMenuClick({ kind: 'track', track: t }, e)"
         />

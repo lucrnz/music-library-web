@@ -1,7 +1,7 @@
 /**
  * Downloads offline tree: always artist → album → tracks.
  */
-import type { ArtistListItem } from "@/api";
+import type { Artist } from "@/models/artist";
 import type { LibraryAlbum } from "@/components/library/loaders";
 import type { TreeNode } from "@/components/tree/sources/artistsSource";
 import { resolveDownloadsFocusPath } from "@/components/tree/treeNavigation";
@@ -26,14 +26,16 @@ export interface DownloadsTreePacked {
   artUrls: Record<string, string>;
 }
 
-export function artistFromDl(artist: DownloadsHierarchyArtist): ArtistListItem {
+export function artistFromDl(artist: DownloadsHierarchyArtist): Artist {
   return {
     id: artist.artistId,
     name: artist.name,
-    album_count: artist.albums.length,
-    track_count: artist.albums.reduce((n, al) => n + al.tracks.length, 0),
-    has_preferred_image: false,
-    preferred_rev: 0,
+    sortName: null,
+    albumCount: artist.albums.length,
+    trackCount: artist.albums.reduce((n, al) => n + al.tracks.length, 0),
+    hasImage: false,
+    hasPreferredImage: false,
+    preferredRev: 0,
   };
 }
 
@@ -60,12 +62,12 @@ export async function loadDownloadsTree(): Promise<DownloadsTreePacked> {
   for (const ar of hierarchy.artists) {
     if (ar.hasThumb) {
       const u = await getLocalArtistImageUrl(ar.artistId, "thumb");
-      if (u) artUrls[`a:${ar.artistId}`] = u;
+      if (u) artUrls[`artist:${ar.artistId}:thumb`] = u;
     }
     for (const al of ar.albums) {
       if (al.hasThumb) {
         const u = await getLocalCoverUrl(al.albumId, "thumb");
-        if (u) artUrls[`al:${al.albumId}`] = u;
+        if (u) artUrls[`cover:${al.albumId}:thumb`] = u;
       }
     }
   }
@@ -78,7 +80,7 @@ export async function loadDownloadsTree(): Promise<DownloadsTreePacked> {
         kind: "track",
         title: tr.title || "",
         subtitle: "",
-        cover: artUrls[`al:${al.albumId}`] || "",
+        cover: artUrls[`cover:${al.albumId}:thumb`] || "",
         data: trackFromDl(tr),
         downloadMeta: {
           codec: tr.codec,
@@ -95,7 +97,7 @@ export async function loadDownloadsTree(): Promise<DownloadsTreePacked> {
         kind: "album",
         title: al.title || "Unknown album",
         subtitle: `${al.tracks?.length || 0} tracks`,
-        cover: artUrls[`al:${al.albumId}`] || "/static/img/placeholder.svg",
+        cover: artUrls[`cover:${al.albumId}:thumb`] || "/static/img/placeholder.svg",
         data: albumFromDl(al, ar.name),
         children: trackNodes,
         lossyKind: kindForTracks(al.tracks),
@@ -107,7 +109,7 @@ export async function loadDownloadsTree(): Promise<DownloadsTreePacked> {
       kind: "artist",
       title: ar.name || "Unknown artist",
       subtitle: `${ar.albums.length} albums`,
-      cover: artUrls[`a:${ar.artistId}`] || "/static/img/placeholder.svg",
+      cover: artUrls[`artist:${ar.artistId}:thumb`] || "/static/img/placeholder.svg",
       data: artistFromDl(ar),
       children: albumNodes,
     };

@@ -1,9 +1,9 @@
-import type { ArtistListItem } from "@/api";
+import type { Artist } from "@/models/artist";
 import type { Track } from "@/models/track";
 
-export type ListenArtist = ArtistListItem & {
-  play_count: number;
-  last_counted_at: string;
+export type ListenArtist = Artist & {
+  playCount: number;
+  lastCountedAt: string;
 };
 
 export type ListenTrack = Track & {

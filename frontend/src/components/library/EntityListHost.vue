@@ -19,7 +19,8 @@ import type {
   LibraryAlbum,
   LibraryBody,
 } from "@/components/library/loaders";
-import type { ArtistListItem, BrowseDir } from "@/api";
+import type { BrowseDir } from "@/api";
+import type { Artist } from "@/models/artist";
 import type { Track } from "@/models/track";
 
 export interface EntityMenuHandlers<T> {
@@ -28,9 +29,9 @@ export interface EntityMenuHandlers<T> {
 }
 
 export interface EntityActions {
-  artist?: EntityMenuHandlers<ArtistListItem> & {
+  artist?: EntityMenuHandlers<Artist> & {
     includePhoto: boolean;
-    onThumbDrop?: (artist: ArtistListItem, file: File) => void;
+    onThumbDrop?: (artist: Artist, file: File) => void;
   };
   album?: EntityMenuHandlers<LibraryAlbum>;
   track?: EntityMenuHandlers<Track>;
@@ -45,20 +46,20 @@ const props = withDefaults(defineProps<{
   isGrid?: boolean;
   gridHost?: boolean;
   showTrackDownload?: boolean;
-  artistCover?: ((item: ArtistListItem) => string) | null;
+  artistCover?: ((item: Artist) => string) | null;
   albumCover?: ((item: LibraryAlbum) => string) | null;
   trackCover?: ((item: Track) => string) | null;
   isSelected?: ((path: string) => boolean) | null;
   entityActions?: EntityActions | null;
 }>(), { error: "", loading: false, isGrid: false, gridHost: false, showTrackDownload: true, artistCover: null, albumCover: null, trackCover: null, isSelected: null, entityActions: null });
 const emit = defineEmits<{
-  "open-artist": [artist: ArtistListItem];
+  "open-artist": [artist: Artist];
   "open-album": [album: LibraryAlbum];
   "open-folder": [dir: BrowseDir];
   "select-folder": [dir: BrowseDir];
   "select-file": [file: FileRowModel];
 }>();
-function artistSrc(artist: ArtistListItem): string | null {
+function artistSrc(artist: Artist): string | null {
       return props.artistCover ? props.artistCover(artist) : null;
     }
     function albumSrc(album: LibraryAlbum): string | null {
@@ -70,7 +71,7 @@ function artistSrc(artist: ArtistListItem): string | null {
     function selected(path: string) {
       return props.isSelected ? props.isSelected(path) : false;
     }
-    function openArtist(a: ArtistListItem) {
+    function openArtist(a: Artist) {
       emit("open-artist", a);
     }
     function openAlbum(a: LibraryAlbum) {

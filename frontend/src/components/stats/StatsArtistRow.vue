@@ -25,6 +25,6 @@ function onClick() {
     <span class="row-meta">
       <span class="row-title">{{ artist.name }}</span>
     </span>
-    <span class="row-plays">{{ artist.play_count }}</span>
+    <span class="row-plays">{{ artist.playCount }}</span>
   </div>
 </template>

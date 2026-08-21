@@ -3,7 +3,8 @@
  * applyPreferredServerResult only.
  */
 import { reactive } from "vue";
-import { artistImageUrl, type ArtistListItem } from "@/api";
+import { artistImageUrl } from "@/api";
+import type { Artist } from "@/models/artist";
 
 export type OverlayPending = "upload" | "revert";
 
@@ -25,19 +26,19 @@ export function revokePreviewUrl(id: string) {
   }
 }
 
-export function coverSrc(artist: ArtistListItem): string {
+export function coverSrc(artist: Artist): string {
   const overlay = artistArtOverlays.get(artist.id);
   if (overlay?.previewUrl) return overlay.previewUrl;
   return artistImageUrl({
     ...artist,
-    has_preferred_image: overlay?.hasPreferred ?? artist.has_preferred_image,
-    preferred_rev: overlay?.preferredRev ?? artist.preferred_rev,
+    hasPreferredImage: overlay?.hasPreferred ?? artist.hasPreferredImage,
+    preferredRev: overlay?.preferredRev ?? artist.preferredRev,
   });
 }
 
-export function menuHasPreferred(artist: ArtistListItem): boolean {
+export function menuHasPreferred(artist: Artist): boolean {
   const overlay = artistArtOverlays.get(artist.id);
-  if (!overlay) return !!artist.has_preferred_image;
+  if (!overlay) return !!artist.hasPreferredImage;
   if (overlay.pending === "revert") return false;
   return overlay.pending === "upload" || overlay.hasPreferred === true;
 }

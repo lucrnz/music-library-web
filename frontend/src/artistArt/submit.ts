@@ -11,7 +11,7 @@ import {
   PreferredRequestError,
 } from "@/artistArt/upload";
 import { showToast } from "@/stores/ui";
-import type { ArtistListItem } from "@/api";
+import type { Artist } from "@/models/artist";
 
 function statusOf(err: unknown): number | undefined {
   return err instanceof PreferredRequestError ? err.status : undefined;
@@ -24,10 +24,10 @@ function failToast(kind: string, failLabel: string) {
   else showToast("Can't reach server");
 }
 
-function enqueueArgs(artist: ArtistListItem) {
+function enqueueArgs(artist: Artist) {
   const overlay = artistArtOverlays.get(artist.id);
-  const hasPreferred = overlay?.hasPreferred ?? !!artist.has_preferred_image;
-  const preferredRev = overlay?.preferredRev ?? artist.preferred_rev ?? 0;
+  const hasPreferred = overlay?.hasPreferred ?? !!artist.hasPreferredImage;
+  const preferredRev = overlay?.preferredRev ?? artist.preferredRev ?? 0;
   return {
     artistId: artist.id,
     name: artist.name,
@@ -38,7 +38,7 @@ function enqueueArgs(artist: ArtistListItem) {
 }
 
 async function enqueueAndToast(
-  artist: ArtistListItem,
+  artist: Artist,
   action: "upload" | "revert",
   blob?: Blob,
 ) {
@@ -50,7 +50,7 @@ async function enqueueAndToast(
   );
 }
 
-export async function submitPreferredCrop(artist: ArtistListItem, blob: Blob) {
+export async function submitPreferredCrop(artist: Artist, blob: Blob) {
   if (!canReachServer()) {
     await enqueueAndToast(artist, "upload", blob);
     return;
@@ -68,7 +68,7 @@ export async function submitPreferredCrop(artist: ArtistListItem, blob: Blob) {
   }
 }
 
-export async function submitPreferredRevert(artist: ArtistListItem) {
+export async function submitPreferredRevert(artist: Artist) {
   if (!canReachServer()) {
     await enqueueAndToast(artist, "revert");
     return;

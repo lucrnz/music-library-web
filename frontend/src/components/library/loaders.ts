@@ -11,14 +11,15 @@ import {
   fetchAlbumTracks,
   fetchArtist,
   fetchArtistAlbums,
+  fetchArtists,
   fetchSearch,
   fetchTracksMeta,
-  type ArtistListItem,
   type BrowseDir,
   type BrowseResponse,
 } from "@/api";
 import { formatTrackLabel } from "@/util";
 import type { Album } from "@/models/album";
+import type { Artist } from "@/models/artist";
 import type { Track } from "@/models/track";
 
 /** Folder file row: path chrome + optional full Track. */
@@ -48,13 +49,13 @@ export type LibraryAlbum = Pick<Album, "id" | "title" | "artist"> & {
 
 export type LibraryBody =
   | { kind: "folders"; dirs: BrowseDir[]; files: FileRowModel[] }
-  | { kind: "artists"; artists: ArtistListItem[] }
+  | { kind: "artists"; artists: Artist[] }
   | { kind: "albumGrid"; albums: LibraryAlbum[] }
   | { kind: "tracks"; tracks: Track[] }
   | {
       kind: "search";
       sections: {
-        artists: ArtistListItem[];
+        artists: Artist[];
         albums: Album[];
         tracks: Track[];
       };
@@ -64,9 +65,9 @@ export type LibraryBody =
 export interface LibraryPage {
   chrome: LibraryChrome;
   body: LibraryBody;
-  headerArtist?: ArtistListItem | null;
+  headerArtist?: Artist | null;
   headerAlbum?: LibraryAlbum | null;
-  /** Offline browse blob URLs (`a:{id}`, `al:{id}`). Online pages omit this. */
+  /** Offline browse blob URLs (`artist:{id}:thumb`, `cover:{id}:thumb`). */
   artUrls?: Record<string, string>;
 }
 
@@ -163,7 +164,7 @@ export async function loadSearch(q: string): Promise<LibraryPage> {
 
 export async function loadArtistDetail(id: string): Promise<LibraryPage> {
   let title = "Artist";
-  let headerArtist: ArtistListItem | null = null;
+  let headerArtist: Artist | null = null;
   try {
     const artist = await fetchArtist(id);
     title = artist.name || "Artist";
@@ -216,8 +217,7 @@ export async function loadAlbumDetail(id: string): Promise<LibraryPage> {
 
 export async function loadArtistsList(): Promise<LibraryPage> {
   const chrome = { title: "Artists", showBack: false };
-  const data = await apiGet<{ items?: ArtistListItem[] }>("/api/artists?limit=500");
-  const artists = data.items || [];
+  const artists = await fetchArtists();
   if (!artists.length) {
     return page(chrome, {
       kind: "empty",

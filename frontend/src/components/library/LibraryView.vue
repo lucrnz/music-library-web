@@ -12,7 +12,8 @@ import { entityActionsFor } from "@/components/library/entityActions";
 import type { EntityActions } from "@/components/library/EntityListHost.vue";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
 import { useEntityMenu } from "@/components/library/useEntityMenu";
-import type { ArtistListItem, BrowseDir } from "@/api";
+import type { BrowseDir } from "@/api";
+import type { Artist } from "@/models/artist";
 import {
   connectivityBanner,
   connectivityLoadError,
@@ -140,7 +141,7 @@ function isCurrent(seq: number) {
   return seq === renderSeq;
 }
 
-const headerArtist = ref<ArtistListItem | null>(null);
+const headerArtist = ref<Artist | null>(null);
 const headerAlbum = ref<LibraryAlbum | null>(null);
 
 function applyPage(page: LibraryPage) {
@@ -153,6 +154,19 @@ function applyPage(page: LibraryPage) {
   headerArtist.value = page.headerArtist ?? null;
   headerAlbum.value = page.headerAlbum ?? null;
   artUrls.value = page.artUrls || {};
+}
+
+function applyStatsChrome() {
+  title.value = "Stats";
+  showBack.value = false;
+  backArtistId.value = null;
+  body.value = INITIAL_BODY;
+  headerArtist.value = null;
+  headerAlbum.value = null;
+  artUrls.value = {};
+  hasLoadedOnce.value = true;
+  loading.value = false;
+  error.value = "";
 }
 
 function applyTreeChrome() {
@@ -174,19 +188,6 @@ function applyTreeChrome() {
 }
 
 async function load() {
-  if (mode.value === "stats") {
-    title.value = "Stats";
-    showBack.value = false;
-    backArtistId.value = null;
-    body.value = INITIAL_BODY;
-    headerArtist.value = null;
-    headerAlbum.value = null;
-    artUrls.value = {};
-    hasLoadedOnce.value = true;
-    loading.value = false;
-    error.value = "";
-    return;
-  }
   if (showTree.value) {
     applyTreeChrome();
     hasLoadedOnce.value = true;
@@ -241,6 +242,10 @@ const { coldStartTree, watchNavigation } = useBrowseLayout({
     mode.value !== "search" &&
     mode.value !== "stats",
   onNavigate: () => {
+    if (mode.value === "stats") {
+      applyStatsChrome();
+      return;
+    }
     if (route.meta.pane !== "library") {
       if (!hasLoadedOnce.value) load();
       return;
@@ -267,6 +272,10 @@ watchNavigation(
 
 onMounted(() => {
   coldStartTree();
+  if (mode.value === "stats") {
+    applyStatsChrome();
+    return;
+  }
   load();
 });
 
@@ -373,7 +382,7 @@ const {
     })(target),
 });
 
-function artistCover(artist: ArtistListItem) {
+function artistCover(artist: Artist) {
   return source.value.artistCover(artist, artUrls.value);
 }
 
@@ -385,7 +394,7 @@ function trackCover(track: Track) {
   return source.value.trackCover(track, artUrls.value);
 }
 
-async function onArtistThumbDrop(artist: ArtistListItem, file: File) {
+async function onArtistThumbDrop(artist: Artist, file: File) {
   const blob = await openCropFromFile(file);
   if (!blob) return;
   await submitPreferredCrop(artist, blob);

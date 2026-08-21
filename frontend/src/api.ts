@@ -7,20 +7,9 @@
 import { diagRequestHeaders } from "@/diag/log";
 import type { ListenArtist, ListenRankings, ListenTrack } from "@/listens/types";
 import { fromApiAlbum, mapAlbums, type Album } from "@/models/album";
+import { fromApiArtist, mapArtists, type Artist } from "@/models/artist";
 import { fromApiLyrics, type Lyrics } from "@/models/lyrics";
 import { fromApiTrack, mapTracks, type Track } from "@/models/track";
-
-/** Today's GET /api/artists item (snake_case). */
-export interface ArtistListItem {
-  id: string;
-  name: string;
-  sort_name?: string | null;
-  album_count: number;
-  track_count: number;
-  has_image?: boolean;
-  has_preferred_image?: boolean;
-  preferred_rev?: number;
-}
 
 /** Today's GET /api/browse directory row. */
 export interface BrowseDir {
@@ -168,7 +157,7 @@ export function coverUrl(
 export function artistImageUrl(
   artistOrId:
     | string
-    | { id?: string; preferred_rev?: number; has_preferred_image?: boolean }
+    | { id?: string; preferredRev?: number; hasPreferredImage?: boolean }
     | null
     | undefined,
   size: "full" | "thumb" = "thumb",
@@ -184,9 +173,9 @@ export function artistImageUrl(
   const rev =
     typeof artistOrId === "object" &&
     artistOrId &&
-    typeof artistOrId.preferred_rev === "number" &&
-    artistOrId.preferred_rev !== 0
-      ? artistOrId.preferred_rev
+    typeof artistOrId.preferredRev === "number" &&
+    artistOrId.preferredRev !== 0
+      ? artistOrId.preferredRev
       : 0;
   let url = `/api/artist-image?artist_id=${encodeURIComponent(id)}&size=${size}`;
   if (rev) url += `&rev=${rev}`;
@@ -246,18 +235,18 @@ export async function fetchPlaylistTracks(playlistId: string): Promise<Track[]> 
 }
 
 export interface SearchResult {
-  artists: ArtistListItem[];
+  artists: Artist[];
   albums: Album[];
   tracks: Track[];
 }
 
-/** GET /api/search — maps tracks and albums; artists stay server shape. */
+/** GET /api/search — maps artists, albums, and tracks. */
 export async function fetchSearch(q: string, limit = 50): Promise<SearchResult> {
-  const data = await apiGet<ItemsResponse<ArtistListItem>>(
+  const data = await apiGet<ItemsResponse<unknown>>(
     `/api/search?q=${encodeURIComponent(q)}&limit=${limit}`,
   );
   return {
-    artists: data.artists || [],
+    artists: mapArtists(data.artists || []),
     albums: mapAlbums(data.albums || []),
     tracks: mapTracks(data.tracks || []),
   };
@@ -290,9 +279,19 @@ export async function fetchAlbums(
   return mapAlbums(data.items || []);
 }
 
+/** GET /api/artists — mapped Artist[]. */
+export async function fetchArtists(
+  query = "limit=500",
+): Promise<Artist[]> {
+  const data = await apiGet<ItemsResponse<unknown>>(`/api/artists?${query}`);
+  return mapArtists(data.items || []);
+}
+
 /** GET /api/artists/{id} */
-export async function fetchArtist(artistId: string): Promise<ArtistListItem> {
-  return apiGet<ArtistListItem>(`/api/artists/${encodeURIComponent(artistId)}`);
+export async function fetchArtist(artistId: string): Promise<Artist> {
+  return fromApiArtist(
+    await apiGet<unknown>(`/api/artists/${encodeURIComponent(artistId)}`),
+  );
 }
 
 function mapListenTrack(raw: unknown): ListenTrack {
@@ -306,16 +305,16 @@ function mapListenTrack(raw: unknown): ListenTrack {
 }
 
 function mapListenArtist(raw: unknown): ListenArtist {
-  const rec = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const artist = rec as unknown as ArtistListItem;
+  const rec =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   return {
-    ...artist,
-    play_count: Number(rec.play_count) || 0,
-    last_counted_at: String(rec.last_counted_at || ""),
+    ...fromApiArtist(raw),
+    playCount: Number(rec.play_count ?? rec.playCount) || 0,
+    lastCountedAt: String(rec.last_counted_at ?? rec.lastCountedAt ?? ""),
   };
 }
 
-/** GET /api/listens/rankings — wrap fromApiTrack; artists stay server-shaped. */
+/** GET /api/listens/rankings — maps tracks and artists. */
 export async function fetchListenRankings(range: string): Promise<ListenRankings> {
   const data = await apiGet<{
     range?: string;
@@ -341,6 +340,7 @@ export async function fetchAlbum(albumId: string): Promise<Album> {
 }
 
 export { fromApiAlbum, mapAlbums } from "@/models/album";
+export { fromApiArtist, mapArtists, type Artist } from "@/models/artist";
 export {
   fromApiTrack,
   fromCatalogRecord,
