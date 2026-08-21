@@ -178,21 +178,53 @@ function applyIntent(intent: PlayIntent) {
   );
 }
 
-/**
- * Mark the current load unavailable and set the user-visible notice.
- */
-function failPlayback(
-  profileId: string | null | undefined,
-  reason: PlayBlockReason,
-  notice: string | null | undefined,
-) {
-  setPlaySourceState("unavailable", profileId || null, reason);
+function failCurrentLoad(opts: {
+  reason: PlayBlockReason;
+  profile?: string | null;
+  notice?: string | null;
+  toast?: boolean | string;
+  openSettings?: boolean;
+  stopSink?: boolean;
+  setUnavailable?: boolean;
+  title?: string | null;
+}) {
+  if (opts.stopSink) {
+    try {
+      activeSink.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+  const reason = opts.reason || "exclusive_failed";
+  const rawNotice =
+    opts.notice ||
+    PLAY_BLOCK_MESSAGES[reason] ||
+    PLAY_BLOCK_MESSAGES.exclusive_failed;
+  const exclusive = reason.startsWith("exclusive");
+  const notice =
+    !exclusive && opts.title && rawNotice
+      ? `${opts.title}: ${rawNotice}`
+      : rawNotice;
+  if (opts.setUnavailable !== false) {
+    setPlaySourceState(
+      "unavailable",
+      opts.profile ?? player.playProfileId ?? null,
+      reason,
+    );
+    emit(
+      "player.load.fail",
+      failCtx({ reason, message: notice || null }),
+      "error",
+    );
+  }
   setPlayNotice(notice);
-  emit(
-    "player.load.fail",
-    failCtx({ reason, message: notice || null }),
-    "error"
-  );
+  if (opts.toast) {
+    showToast(typeof opts.toast === "string" ? opts.toast : rawNotice);
+  }
+  if (opts.openSettings || reason === "exclusive_needs_device") {
+    openSettings();
+  }
+  syncTransportFlags();
 }
 
 const msSupported = "mediaSession" in navigator;
@@ -261,29 +293,6 @@ function syncTransportFlags() {
     navigator.mediaSession.playbackState =
       pl.index >= 0 ? (activeSink.paused ? "paused" : "playing") : "none";
   }
-}
-
-function hardStopCompanion(
-  message: string | null | undefined,
-  reason: PlayBlockReason = "exclusive_failed",
-  opts: { openSettings?: boolean } = {},
-) {
-  try {
-    activeSink.stop();
-  } catch {
-    /* ignore */
-  }
-  const r = reason || "exclusive_failed";
-  const notice =
-    message ||
-    PLAY_BLOCK_MESSAGES[r] ||
-    PLAY_BLOCK_MESSAGES.exclusive_failed;
-  failPlayback(player.playProfileId, r, notice);
-  showToast(notice);
-  if (opts.openSettings || r === "exclusive_needs_device") {
-    openSettings();
-  }
-  syncTransportFlags();
 }
 
 /**
@@ -361,15 +370,22 @@ function wireSinkHandlers() {
     ) => {
       if (player.playSource === "none") return;
       if (code === "exclusive_needs_device") {
-        hardStopCompanion(
-          message || PLAY_BLOCK_MESSAGES.exclusive_needs_device,
-          "exclusive_needs_device",
-          { openSettings: true }
-        );
+        failCurrentLoad({
+          reason: "exclusive_needs_device",
+          notice: message || PLAY_BLOCK_MESSAGES.exclusive_needs_device,
+          toast: true,
+          stopSink: true,
+          openSettings: true,
+        });
         return;
       }
       if (activeSink.kind === "companion") {
-        hardStopCompanion(message, "exclusive_failed");
+        failCurrentLoad({
+          reason: "exclusive_failed",
+          notice: message,
+          toast: true,
+          stopSink: true,
+        });
         return;
       }
       emit(
@@ -382,12 +398,10 @@ function wireSinkHandlers() {
         }),
         "error"
       );
-      failPlayback(
-        player.playProfileId,
-        "play_failed",
-        message || PLAY_BLOCK_MESSAGES.play_failed
-      );
-      syncTransportFlags();
+      failCurrentLoad({
+        reason: "play_failed",
+        notice: message || PLAY_BLOCK_MESSAGES.play_failed,
+      });
     },
     onPauseState: () => {
       syncTransportFlags();
@@ -492,53 +506,6 @@ async function intentForTrack(
   });
 }
 
-function showUnavailable(
-  track: Track | null | undefined,
-  intent: Extract<PlayIntent, { source: "unavailable" }>,
-) {
-  const title = track?.title || "Track";
-  const exclusive = intent.block.startsWith("exclusive");
-  const notice = exclusive
-    ? intent.message
-    : intent.message
-      ? `${title}: ${intent.message}`
-      : intent.message;
-  setPlayNotice(notice);
-  if (exclusive) {
-    showToast(intent.message || PLAY_BLOCK_MESSAGES.exclusive_failed);
-    if (intent.block === "exclusive_needs_device") openSettings();
-  }
-  syncTransportFlags();
-}
-
-function failLoad(intent: PlayIntent, err: unknown) {
-  const code =
-    err && typeof err === "object" && "code" in err
-      ? (err as { code?: unknown }).code
-      : undefined;
-  const companion =
-    (intent.source !== "unavailable" && intent.sink === "companion") ||
-    activeSink.kind === "companion";
-  if (companion) {
-    console.error("Exclusive playback failed", err);
-    const reason =
-      typeof code === "string" && code in PLAY_BLOCK_MESSAGES
-        ? (code as PlayBlockReason)
-        : "exclusive_failed";
-    hardStopCompanion(
-      err instanceof Error ? err.message : PLAY_BLOCK_MESSAGES.exclusive_failed,
-      reason,
-    );
-    return;
-  }
-  console.error("Playback failed", err);
-  failPlayback(
-    intent.profile,
-    "play_failed",
-    PLAY_BLOCK_MESSAGES.play_failed,
-  );
-}
-
 async function loadResolved(
   gen: number,
   track: Track | null | undefined,
@@ -552,7 +519,16 @@ async function loadResolved(
     revokeLocalPlayUrl();
   }
   if (intent.source === "unavailable") {
-    showUnavailable(track, intent);
+    const exclusive = intent.block.startsWith("exclusive");
+    failCurrentLoad({
+      reason: intent.block,
+      notice: intent.message,
+      toast: exclusive
+        ? intent.message || PLAY_BLOCK_MESSAGES.exclusive_failed
+        : false,
+      setUnavailable: false,
+      title: exclusive ? null : track?.title || "Track",
+    });
     return;
   }
 
@@ -582,7 +558,36 @@ async function loadResolved(
     return loadResolved(gen, track, { localBroken: true });
   }
   if (!result.ok) {
-    failLoad(intent, result.err);
+    const err = result.err;
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? (err as { code?: unknown }).code
+        : undefined;
+    const companion =
+      intent.sink === "companion" || activeSink.kind === "companion";
+    if (companion) {
+      console.error("Exclusive playback failed", err);
+      const reason =
+        typeof code === "string" && code in PLAY_BLOCK_MESSAGES
+          ? (code as PlayBlockReason)
+          : "exclusive_failed";
+      failCurrentLoad({
+        reason,
+        notice:
+          err instanceof Error
+            ? err.message
+            : PLAY_BLOCK_MESSAGES.exclusive_failed,
+        toast: true,
+        stopSink: true,
+      });
+      return;
+    }
+    console.error("Playback failed", err);
+    failCurrentLoad({
+      reason: "play_failed",
+      profile: intent.profile,
+      notice: PLAY_BLOCK_MESSAGES.play_failed,
+    });
     return;
   }
   emit(

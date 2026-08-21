@@ -30,15 +30,9 @@ export type PlayIntent =
       url: string;
     };
 
-export interface ExclusiveGate {
-  ok: boolean;
-  reason?: PlayBlockReason | string | null;
-}
-
 export interface PlayIntentCtx {
   exclusiveEnabled: boolean;
   exclusiveTag: string | null;
-  exclusiveGate?: ExclusiveGate;
   enabled: boolean;
   offline: boolean;
   activeStreamCodec: string;
@@ -83,15 +77,6 @@ function exclusiveIntent(
 ): PlayIntent {
   if (track?.isLossy) {
     return blocked("exclusive_lossy");
-  }
-  const gate = ctx.exclusiveGate;
-  if (gate && !gate.ok) {
-    const raw = gate.reason || "exclusive_not_ready";
-    const known =
-      raw in PLAY_BLOCK_MESSAGES
-        ? (raw as PlayBlockReason)
-        : "exclusive_not_ready";
-    return blocked(known);
   }
   const tag = ctx.exclusiveTag;
   if (!tag) {
@@ -148,19 +133,17 @@ export async function resolvePlayIntent(
     catalog: ctx.catalog,
   });
 
-  if (source.type === "unavailable") {
+  if (source.source === "unavailable") {
     return blocked(
-      source.reason,
-      source.codec || activeCodec || null,
+      source.block,
+      source.profile || activeCodec || null,
       source.message,
     );
   }
 
   return {
-    sink: "htmlAudio",
-    source: source.type,
-    profile: source.codec || activeCodec || null,
-    url: source.url,
+    ...source,
+    profile: source.profile || activeCodec || null,
   };
 }
 

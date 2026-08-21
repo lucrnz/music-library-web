@@ -8,6 +8,7 @@ import {
   playBlockMessage,
   type PlayBlockReason,
 } from "@/playBlock";
+import type { PlayIntent } from "@/playback/playIntent";
 import { localAtLeastAsGood } from "@/qualityRank";
 import type { CatalogTrackRecord } from "@/models/track";
 import type { PlaybackPolicy } from "@/stores/settings";
@@ -20,28 +21,26 @@ import {
 
 export type { PlaybackPolicy };
 
-export type PlaySource =
-  | {
-      type: "downloaded";
-      url: string;
-      reason: null;
-      message: null;
-      codec?: string | null;
-    }
-  | {
-      type: "streaming";
-      url: string;
-      reason: null;
-      message: null;
-      codec?: string | null;
-    }
-  | {
-      type: "unavailable";
-      url: null;
-      reason: PlayBlockReason;
-      message: string | null;
-      codec?: string | null;
-    };
+function unavailable(
+  block: PlayBlockReason,
+  profile: string | null = null,
+  message?: string | null,
+): PlayIntent {
+  return {
+    source: "unavailable",
+    profile,
+    block,
+    message: message ?? PLAY_BLOCK_MESSAGES[block],
+  };
+}
+
+function htmlReady(
+  source: "streaming" | "downloaded",
+  url: string,
+  profile: string | null,
+): PlayIntent {
+  return { sink: "htmlAudio", source, profile, url };
+}
 
 /**
  * @param {object|null} rec
@@ -94,35 +93,19 @@ export function willPreferLocal(
   );
 }
 
-/**
- * Open local blob only after policy decides local wins.
- * @param {object} rec
- * @returns {Promise<PlaySource>}
- */
+/** Open local blob only after policy decides local wins. */
 async function openDownloadedSource(
   rec: CatalogTrackRecord & { codec: string },
-): Promise<PlaySource> {
+): Promise<PlayIntent> {
   try {
     const url = await getLocalAudioUrlForRecord(rec);
     if (url) {
-      return {
-        type: "downloaded",
-        url,
-        reason: null,
-        message: null,
-        codec: rec.codec,
-      };
+      return htmlReady("downloaded", url, rec.codec);
     }
   } catch (err: unknown) {
     console.warn("Local download open failed", err);
   }
-  return {
-    type: "unavailable",
-    url: null,
-    reason: "broken",
-    message: PLAY_BLOCK_MESSAGES.broken,
-    codec: recordCodec(rec),
-  };
+  return unavailable("broken", recordCodec(rec));
 }
 
 /**
@@ -136,7 +119,6 @@ async function openDownloadedSource(
  *   playbackPolicy?: PlaybackPolicy,
  *   catalog?: { id: string }[],
  * }} ctx
- * @returns {Promise<PlaySource>}
  */
 export async function resolvePlaySource(
   track: { id?: string; title?: string } | null | undefined,
@@ -147,14 +129,9 @@ export async function resolvePlaySource(
     playbackPolicy?: PlaybackPolicy;
     catalog?: { id: string }[];
   },
-): Promise<PlaySource> {
+): Promise<PlayIntent> {
   if (!track?.id) {
-    return {
-      type: "unavailable",
-      url: null,
-      reason: "no_id",
-      message: PLAY_BLOCK_MESSAGES.no_id,
-    };
+    return unavailable("no_id");
   }
 
   const policy = ctx.playbackPolicy || "prefer_better";
@@ -174,14 +151,7 @@ export async function resolvePlaySource(
     let reason: PlayBlockReason = "missing";
     if (rec?.status === "broken") reason = "broken";
     else if (!rec) reason = "offline_no_local";
-    return {
-      type: "unavailable",
-      url: null,
-      reason,
-      message: playBlockMessage(reason),
-      // Intended profile: download record when present, else active stream tag.
-      codec: recordCodec(rec) || active || null,
-    };
+    return unavailable(reason, recordCodec(rec) || active || null, playBlockMessage(reason));
   }
 
   const localCodec = recordCodec(rec);
@@ -191,27 +161,15 @@ export async function resolvePlaySource(
     shouldPreferLocalOnline(localCodec, active, policy, catalog)
   ) {
     const downloaded = await openDownloadedSource(rec);
-    if (downloaded.type === "downloaded") return downloaded;
+    if (downloaded.source === "downloaded") return downloaded;
     // Blob missing despite record — fall through to stream when online.
   }
 
   const remote = streamUrl(track, active);
   if (!remote) {
-    return {
-      type: "unavailable",
-      url: null,
-      reason: "no_id",
-      message: PLAY_BLOCK_MESSAGES.no_id,
-      codec: active || null,
-    };
+    return unavailable("no_id", active || null);
   }
-  return {
-    type: "streaming",
-    url: remote,
-    reason: null,
-    message: null,
-    codec: active || null,
-  };
+  return htmlReady("streaming", remote, active || null);
 }
 
 /**

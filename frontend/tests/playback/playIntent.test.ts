@@ -50,7 +50,6 @@ describe("resolvePlayIntent", () => {
     const intent = await resolvePlayIntent(track({ isLossy: true }), {
       exclusiveEnabled: true,
       exclusiveTag: "flac_16_44100",
-      exclusiveGate: { ok: true },
       enabled: false,
       offline: false,
       activeStreamCodec: "opus_192_48000",
@@ -79,7 +78,6 @@ describe("resolvePlayIntent", () => {
     const intent = await resolvePlayIntent(track(), {
       exclusiveEnabled: true,
       exclusiveTag: "flac_16_44100",
-      exclusiveGate: { ok: true },
       enabled: true,
       offline: false,
       activeStreamCodec: "opus_192_48000",
@@ -96,7 +94,6 @@ describe("resolvePlayIntent", () => {
     const intent = await resolvePlayIntent(track(), {
       exclusiveEnabled: true,
       exclusiveTag: null,
-      exclusiveGate: { ok: true },
       enabled: false,
       offline: false,
       activeStreamCodec: "opus_192_48000",
@@ -108,11 +105,10 @@ describe("resolvePlayIntent", () => {
 
   it("HTML offline with no download is offline_no_local", async () => {
     vi.mocked(resolvePlaySource).mockResolvedValue({
-      type: "unavailable",
-      url: null,
-      reason: "offline_no_local",
+      source: "unavailable",
+      profile: "opus_192_48000",
+      block: "offline_no_local",
       message: "You're offline and this track isn't downloaded.",
-      codec: "opus_192_48000",
     });
     const intent = await resolvePlayIntent(track(), {
       exclusiveEnabled: false,
@@ -128,11 +124,10 @@ describe("resolvePlayIntent", () => {
 
   it("HTML prefer-local download is downloaded", async () => {
     vi.mocked(resolvePlaySource).mockResolvedValue({
-      type: "downloaded",
+      sink: "htmlAudio",
+      source: "downloaded",
       url: "blob:local",
-      reason: null,
-      message: null,
-      codec: "flac_16_44100",
+      profile: "flac_16_44100",
     });
     const intent = await resolvePlayIntent(track(), {
       exclusiveEnabled: false,
