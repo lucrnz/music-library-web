@@ -14,17 +14,16 @@ import { downloads } from "@/downloads/state";
 import { createCompanionSink } from "@/playback/sinks/companionSink";
 import { createHtmlAudioSink } from "@/playback/sinks/htmlAudioSink";
 import type { PlaybackSink, SinkErrorDetails } from "@/playback/sinks/types";
-import { ensurePreferredDevice } from "@/exclusive/companionClient";
 import { supportsCodecKind } from "@/codecSupport";
 import { SOURCE_TAG, deliveryCodec } from "@/lossyKind";
 import type { Track } from "@/models/track";
 import { PLAY_BLOCK_MESSAGES, type PlayBlockReason } from "@/playBlock";
 import {
+  needsCompanionStop,
   resolvePlayIntent,
   type PlayIntent,
 } from "@/playback/playIntent";
 import { prepareTracks } from "@/playback/prepare";
-import { needsCompanionStop } from "@/playback/teardown";
 import { showToast } from "@/stores/ui";
 import {
   consumeMissingTechToast,
@@ -38,7 +37,7 @@ import {
   writePlaybackPosition,
 } from "@/stores/playbackPosition";
 import { pl, commit } from "@/stores/playlist";
-import { readVolume, writeVolume } from "@/stores/playerPrefs";
+import { readVolume, setOutputVolume } from "@/stores/playerPrefs";
 import {
   invalidateCoverCache,
   updateMediaSession,
@@ -58,9 +57,9 @@ import {
   startCycle as startListenCycle,
 } from "@/listens/bridge";
 import {
-  bindOnDemandControl,
-  claimOnDemand,
+  become,
   installOnDemandMediaSession,
+  onLeaveQueue,
 } from "@/playback/onDemandControl";
 
 export { player };
@@ -369,7 +368,7 @@ function wireSinkHandlers() {
         );
         return;
       }
-      if (activeSink.kind === "companion" || isExclusiveEnabled()) {
+      if (activeSink.kind === "companion") {
         hardStopCompanion(message, "exclusive_failed");
         return;
       }
@@ -400,11 +399,8 @@ function wireSinkHandlers() {
 }
 
 export function stopPlayback() {
-  claimOnDemand();
-  invalidateLoads();
+  become("none");
   discardListen();
-  clearPlaySourceState();
-  teardownOnDemandMedia();
   setPlayNotice(null);
   nearEndPrepareSent = false;
   pl.index = -1;
@@ -436,10 +432,6 @@ function maybePrepareNext() {
   if (!canReachServer()) return;
 
   nearEndPrepareSent = true;
-  void issueNearEndPrepare(nextTrack);
-}
-
-async function issueNearEndPrepare(nextTrack: Track) {
   prepareTracks([nextTrack], { urgent: true, limit: 1 });
 }
 
@@ -479,11 +471,6 @@ async function intentForTrack(
   extra: { localBroken?: boolean } = {},
 ): Promise<PlayIntent | null> {
   const exclusive = isExclusiveEnabled();
-  let exclusiveGate: { ok: boolean; reason?: string } | undefined;
-  if (exclusive && !track?.isLossy) {
-    exclusiveGate = await ensurePreferredDevice({ timeoutMs: 1500 });
-    if (!still(gen)) return null;
-  }
   const activeCodec =
     deliveryCodec(track, getActiveStreamCodec()) || getActiveStreamCodec();
   let sourceOk: boolean | undefined;
@@ -494,7 +481,6 @@ async function intentForTrack(
   return resolvePlayIntent(track, {
     exclusiveEnabled: exclusive,
     exclusiveTag: exclusive ? getExclusiveProfileTag(track) : null,
-    exclusiveGate,
     enabled: downloads.enabled,
     offline: !canUseRemoteMedia(),
     activeStreamCodec: getActiveStreamCodec(),
@@ -506,30 +492,67 @@ async function intentForTrack(
   });
 }
 
-async function loadIntent(
+function showUnavailable(
+  track: Track | null | undefined,
+  intent: Extract<PlayIntent, { source: "unavailable" }>,
+) {
+  const title = track?.title || "Track";
+  const exclusive = intent.block.startsWith("exclusive");
+  const notice = exclusive
+    ? intent.message
+    : intent.message
+      ? `${title}: ${intent.message}`
+      : intent.message;
+  setPlayNotice(notice);
+  if (exclusive) {
+    showToast(intent.message || PLAY_BLOCK_MESSAGES.exclusive_failed);
+    if (intent.block === "exclusive_needs_device") openSettings();
+  }
+  syncTransportFlags();
+}
+
+function failLoad(intent: PlayIntent, err: unknown) {
+  const code =
+    err && typeof err === "object" && "code" in err
+      ? (err as { code?: unknown }).code
+      : undefined;
+  const companion =
+    (intent.source !== "unavailable" && intent.sink === "companion") ||
+    activeSink.kind === "companion";
+  if (companion) {
+    console.error("Exclusive playback failed", err);
+    const reason =
+      typeof code === "string" && code in PLAY_BLOCK_MESSAGES
+        ? (code as PlayBlockReason)
+        : "exclusive_failed";
+    hardStopCompanion(
+      err instanceof Error ? err.message : PLAY_BLOCK_MESSAGES.exclusive_failed,
+      reason,
+    );
+    return;
+  }
+  console.error("Playback failed", err);
+  failPlayback(
+    intent.profile,
+    "play_failed",
+    PLAY_BLOCK_MESSAGES.play_failed,
+  );
+}
+
+async function loadResolved(
   gen: number,
   track: Track | null | undefined,
-  intent: PlayIntent,
+  extra: { localBroken?: boolean } = {},
 ) {
+  const intent = await intentForTrack(track, gen, extra);
+  if (!still(gen) || !intent) return;
   applyIntent(intent);
   if (needsCompanionStop(intent, activeSink.kind)) {
     stopSink(companionSink);
     revokeLocalPlayUrl();
   }
   if (intent.source === "unavailable") {
-    const title = track?.title || "Track";
-    const exclusive = intent.block.startsWith("exclusive");
-    const notice = exclusive
-      ? intent.message
-      : intent.message
-        ? `${title}: ${intent.message}`
-        : intent.message;
-    setPlayNotice(notice);
-    if (exclusive) {
-      showToast(intent.message || PLAY_BLOCK_MESSAGES.exclusive_failed);
-      if (intent.block === "exclusive_needs_device") openSettings();
-    }
-    syncTransportFlags();
+    showUnavailable(track, intent);
     return;
   }
 
@@ -550,66 +573,29 @@ async function loadIntent(
     localPlayUrl = intent.url;
   }
 
-  let result = await attemptPlay(intent.url, gen);
+  const result = await attemptPlay(intent.url, gen);
   if (!still(gen)) return;
-  if (!result.ok && intent.source === "downloaded") {
+  if (!result.ok && intent.source === "downloaded" && !extra.localBroken) {
     console.warn("Local playback failed, falling back to stream", result.err);
     if (track?.id) markDownloadBroken(track.id).catch(() => {});
     revokeLocalPlayUrl();
-    const retry = await intentForTrack(track, gen, { localBroken: true });
-    if (!retry || !still(gen)) return;
-    applyIntent(retry);
-    if (needsCompanionStop(retry, activeSink.kind)) {
-      stopSink(companionSink);
-      revokeLocalPlayUrl();
-    }
-    if (retry.source === "unavailable") {
-      const title = track?.title || "Track";
-      setPlayNotice(retry.message ? `${title}: ${retry.message}` : retry.message);
-      syncTransportFlags();
-      return;
-    }
-    result = await attemptPlay(retry.url, gen);
-    if (!still(gen)) return;
-    if (!result.ok) {
-      console.error("Playback failed", result.err);
-      failPlayback(
-        retry.profile,
-        "play_failed",
-        PLAY_BLOCK_MESSAGES.play_failed,
-      );
-    }
-  } else if (!result.ok) {
-    if (intent.sink === "companion") {
-      console.error("Exclusive playback failed", result.err);
-      hardStopCompanion(
-        result.err instanceof Error
-          ? result.err.message
-          : PLAY_BLOCK_MESSAGES.exclusive_failed,
-        "exclusive_failed",
-      );
-      return;
-    }
-    console.error("Playback failed", result.err);
-    failPlayback(
-      intent.profile,
-      "play_failed",
-      PLAY_BLOCK_MESSAGES.play_failed,
-    );
+    return loadResolved(gen, track, { localBroken: true });
   }
-  if (still(gen) && result.ok) {
-    emit(
-      "player.load.ok",
-      { play_source: player.playSource, profile: player.playProfileId },
-      "info",
-    );
-    maybeStartListenCycle(track);
+  if (!result.ok) {
+    failLoad(intent, result.err);
+    return;
   }
+  emit(
+    "player.load.ok",
+    { play_source: player.playSource, profile: player.playProfileId },
+    "info",
+  );
+  maybeStartListenCycle(track);
   syncTransportFlags();
 }
 
 export async function playIndex(index: number) {
-  claimOnDemand();
+  become("queue");
   if (index < 0 || index >= pl.length) return;
   const cold = player.playSource === "none";
   const nextTrack = pl.tracks[index];
@@ -640,9 +626,7 @@ export async function playIndex(index: number) {
   revokeLocalPlayUrl();
   setPlayNotice(null);
 
-  const intent = await intentForTrack(track, gen);
-  if (!still(gen) || !intent) return;
-  await loadIntent(gen, track, intent);
+  await loadResolved(gen, track);
   if (still(gen)) flushPendingResume();
 }
 
@@ -678,8 +662,8 @@ export function playPrev() {
   }
   const idx = shouldSkipUnplayableQueue()
     ? pl.advanceToPlayable("prev", (t) => !!t?.id && isLocallyPlayableDownload(t.id))
-    : pl.prevIndex(0);
-  if (typeof idx !== "number" || idx < 0) {
+    : pl.prevIndex();
+  if (idx < 0) {
     stopAtQueueEnd();
     return;
   }
@@ -741,10 +725,8 @@ export function seekToFraction(frac: number) {
 }
 
 export function setVolume(v: number) {
-  const n = Math.min(1, Math.max(0, Number(v)));
-  player.volume = n;
-  activeSink.setVolume(n);
-  writeVolume(n);
+  setOutputVolume(v);
+  activeSink.setVolume(player.volume);
 }
 
 export function applyVolume() {
@@ -758,9 +740,9 @@ export function initAudioListeners() {
   // Ensure html sink element is in the document for first non-exclusive play.
   selectSink("htmlAudio");
   activeSink.setVolume(player.volume);
-  bindOnDemandControl({
-    bumpLoadGeneration: invalidateLoads,
-    stopSinks: teardownOnDemandMedia,
+  onLeaveQueue(() => {
+    invalidateLoads();
+    teardownOnDemandMedia();
   });
   installOnDemandMediaSession({
     play: () => {

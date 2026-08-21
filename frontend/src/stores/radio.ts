@@ -8,9 +8,8 @@ import { SOURCE_TAG } from "@/lossyKind";
 import { fromApiTrack, type Track } from "@/models/track";
 import { discard as discardListen } from "@/listens/bridge";
 import {
-  restoreMediaSession,
-  setOnDemandClaimHook,
-  stopOnDemandSinks,
+  become,
+  onLeaveRadio,
   suspendMediaSession,
 } from "@/playback/onDemandControl";
 import { player } from "@/stores/playerState";
@@ -24,7 +23,7 @@ import { readVolume } from "@/stores/playerPrefs";
 import { getActiveStreamCodec } from "@/stores/settings";
 import { showToast } from "@/stores/ui";
 
-export type RadioChrome = "inactive" | "preview" | "stopped" | "tuning" | "tuned";
+export type RadioChrome = "inactive" | "stopped" | "tuning" | "tuned";
 export type RadioFace = "catching_up" | "skip_pending" | "idle" | "current";
 
 export interface RadioStore {
@@ -61,10 +60,11 @@ let hydrateInFlight: Promise<void> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let lastLoadedTrackId: string | null = null;
 let lastLoadedLossy: boolean | null = null;
+let radioGen = 0;
 let connectivityBound = false;
 let visibilityBound = false;
 let volumeBound = false;
-let claimHookBound = false;
+let sessionBound = false;
 
 interface TuneAck {
   ok: boolean;
@@ -147,7 +147,10 @@ export function applySnapshot(raw: unknown, now = performance.now()): void {
   void onFaceOrTrack(prevId);
 }
 
-async function onFaceOrTrack(prevId: string | null): Promise<void> {
+async function onFaceOrTrack(
+  prevId: string | null,
+  countsAsFailure = false,
+): Promise<void> {
   if (radio.chrome !== "tuning" && radio.chrome !== "tuned" && radio.chrome !== "stopped") {
     return;
   }
@@ -159,6 +162,7 @@ async function onFaceOrTrack(prevId: string | null): Promise<void> {
     if (radio.chrome === "tuned") radio.chrome = "tuning";
     audio.stop();
     lastLoadedTrackId = null;
+    radioGen += 1;
     return;
   }
   if (radio.face !== "current" || !radio.track?.id) return;
@@ -166,15 +170,13 @@ async function onFaceOrTrack(prevId: string | null): Promise<void> {
     writeRadioMediaSession();
     return;
   }
-  if (radio.chrome === "tuning" && lastLoadedTrackId == null) {
-    await sendTuneIn();
-    if (radio.chrome === "tuning") await loadCurrent(false);
-    return;
-  }
-  const changed = radio.track.id !== prevId && prevId != null;
-  const lossyFlip = lastLoadedLossy != null && lastLoadedLossy !== radio.isLossy;
-  if ((changed || lossyFlip) && (radio.chrome === "tuning" || radio.chrome === "tuned")) {
-    await loadCurrent(false);
+  const changed =
+    lastLoadedTrackId == null ||
+    radio.track.id !== lastLoadedTrackId ||
+    (lastLoadedLossy != null && lastLoadedLossy !== radio.isLossy) ||
+    (prevId != null && radio.track.id !== prevId);
+  if ((radio.chrome === "tuning" || radio.chrome === "tuned") && changed) {
+    await loadCurrent(countsAsFailure);
   } else if (radio.chrome === "tuned") {
     maybeReseek();
   }
@@ -193,15 +195,20 @@ async function loadCurrent(countsAsFailure: boolean): Promise<void> {
   if (!track?.id) return;
   const url = streamUrl(track, streamCodecForLoad());
   if (!url) return;
+  const gen = ++radioGen;
   try {
     await audio.load(url);
+    if (gen !== radioGen) return;
     await audio.seek(interpolatedPosition());
+    if (gen !== radioGen) return;
     await audio.play();
+    if (gen !== radioGen) return;
     lastLoadedTrackId = track.id;
     lastLoadedLossy = radio.isLossy;
     radio.chrome = "tuned";
     writeRadioMediaSession();
   } catch {
+    if (gen !== radioGen) return;
     if (countsAsFailure && failures.record()) {
       showToast("Radio could not start — tuned out");
       tuneOut();
@@ -309,8 +316,8 @@ async function onReconnect(): Promise<void> {
   if (radio.face === "current" && radioChromeActive()) {
     radio.chrome = "tuning";
     lastLoadedTrackId = null;
-    await sendTuneIn();
-    if (radio.chrome === "tuning") await loadCurrent(false);
+    const ok = await sendTuneIn();
+    if (ok) await onFaceOrTrack(null);
   }
 }
 
@@ -372,17 +379,28 @@ function bindVolumeWatch(): void {
   );
 }
 
-function bindClaimHook(): void {
-  if (claimHookBound) return;
-  claimHookBound = true;
-  setOnDemandClaimHook(() => {
-    exitToQueue();
+function bindSession(): void {
+  if (sessionBound) return;
+  sessionBound = true;
+  onLeaveRadio(() => {
+    leaveRadio();
   });
 }
 
+function leaveRadio(): void {
+  if (radio.chrome === "inactive") return;
+  if (radioChromeActive()) sendJson({ type: "tune_out" });
+  audio.stop();
+  lastLoadedTrackId = null;
+  lastLoadedLossy = null;
+  radioGen += 1;
+  radio.tunerProfile = null;
+  radio.chrome = "inactive";
+  maybeDisconnect();
+}
+
 export async function connect(): Promise<void> {
-  if (radio.chrome === "inactive") radio.chrome = "preview";
-  bindClaimHook();
+  bindSession();
   bindVolumeWatch();
   bindConnectivity();
   bindVisibility();
@@ -427,7 +445,7 @@ export function setTabOpen(open: boolean): void {
 }
 
 export async function tuneIn(): Promise<void> {
-  if (radio.chrome === "inactive" || radio.chrome === "preview") {
+  if (radio.chrome === "inactive") {
     radio.chrome = "stopped";
   }
   await connect();
@@ -436,10 +454,10 @@ export async function tuneIn(): Promise<void> {
     showToast("Radio is not on air yet");
     return;
   }
-  suspendMediaSession();
-  stopOnDemandSinks();
+  become("radio");
   discardListen();
   radio.chrome = "tuning";
+  lastLoadedTrackId = null;
   audio.setVolume(readVolume() ?? 1);
   audio.onPause(() => {
     if (radio.chrome === "tuned" && !audio.ended) tuneOut();
@@ -460,33 +478,23 @@ export async function tuneIn(): Promise<void> {
     writeRadioMediaSession();
     return;
   }
-  await loadCurrent(true);
+  await onFaceOrTrack(null, true);
 }
 
 export function tuneOut(): void {
-  if (radio.chrome === "inactive" || radio.chrome === "preview") return;
+  if (radio.chrome === "inactive") return;
   sendJson({ type: "tune_out" });
   audio.stop();
   lastLoadedTrackId = null;
   lastLoadedLossy = null;
+  radioGen += 1;
   radio.chrome = "stopped";
   writeRadioMediaSession();
 }
 
 export function exitToQueue(): void {
-  if (radio.chrome === "inactive") return;
-  if (radioChromeActive()) sendJson({ type: "tune_out" });
-  audio.stop();
-  lastLoadedTrackId = null;
-  lastLoadedLossy = null;
-  radio.tunerProfile = null;
-  radio.chrome = "inactive";
-  restoreMediaSession();
-  maybeDisconnect();
-}
-
-export function setVolume(v: number): void {
-  audio.setVolume(v);
+  leaveRadio();
+  become("none");
 }
 
 export async function onStreamProfileChanged(): Promise<void> {
@@ -496,7 +504,8 @@ export async function onStreamProfileChanged(): Promise<void> {
   const ok = await sendTuneIn();
   if (!ok) return;
   if (!radio.isLossy && radio.chrome !== "stopped") {
-    await loadCurrent(false);
+    lastLoadedTrackId = null;
+    await onFaceOrTrack(null);
   }
 }
 
@@ -537,5 +546,6 @@ export function resetRadioStore(): void {
   radio.tunerProfile = null;
   lastLoadedTrackId = null;
   lastLoadedLossy = null;
+  radioGen += 1;
   failures.reset();
 }

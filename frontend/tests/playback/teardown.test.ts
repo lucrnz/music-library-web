@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlayIntent } from "@/playback/playIntent";
-import { needsCompanionStop } from "@/playback/teardown";
+import { needsCompanionStop } from "@/playback/playIntent";
 
 const unavailable: PlayIntent = {
   source: "unavailable",

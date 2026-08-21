@@ -143,9 +143,9 @@ describe("playlist store", () => {
     expect(pl.nextIndex()).toBe(1);
     pl.index = 0;
     pl.repeat = "off";
-    expect(pl.prevIndex(0)).toBe(0);
+    expect(pl.prevIndex()).toBe(0);
     pl.repeat = "all";
-    expect(pl.prevIndex(0)).toBe(2);
+    expect(pl.prevIndex()).toBe(2);
   });
 
   it("rebuildShuffle is a permutation", () => {

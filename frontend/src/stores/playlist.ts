@@ -40,7 +40,7 @@ export interface PlaylistState extends PlaylistCursor {
   rebuildShuffle(): void;
   nextIndex(): number;
   peekNextIndex(): number;
-  prevIndex(currentTime: number): number | { restart: true; index: number };
+  prevIndex(): number;
   advanceToPlayable(
     dir: "next" | "prev",
     isPlayable: (track: Track | undefined) => boolean,
@@ -209,11 +209,8 @@ const playlistState: PlaylistState = {
     return computeNextIndex(this);
   },
 
-  prevIndex(this: PlaylistState, currentTime) {
+  prevIndex(this: PlaylistState) {
     if (!this.tracks.length) return -1;
-    if (currentTime > 3) {
-      return { restart: true, index: this.index };
-    }
     return stepPrev(this);
   },
 

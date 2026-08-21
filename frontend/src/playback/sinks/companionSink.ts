@@ -9,8 +9,10 @@ import {
   companionSeek,
   companionSetVolume,
   companionStop,
+  ensurePreferredDevice,
   onCompanionEvent,
 } from "@/exclusive/companionClient";
+import { PLAY_BLOCK_MESSAGES } from "@/playBlock";
 import type { PlaybackSink, SinkHandlers } from "@/playback/sinks/types";
 
 export function createCompanionSink(): PlaybackSink {
@@ -52,6 +54,14 @@ export function createCompanionSink(): PlaybackSink {
       ensureListen();
     },
     async load(url) {
+      const gate = await ensurePreferredDevice({ timeoutMs: 1500 });
+      if (!gate.ok) {
+        const err = new Error(
+          PLAY_BLOCK_MESSAGES[gate.reason] || PLAY_BLOCK_MESSAGES.exclusive_not_ready,
+        ) as Error & { code: string };
+        err.code = gate.reason;
+        throw err;
+      }
       ensureListen();
       paused = false;
       currentTime = 0;

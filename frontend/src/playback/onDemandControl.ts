@@ -1,10 +1,11 @@
 /**
- * On-demand sink stop + Media Session install/restore/suspend.
- * Does not import radio.ts or player.ts.
+ * Session owner: queue vs radio vs none. Does not import radio.ts or player.ts.
  */
 import { clearPlaySourceState } from "@/stores/playerState";
 
 const msSupported = typeof navigator !== "undefined" && "mediaSession" in navigator;
+
+export type ActiveSession = "none" | "queue" | "radio";
 
 export interface OnDemandMediaHandlers {
   play: () => void;
@@ -14,39 +15,39 @@ export interface OnDemandMediaHandlers {
   seekto: MediaSessionActionHandler;
 }
 
-let stopSinksFn: (() => void) | null = null;
-let bumpLoadFn: (() => void) | null = null;
+let active: ActiveSession = "none";
+let leaveQueueFn: (() => void) | null = null;
+let leaveRadioFn: (() => void) | null = null;
 let onDemandHandlers: OnDemandMediaHandlers | null = null;
 let suspended = false;
-let onDemandClaimHook: (() => void) | null = null;
 
-export function bindOnDemandControl(opts: {
-  stopSinks: () => void;
-  bumpLoadGeneration: () => void;
-}): void {
-  stopSinksFn = opts.stopSinks;
-  bumpLoadFn = opts.bumpLoadGeneration;
+export function onLeaveQueue(fn: (() => void) | null): void {
+  leaveQueueFn = fn;
+}
+
+export function onLeaveRadio(fn: (() => void) | null): void {
+  leaveRadioFn = fn;
+}
+
+export function become(next: ActiveSession): void {
+  if (next === active) return;
+  if (active === "radio") leaveRadioFn?.();
+  if (active === "queue") {
+    clearPlaySourceState();
+    leaveQueueFn?.();
+  }
+  active = next;
+  if (next === "radio") suspendMediaSession();
+  else restoreMediaSession();
+}
+
+export function activeSession(): ActiveSession {
+  return active;
 }
 
 export function installOnDemandMediaSession(handlers: OnDemandMediaHandlers): void {
   onDemandHandlers = handlers;
   if (!suspended) applyOnDemandHandlers();
-}
-
-export function stopOnDemandSinks(): void {
-  bumpLoadFn?.();
-  clearPlaySourceState();
-  stopSinksFn?.();
-}
-
-/** Radio registers exit-to-inactive here so player.ts need not import radio. */
-export function setOnDemandClaimHook(fn: (() => void) | null): void {
-  onDemandClaimHook = fn;
-}
-
-export function claimOnDemand(): void {
-  onDemandClaimHook?.();
-  restoreMediaSession();
 }
 
 export function suspendMediaSession(): void {

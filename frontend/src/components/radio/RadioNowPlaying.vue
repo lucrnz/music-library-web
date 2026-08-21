@@ -14,7 +14,7 @@ import {
   tuneIn,
   tuneOut,
 } from "@/stores/radio";
-import { writeVolume } from "@/stores/playerPrefs";
+import { setOutputVolume } from "@/stores/playerPrefs";
 
 const props = withDefaults(
   defineProps<{
@@ -81,8 +81,7 @@ function onTune() {
 }
 
 function onVolume(v: number) {
-  player.volume = v;
-  writeVolume(v);
+  setOutputVolume(v);
 }
 
 function openRadio() {

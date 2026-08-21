@@ -61,6 +61,20 @@ describe("resolvePlayIntent", () => {
     expect("url" in intent).toBe(false);
   });
 
+  it("exclusive without a gate is ready companion (sink owns the device poll)", async () => {
+    const intent = await resolvePlayIntent(track(), {
+      exclusiveEnabled: true,
+      exclusiveTag: "flac_16_44100",
+      enabled: false,
+      offline: false,
+      activeStreamCodec: "opus_192_48000",
+    });
+    expect(intent.source).toBe("streaming");
+    if (intent.source === "unavailable") return;
+    expect(intent.sink).toBe("companion");
+    expect(intent.url).toContain("codec=flac_16_44100");
+  });
+
   it("exclusive lossless is companion streaming with exclusive tag", async () => {
     const intent = await resolvePlayIntent(track(), {
       exclusiveEnabled: true,

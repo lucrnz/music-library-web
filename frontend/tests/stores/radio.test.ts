@@ -10,9 +10,9 @@ vi.mock("@/api", () => ({
 vi.mock("@/listens/bridge", () => ({ discard: vi.fn() }));
 vi.mock("@/playback/onDemandControl", () => ({
   restoreMediaSession: vi.fn(),
-  stopOnDemandSinks: vi.fn(),
   suspendMediaSession: vi.fn(),
-  setOnDemandClaimHook: vi.fn(),
+  become: vi.fn(),
+  onLeaveRadio: vi.fn(),
 }));
 vi.mock("@/stores/ui", () => ({ showToast: vi.fn() }));
 
@@ -96,7 +96,7 @@ describe("radio store", () => {
     vi.mocked(fetchRadioNow).mockResolvedValue(currentPayload);
     await connect();
     expect(fetchRadioNow).toHaveBeenCalledTimes(1);
-    expect(radio.chrome).toBe("preview");
+    expect(radio.chrome).toBe("inactive");
     expect(radio.face).toBe("current");
     expect(radio.track?.id).toBe("t1");
   });
@@ -109,11 +109,12 @@ describe("radio store", () => {
     expect(radio.face).toBe("idle");
   });
 
-  it("opening the tab is preview and does not steal chrome", async () => {
+  it("opening the tab is inactive and does not steal chrome", async () => {
     vi.mocked(fetchRadioNow).mockResolvedValue(currentPayload);
     setTabOpen(true);
     await Promise.resolve();
-    expect(radio.chrome).toBe("preview");
+    expect(radio.chrome).toBe("inactive");
+    expect(radio.tabOpen).toBe(true);
     expect(radioChromeActive()).toBe(false);
     setTabOpen(false);
     expect(radio.connected).toBe(false);

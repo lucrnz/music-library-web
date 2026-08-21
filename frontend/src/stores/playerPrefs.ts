@@ -31,6 +31,13 @@ export function writeVolume(v: number) {
   }
 }
 
+/** Face + storage. Sinks apply separately (on-demand via player.setVolume). */
+export function setOutputVolume(v: number) {
+  const n = Math.min(1, Math.max(0, Number(v)));
+  player.volume = n;
+  writeVolume(n);
+}
+
 export function readExpanded(): boolean {
   try {
     return localStorage.getItem(EXPANDED_STORAGE_KEY) === "1";
