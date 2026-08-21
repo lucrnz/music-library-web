@@ -14,10 +14,8 @@ import {
 } from "@/components/library/artistMenuItems";
 import { buildFolderMenuItems } from "@/components/library/folderMenuItems";
 import { buildTrackMenuItems } from "@/components/library/trackMenuItems";
-import {
-  openMenuKey,
-  type OpenMenu,
-} from "@/components/library/entityMenu";
+import { type OpenMenu } from "@/components/library/entityMenu";
+import { useEntityMenu } from "@/components/library/useEntityMenu";
 import { addAllDownloadedAlbum, addAllDownloadedArtist } from "@/downloads/addAll";
 import {
   albumFromDl,
@@ -31,11 +29,7 @@ import type {
   DownloadsHierarchyArtist,
 } from "@/downloads/hierarchy";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
-import {
-  isDesktopContextMenu,
-  nextOpenKey,
-} from "@/components/menu/rowActionMenu";
-import { useRowActionMenu } from "@/components/menu/useRowActionMenu";
+import { isDesktopContextMenu } from "@/components/menu/rowActionMenu";
 import { artUrlCache } from "@/downloads/catalog";
 import { downloads } from "@/downloads/state";
 import type { ArtistListItem } from "@/api";
@@ -92,69 +86,67 @@ const props = defineProps<{
 
 const route = useRoute();
 const artistsMode = computed(() => props.mode === "artists");
+const downloadsMode = computed(() => props.mode === "downloads");
 const {
+  menuOpen,
+  menuItems,
   menuAnchor,
   menuRestoreEl,
-  closeMenu,
-  openMenu,
-} = useRowActionMenu();
-const menuKey = ref("");
-const menuTarget = ref<OpenMenu | null>(null);
-const menuOpen = computed(() => !!menuKey.value);
-const downloadsMode = computed(() => props.mode === "downloads");
-const menuItems = computed(() => {
-  const target = menuTarget.value;
-  if (!target) return [];
-  const photo = artistsMode.value && target.kind === "artist";
-  switch (target.kind) {
-    case "artist":
-      return buildArtistMenuItems({
-        artist: target.artist,
-        includePhoto: photo,
-        addAll: () =>
-          downloadsMode.value
-            ? addAllDownloadedArtist(target.artist.id)
-            : addAllForArtist(target.artist.id),
-        downloadAll:
-          !downloadsMode.value && downloads.enabled
-            ? () => runArtistDownloadAll(target.artist)
-            : undefined,
-      });
-    case "album":
-      return buildAlbumMenuItems({
-        album: target.album,
-        addAll: () =>
-          downloadsMode.value
-            ? addAllDownloadedAlbum(target.album.id)
-            : addAllForAlbum(target.album.id),
-        download:
-          !downloadsMode.value && downloads.enabled
-            ? () => downloadAlbumById(target.album.id)
-            : undefined,
-      });
-    case "track":
-      return buildTrackMenuItems({
-        title: target.track.title,
-        artist: target.track.artist,
-        album: target.track.album,
-        addToPlaylist: () => queueOnly(target.track),
-      });
-    case "file": {
-      const t = target.file.track;
-      return buildTrackMenuItems({
-        title: t?.title || target.file.displayName || target.file.name,
-        artist: t?.artist,
-        album: t?.album,
-        addToPlaylist: () =>
-          queueOnly(t || target.file.id || target.file.path),
-      });
+  closeEntityMenu,
+  openEntityMenu,
+} = useEntityMenu({
+  itemsFor: (target) => {
+    const photo = artistsMode.value && target.kind === "artist";
+    switch (target.kind) {
+      case "artist":
+        return buildArtistMenuItems({
+          artist: target.artist,
+          includePhoto: photo,
+          addAll: () =>
+            downloadsMode.value
+              ? addAllDownloadedArtist(target.artist.id)
+              : addAllForArtist(target.artist.id),
+          downloadAll:
+            !downloadsMode.value && downloads.enabled
+              ? () => runArtistDownloadAll(target.artist)
+              : undefined,
+        });
+      case "album":
+        return buildAlbumMenuItems({
+          album: target.album,
+          addAll: () =>
+            downloadsMode.value
+              ? addAllDownloadedAlbum(target.album.id)
+              : addAllForAlbum(target.album.id),
+          download:
+            !downloadsMode.value && downloads.enabled
+              ? () => downloadAlbumById(target.album.id)
+              : undefined,
+        });
+      case "track":
+        return buildTrackMenuItems({
+          title: target.track.title,
+          artist: target.track.artist,
+          album: target.track.album,
+          addToPlaylist: () => queueOnly(target.track),
+        });
+      case "file": {
+        const t = target.file.track;
+        return buildTrackMenuItems({
+          title: t?.title || target.file.displayName || target.file.name,
+          artist: t?.artist,
+          album: t?.album,
+          addToPlaylist: () =>
+            queueOnly(t || target.file.id || target.file.path),
+        });
+      }
+      case "folder":
+        return buildFolderMenuItems({
+          dir: target.dir,
+          addAll: () => addAllForFolder(target.dir.path || ""),
+        });
     }
-    case "folder":
-      return buildFolderMenuItems({
-        dir: target.dir,
-        addAll: () => addAllForFolder(target.dir.path || ""),
-      });
-  }
+  },
 });
 
 function artistFromNode(node: TreeNode): ArtistListItem | null {
@@ -175,27 +167,6 @@ function resolveCover(node: TreeNode): string {
     return (id && artUrlCache.urls[`artist:${id}:thumb`]) || node.cover || "";
   }
   return node.cover || "";
-}
-
-function closeEntityMenu() {
-  menuKey.value = "";
-  menuTarget.value = null;
-  closeMenu();
-}
-
-function openEntityMenu(
-  target: OpenMenu,
-  anchor: { kind: "el"; el: HTMLElement } | { kind: "point"; x: number; y: number },
-  restoreEl?: HTMLElement | null,
-) {
-  const next = nextOpenKey(menuKey.value, openMenuKey(target));
-  if (!next) {
-    closeEntityMenu();
-    return;
-  }
-  menuKey.value = next;
-  menuTarget.value = target;
-  openMenu(anchor, restoreEl);
 }
 
 function parentNameForAlbum(albumId: string): string {
