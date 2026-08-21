@@ -165,10 +165,36 @@ def test_empty_then_scan_watermark_picks(tmp_home, db):
         assert row is not None
         row.kind = "scan"
         row.finished_at = "2026-01-01T00:00:01+00:00"
+        row.last_scan_finished_at = "2026-01-01T00:00:01+00:00"
         session.commit()
     station.tick(t0 + timedelta(seconds=2))
     assert station.now_playing().face == "current"
     assert station.now_playing().track is not None
+
+
+def test_regen_finished_at_does_not_change_scan_watermark(tmp_home, db):
+    station = _station(tmp_home, db)
+    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with db.session() as session:
+        _seed_tracks(session, tmp_home.lib, 8, duration_ms=30_000)
+        row = session.get(ScanState, 1)
+        assert row is not None
+        row.kind = "scan"
+        row.finished_at = "2026-01-01T00:00:01+00:00"
+        row.last_scan_finished_at = "2026-01-01T00:00:01+00:00"
+        session.commit()
+    station.run_catchup(t0)
+    with db.session() as session:
+        first = radio_repo.scan_finished_at(session)
+        row = session.get(ScanState, 1)
+        assert row is not None
+        row.kind = "regen-lyrics"
+        row.finished_at = "2026-01-01T00:00:02+00:00"
+        session.commit()
+    with db.session() as session:
+        assert radio_repo.scan_finished_at(session) == first
+    station.tick(t0 + timedelta(seconds=2))
+    assert station.now_playing().face == "current"
 
 
 def test_probe_fail_skips_without_duration_and_is_not_reprobed(tmp_home, db):

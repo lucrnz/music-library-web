@@ -61,11 +61,11 @@ class PersistedStation:
 
 
 def scan_finished_at(session: Session) -> str | None:
-    """``scan_state.finished_at`` when the last completed job was a library scan."""
+    """Last completed library scan timestamp. Regen jobs do not clear this."""
     row = session.get(ScanState, 1)
-    if row is None or row.kind != "scan":
+    if row is None:
         return None
-    return row.finished_at
+    return row.last_scan_finished_at
 
 
 def load_station(session: Session) -> PersistedStation:

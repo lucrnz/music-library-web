@@ -205,6 +205,9 @@ class ScanState(Base):
     force: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     started_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     finished_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    last_scan_finished_at: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )
     phase: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # Scan-only counters; leave 0 for regen kinds.
     files_seen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

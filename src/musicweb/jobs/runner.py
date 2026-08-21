@@ -61,6 +61,7 @@ class LibraryJobRunner:
         self._lock = threading.Lock()
         self._cancel = threading.Event()
         self._running = False
+        self._job_kind: JobKind = "scan"
 
     @property
     def is_running(self) -> bool:
@@ -101,23 +102,7 @@ class LibraryJobRunner:
                 return False
             self._cancel.clear()
             self._running = True
-            with self._db.session() as session:
-                self._set_state(
-                    session,
-                    status="running",
-                    kind=kind,
-                    mode=mode if kind == "scan" else None,
-                    force=force if kind != "scan" else (mode == "full"),
-                    started_at=utc_now_iso(),
-                    finished_at=None,
-                    phase=None,
-                    files_seen=0,
-                    files_upserted=0,
-                    files_missing=0,
-                    files_total_hint=None,
-                    current_path=None,
-                    last_error=None,
-                )
+            self._begin(kind, mode=mode, force=force)
             self._thread = threading.Thread(
                 target=self._thread_main,
                 args=(kind,),
@@ -141,6 +126,7 @@ class LibraryJobRunner:
                 raise RuntimeError("Library job already running")
             self._cancel.clear()
             self._running = True
+            self._begin(kind, mode=mode, force=force)
         try:
             try:
                 self._execute(kind, mode=mode, force=force)
@@ -202,6 +188,32 @@ class LibraryJobRunner:
             setattr(row, key, value)
         session.commit()
 
+    def _begin(
+        self,
+        kind: JobKind,
+        *,
+        mode: ScanMode = "quick",
+        force: bool = False,
+    ) -> None:
+        self._job_kind = kind
+        with self._db.session() as session:
+            self._set_state(
+                session,
+                status="running",
+                kind=kind,
+                mode=mode if kind == "scan" else None,
+                force=force if kind != "scan" else (mode == "full"),
+                started_at=utc_now_iso(),
+                finished_at=None,
+                phase=None,
+                files_seen=0,
+                files_upserted=0,
+                files_missing=0,
+                files_total_hint=None,
+                current_path=None,
+                last_error=None,
+            )
+
     def _progress(
         self,
         *,
@@ -212,23 +224,10 @@ class LibraryJobRunner:
         files_missing: int = 0,
         files_total_hint: int | None = None,
         current_path: str | None = None,
-        persist: bool = True,
-        **extra_state: object,
     ) -> None:
-        if persist:
-            with self._db.session() as session:
-                self._set_state(
-                    session,
-                    phase=phase,
-                    files_seen=files_seen,
-                    files_upserted=files_upserted,
-                    files_missing=files_missing,
-                    files_total_hint=files_total_hint,
-                    current_path=current_path,
-                    **extra_state,
-                )
         status = "canceling" if self._cancel.is_set() else "running"
-        parts: list[str] = [f"Library scan: {status}"]
+        kind = self._job_kind
+        parts: list[str] = [f"Library {kind}: {status}"]
         if mode:
             parts[0] += f" ({mode})"
         if phase:
@@ -274,23 +273,6 @@ class LibraryJobRunner:
         label = kind if kind != "scan" else f"scan({mode})"
         logger.info("Library job started (%s)", label)
         try:
-            with self._db.session() as session:
-                self._set_state(
-                    session,
-                    status="running",
-                    kind=kind,
-                    mode=mode if kind == "scan" else None,
-                    force=force if kind != "scan" else (mode == "full"),
-                    started_at=utc_now_iso(),
-                    finished_at=None,
-                    phase=None,
-                    files_seen=0,
-                    files_upserted=0,
-                    files_missing=0,
-                    files_total_hint=None,
-                    current_path=None,
-                    last_error=None,
-                )
             if kind == "scan":
                 self._run_scan(mode)
             elif kind == "regen-covers":
@@ -301,14 +283,17 @@ class LibraryJobRunner:
                 self._run_regen_lyrics(force=force)
             else:
                 raise ValueError(f"Unknown job kind: {kind}")
+            finished = utc_now_iso()
+            idle: dict[str, object] = {
+                "status": "idle",
+                "finished_at": finished,
+                "phase": None,
+                "current_path": None,
+            }
+            if kind == "scan":
+                idle["last_scan_finished_at"] = finished
             with self._db.session() as session:
-                self._set_state(
-                    session,
-                    status="idle",
-                    finished_at=utc_now_iso(),
-                    phase=None,
-                    current_path=None,
-                )
+                self._set_state(session, **idle)
             self._log_final_summary(kind=kind, canceled=self._cancel.is_set())
         except Exception as exc:
             logger.exception("Library job failed (%s)", kind)
@@ -328,7 +313,6 @@ class LibraryJobRunner:
             phase="index",
             files_seen=0,
             files_upserted=0,
-            persist=False,
         )
         seen_count, upserted, seen_paths, cover_queue = self._phase_index(mode)
         if self._cancel.is_set():
@@ -342,6 +326,8 @@ class LibraryJobRunner:
 
         force = mode == "full"
         if cover_queue:
+            with self._db.session() as session:
+                self._set_state(session, phase="covers")
             self._progress(
                 mode=mode,
                 phase="covers",
@@ -361,6 +347,8 @@ class LibraryJobRunner:
         if self._cancel.is_set():
             return
 
+        with self._db.session() as session:
+            self._set_state(session, phase="artist_images")
         self._progress(
             mode=mode,
             phase="artist_images",
@@ -378,6 +366,8 @@ class LibraryJobRunner:
         if self._cancel.is_set():
             return
 
+        with self._db.session() as session:
+            self._set_state(session, phase="lyrics")
         self._progress(
             mode=mode,
             phase="lyrics",
@@ -498,7 +488,6 @@ class LibraryJobRunner:
                 phase="finalize",
                 files_seen=seen_count,
                 files_upserted=upserted,
-                persist=False,
             )
             missing = mark_missing(session, seen_paths)
             recount_entities(session)
@@ -517,6 +506,5 @@ class LibraryJobRunner:
             files_seen=seen_count,
             files_upserted=upserted,
             files_missing=missing,
-            persist=False,
         )
         return missing

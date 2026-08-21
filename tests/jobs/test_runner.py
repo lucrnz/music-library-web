@@ -8,6 +8,7 @@ import pytest
 
 from musicweb.artist_image import ArtistImageStore
 from musicweb.cover import CoverStore
+from musicweb.db.models import ScanState
 from musicweb.jobs.runner import LibraryJobRunner
 from musicweb.library import Library
 
@@ -97,3 +98,45 @@ def test_run_sync_clears_running_on_success_and_error(tmp_home, db, monkeypatch)
     with pytest.raises(RuntimeError, match="encode exploded"):
         runner.run_sync("scan")
     assert runner.is_running is False
+
+
+def test_start_writes_running_before_execute(tmp_home, db, monkeypatch):
+    runner = _runner(tmp_home, db)
+    entered = threading.Event()
+    gate = threading.Event()
+    saw_running = {"ok": False}
+
+    def blocked(self, kind, *, mode="quick", force=False):
+        with db.session() as session:
+            row = session.get(ScanState, 1)
+            saw_running["ok"] = row is not None and row.status == "running"
+        entered.set()
+        gate.wait(timeout=5)
+
+    monkeypatch.setattr(LibraryJobRunner, "_execute", blocked)
+    try:
+        assert runner.start("scan") is True
+        assert entered.wait(timeout=2)
+        assert saw_running["ok"] is True
+    finally:
+        gate.set()
+        runner.shutdown()
+
+
+def test_scan_finish_sets_watermark_regen_does_not_clear(tmp_home, db):
+    runner = _runner(tmp_home, db)
+    runner.run_sync("scan")
+    with db.session() as session:
+        row = session.get(ScanState, 1)
+        assert row is not None
+        scan_stamp = row.last_scan_finished_at
+        assert scan_stamp
+        assert row.finished_at == scan_stamp
+        assert row.kind == "scan"
+
+    runner.run_sync("regen-lyrics", force=True)
+    with db.session() as session:
+        row = session.get(ScanState, 1)
+        assert row is not None
+        assert row.kind == "regen-lyrics"
+        assert row.last_scan_finished_at == scan_stamp
