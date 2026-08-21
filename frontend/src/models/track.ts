@@ -63,11 +63,6 @@ export interface CatalogTrackRecord {
   albumArtistId?: string;
   albumArtist?: string;
   track?: number | null;
-  is_lossy?: boolean;
-  source_codec?: string;
-  bitrate_kbps?: number | null;
-  sample_rate_hz?: number | null;
-  bitrate_mode?: string | null;
 }
 
 function asRecord(raw: unknown): Record<string, unknown> | null {

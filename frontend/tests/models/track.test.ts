@@ -55,4 +55,24 @@ describe("fromCatalogRecord", () => {
     expect(track.bitrateMode).toBe("cbr");
     expect(track.bitrateKbps).toBe(256);
   });
+
+  it("still maps a snake-shaped legacy IDB row", () => {
+    const raw: Record<string, unknown> = {
+      trackId: "t2",
+      title: "Old",
+      artist: "A",
+      album: "B",
+      is_lossy: true,
+      source_codec: "mp3",
+      bitrate_kbps: 320,
+      sample_rate_hz: 44100,
+      bitrate_mode: "vbr",
+    };
+    const track = fromCatalogRecord(raw);
+    expect(track.isLossy).toBe(true);
+    expect(track.sourceCodec).toBe("mp3");
+    expect(track.bitrateKbps).toBe(320);
+    expect(track.sampleRateHz).toBe(44100);
+    expect(track.bitrateMode).toBe("vbr");
+  });
 });
