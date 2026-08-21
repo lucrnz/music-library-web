@@ -44,7 +44,7 @@ OPFS is mandatory for resumable Range downloads and partials. Exact object-store
 4. **Network policy.** Auto-pause when hard offline or server unreachable. User pause is separate from auto-pause.
 5. **Catalog projection.** In-memory projection of downloaded tracks feeds UI icons, prepare skip, and tree/list browse of local content. `trackDownloadState` `ready` / `other` means a playable local file — playback uses that join to gray and skip undownloaded queue rows when `connectivity.canUseRemote` is false (see `docs/systems/playback.md`).
 6. **Play path.** Delivery choice (local blob vs stream) is owned by playback resolution (`resolve.js` + player), not by re-encoding on the client.
-7. **Artist thumbs.** Offline thumbs follow `GET /api/artist-image` (preferred bytes first). After a local preferred upload (online submit or flush), `applyPreferredServerResult` overwrites the OPFS artist thumb, publishes a new object URL on `urlCache` (`artist:${id}:thumb`), then revokes the old one. List/tree read that cache. `artistImageUrl` busts on nonzero `preferred_rev` even after revert. A queued revert does not change GET bytes until DELETE succeeds.
+7. **Artist thumbs.** Offline thumbs follow `GET /api/artist-image` (preferred bytes first). After a local preferred upload (online submit or flush), `applyPreferredServerResult` overwrites the OPFS artist thumb, publishes a new object URL on `urlCache` (`artist:${id}:thumb`), then revokes the old one. List/tree read that cache and browse `artUrls` under the same keys (`artist:${id}:thumb`, `cover:${albumId}:thumb`). `artistImageUrl` busts on nonzero `preferredRev` even after revert. A queued revert does not change GET bytes until DELETE succeeds.
 
 ## Ownership / import surface
 

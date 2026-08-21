@@ -41,7 +41,7 @@ One chip row (All-time, Last 7 days, Last 30 days, then months that have data). 
 
 Empty copy: no history at all vs no listens in the selected range. Exact strings live in the Stats view.
 
-Tracks map through `fromApiTrack`. Artist list items stay server-shaped plus ranking extras. Do not widen `Track` or `ArtistListItem`.
+Tracks map through `fromApiTrack`. Ranking artists map through `fromApiArtist`; `ListenArtist` is camel (`playCount`, `lastCountedAt`). Do not widen `Track` or `Artist` with ranking-only fields except via `ListenArtist` / `ListenTrack`.
 
 ## Out of scope
 

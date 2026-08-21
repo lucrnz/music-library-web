@@ -62,7 +62,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **Present audio files** go through `Library.present_audio` (jail + exists + indexable). Stream maps `None` to 404. Enqueue, radio, scan lyrics/covers, and local artist-image folder lookup branch on `None`. Do not reimplement resolve-and-exists at those call sites. `resolve` stays for directory browse/collect.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
-- **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`.
+- **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`. The source owns list load and tree `loadRoots` / `loadChildren` / `resolveCover`; the tree pane does not switch on mode for those jobs.
 - **Row action menus** live under `frontend/src/components/menu/`. Desktop media queries for new client code live in `frontend/src/layout.ts`. See `docs/frontend/conventions.md`.
 - **Offline downloads** stay under `frontend/src/downloads/` and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.
