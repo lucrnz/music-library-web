@@ -39,7 +39,7 @@ When downloads are enabled and `connectivity.canUseRemote` is false, queue rows 
 
 The reactive `player` record lives in `playerState.js`. Cover / Media Session metadata: `playerSession.js`. Volume / expanded storage: `playerPrefs.js`. Resume position: `playbackPosition.ts` (`musicweb.playbackPosition.v1`). Load and sinks stay in `player.js`.
 
-Household radio is **not** stream-vs-download resolve. The radio element loads `/api/stream` for the current official id and instructed-seeks to the station clock. Display clocks: not tuned / tuning follow the official snapshot; tuned follows `audio.currentTime` (re-seek if drift > 2s). Radio now-playing reuses `NowPlayingView` (`setRangeFill`, injected `PlaybackStatusLine`) — not a second badge. After Tune out the stopped radio face stays on the off-radio mini or compact bar. A library/queue play calls `exitToQueue()` and takes the player. See `docs/systems/radio.md`.
+Household radio is **not** stream-vs-download resolve. The radio element loads `/api/stream` for the current official id and instructed-seeks to the station clock. Display clocks: not tuned / tuning follow the official snapshot; tuned follows `audio.currentTime` (re-seek if drift > 2s). Radio now-playing reuses `NowPlayingView` (`setRangeFill`, injected `PlaybackStatusLine`) — not a second badge. On `/radio` the codec line mounts only while tuned; the status wrap stays reserved. After Tune out the stopped radio face stays on the off-radio mini or compact bar. A library/queue play calls `exitToQueue()` and takes the player. See `docs/systems/radio.md`.
 
 ## Resume position
 
