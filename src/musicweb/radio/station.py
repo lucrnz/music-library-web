@@ -16,7 +16,7 @@ from musicweb.db.engine import Database
 from musicweb.db.models import Track
 from musicweb.db.repositories import radio as radio_repo
 from musicweb.db.repositories import tracks as tracks_repo
-from musicweb.library import Library, PathEscapeError
+from musicweb.library import Library
 from musicweb.radio.catalog import load_snapshot
 from musicweb.radio.picker import pick_batch
 from musicweb.radio.probe import file_is_playable
@@ -326,7 +326,10 @@ class RadioStation:
         duration_ms = row.duration_ms if row is not None else None
         resolvable = False
         if row is not None:
-            resolvable = self._resolve_path(row) is not None
+            resolvable = (
+                not row.is_missing
+                and self._library.present_audio(row.rel_path) is not None
+            )
         if row is None or duration_ms is None or not resolvable:
             self._snapshot = StationSnapshot(
                 face="skip_pending",
@@ -345,24 +348,17 @@ class RadioStation:
     def _current_block_reason(self, session: Session, row: Track) -> str | None:
         if row.id in self.skip_ids:
             return "skip"
-        path = self._resolve_path(row)
+        path = (
+            None
+            if row.is_missing
+            else self._library.present_audio(row.rel_path)
+        )
         if path is None:
             return "path"
         if not self._probe(path):
             self.skip_ids.add(row.id)
             return "probe"
         return None
-
-    def _resolve_path(self, row: Track) -> Path | None:
-        if not row.rel_path or row.is_missing:
-            return None
-        try:
-            path = self._library.resolve(row.rel_path)
-        except PathEscapeError:
-            return None
-        if not path.is_file():
-            return None
-        return path
 
     def _skip_current(self, session: Session, reason: str) -> None:
         track_id = self._current_track_id

@@ -83,10 +83,5 @@ def sample_audio_dir(
         ).scalar_one_or_none()
     if track is None or not track.rel_path:
         return None
-    try:
-        path = library.resolve(track.rel_path)
-        if path.is_file():
-            return path.parent
-    except Exception:
-        return None
-    return None
+    path = library.present_audio(track.rel_path)
+    return path.parent if path is not None else None

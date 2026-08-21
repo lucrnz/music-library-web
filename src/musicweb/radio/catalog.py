@@ -9,22 +9,18 @@ from collections.abc import Sequence
 from sqlalchemy.orm import Session
 
 from musicweb.db.repositories import radio as radio_repo
-from musicweb.library import Library, PathEscapeError
+from musicweb.library import Library
 from musicweb.radio.types import CatalogSnapshot, CatalogTrack, EligibleRow
 
 logger = logging.getLogger(__name__)
 
 
 def snapshot_from_rows(library: Library, rows: Sequence[EligibleRow]) -> CatalogSnapshot:
-    """Map eligible rows through ``Library.resolve``; omit jail/missing paths."""
+    """Map eligible rows through ``Library.present_audio``; omit jail/missing paths."""
     artists: dict[str, dict[str, list[CatalogTrack]]] = defaultdict(lambda: defaultdict(list))
     for row in rows:
-        try:
-            path = library.resolve(row.rel_path)
-        except PathEscapeError:
-            logger.info("radio catalog: skip %s (path jail)", row.id)
-            continue
-        if not path.is_file():
+        path = library.present_audio(row.rel_path)
+        if path is None:
             logger.info("radio catalog: skip %s (missing path)", row.id)
             continue
         track = CatalogTrack(

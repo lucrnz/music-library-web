@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from pathlib import Path
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -22,18 +21,6 @@ logger = logging.getLogger(__name__)
 _NON_OK_STATUSES = ("not_found", "error", "pending", "skipped")
 
 _BATCH_SIZE = 100
-
-
-def _resolve_audio_path(library: Library, rel_path: str | None) -> Path | None:
-    if not rel_path:
-        return None
-    try:
-        candidate = library.resolve(rel_path)
-        if candidate.is_file():
-            return candidate
-    except Exception:
-        return None
-    return None
 
 
 def _ordered_unique(ids: list[str]) -> list[str]:
@@ -126,7 +113,7 @@ def _pass2_sidecar_ids(session: Session, library: Library) -> list[str]:
     for track_id, rel_path, source in rows:
         if source == "local_lrc":
             continue
-        abs_path = _resolve_audio_path(library, rel_path)
+        abs_path = library.present_audio(rel_path)
         if abs_path is None:
             continue
         try:
@@ -218,7 +205,7 @@ def fetch_track_lyrics(
                 if track is None or track.is_missing:
                     continue
 
-                abs_path = _resolve_audio_path(library, track.rel_path)
+                abs_path = library.present_audio(track.rel_path)
                 if not fetcher.needs_fetch(
                     track, track.lyrics, force=force, abs_path=abs_path
                 ):

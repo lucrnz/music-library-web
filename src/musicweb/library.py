@@ -56,6 +56,18 @@ class Library:
         """True for indexable audio (lossless, plus MP3/AAC when opted in)."""
         return is_indexable_audio(path, index_lossy=self.index_lossy)
 
+    def present_audio(self, rel: str | None) -> Path | None:
+        """Jail + exists + indexable audio. ``None`` on miss, escape, or non-audio."""
+        if not (rel or "").strip():
+            return None
+        try:
+            path = self.resolve(rel)
+        except (PathEscapeError, OSError):
+            return None
+        if not path.is_file() or not self.is_audio(path):
+            return None
+        return path
+
     def browse(self, relative: str | None = None) -> dict:
         """
         List one level of children under ``relative`` (empty = library root).

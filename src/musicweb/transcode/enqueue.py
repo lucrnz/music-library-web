@@ -38,12 +38,8 @@ def enqueue_prepare(
         ):
             counts["skipped"] += 1
             continue
-        try:
-            resolved = library.resolve(track.rel_path)
-        except Exception:
-            counts["skipped"] += 1
-            continue
-        if not resolved.is_file() or not library.is_audio(resolved):
+        resolved = library.present_audio(track.rel_path)
+        if resolved is None:
             counts["skipped"] += 1
             continue
         warn_null_track_tech(track)

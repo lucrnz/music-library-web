@@ -34,7 +34,7 @@ def test_skips_lossy_and_missing_forwards_label(monkeypatch):
         lambda _session, _ids: [lossless, lossy, missing],
     )
     path = SimpleNamespace(is_file=lambda: True)
-    lib = SimpleNamespace(resolve=lambda _rel: path, is_audio=lambda _p: True)
+    lib = SimpleNamespace(present_audio=lambda _rel: path)
     tc = SimpleNamespace(prepare=Mock(return_value="queued"))
     counts = enqueue_prepare(
         SimpleNamespace(),
@@ -64,7 +64,7 @@ def test_skips_source_tag_without_prepare(monkeypatch):
         lambda _session, _ids: [lossless],
     )
     path = SimpleNamespace(is_file=lambda: True)
-    lib = SimpleNamespace(resolve=lambda _rel: path, is_audio=lambda _p: True)
+    lib = SimpleNamespace(present_audio=lambda _rel: path)
     tc = SimpleNamespace(prepare=Mock(return_value="queued"))
     counts = enqueue_prepare(
         SimpleNamespace(),

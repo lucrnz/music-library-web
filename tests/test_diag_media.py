@@ -99,9 +99,7 @@ def test_stream_passthrough_everything_writes_info(
     monkeypatch.setattr(
         "musicweb.routes.media.tracks_repo.get", lambda db, tid: _lossy_track()
     )
-    monkeypatch.setattr(
-        "musicweb.routes.media._resolve_track_file", lambda lib, track: audio
-    )
+    req.app.state.library.present_audio = lambda rel: audio
     res = asyncio.run(stream(req, id="t1", codec="source", db=None))
     assert isinstance(res, FileResponse)
     lines = _lines(tmp_path)
@@ -121,9 +119,7 @@ def test_stream_passthrough_errors_only_skips_info(
     monkeypatch.setattr(
         "musicweb.routes.media.tracks_repo.get", lambda db, tid: _lossy_track()
     )
-    monkeypatch.setattr(
-        "musicweb.routes.media._resolve_track_file", lambda lib, track: audio
-    )
+    req.app.state.library.present_audio = lambda rel: audio
     res = asyncio.run(stream(req, id="t1", codec="source", db=None))
     assert isinstance(res, FileResponse)
     assert _lines(tmp_path) == []

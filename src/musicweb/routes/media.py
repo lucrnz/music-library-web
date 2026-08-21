@@ -102,15 +102,6 @@ def _emit_stream_reject(
     )
 
 
-def _resolve_track_file(lib: Library, track: Track) -> Path:
-    if track.is_missing or not track.rel_path:
-        raise HTTPException(status_code=404, detail="Track file is missing")
-    resolved = lib.resolve(track.rel_path)
-    if not resolved.is_file() or not lib.is_audio(resolved):
-        raise HTTPException(status_code=404, detail="Audio file not found")
-    return resolved
-
-
 @router.get("/codecs")
 async def codecs() -> dict:
     """Browser stream profiles only (exclusive FLAC tags are not listed)."""
@@ -150,7 +141,11 @@ async def stream(
         track = tracks_repo.get(db, id)
         if track is None:
             raise HTTPException(status_code=404, detail="Track not found")
-        resolved = _resolve_track_file(lib, track)
+        if track.is_missing or not track.rel_path:
+            raise HTTPException(status_code=404, detail="Track file is missing")
+        resolved = lib.present_audio(track.rel_path)
+        if resolved is None:
+            raise HTTPException(status_code=404, detail="Audio file not found")
         intent = stream_intent(is_lossy=bool(track.is_lossy), codec=codec)
         if intent.kind == "reject":
             raise HTTPException(status_code=intent.status, detail=intent.detail)
@@ -282,10 +277,7 @@ async def cover(
             raise HTTPException(status_code=404, detail="Track not found")
         resolved_album_id = track.album_id
         if not track.is_missing and track.rel_path:
-            try:
-                audio_path = lib.resolve(track.rel_path)
-            except Exception:
-                audio_path = None
+            audio_path = lib.present_audio(track.rel_path)
     elif not album_id:
         raise HTTPException(
             status_code=400,

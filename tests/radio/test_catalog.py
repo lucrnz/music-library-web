@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 from musicweb.db.models import Album, Artist, Track
 from musicweb.db.repositories import radio as radio_repo
-from musicweb.library import PathEscapeError
 from musicweb.radio.catalog import snapshot_from_rows
 from musicweb.radio.types import EligibleRow
 
@@ -128,11 +127,9 @@ def test_resolve_failure_omits_row(tmp_path):
     good.write_bytes(b"x")
 
     class FakeLib:
-        def resolve(self, rel: str) -> Path:
-            if rel == "jail.flac":
-                raise PathEscapeError("jail")
-            if rel == "missing.flac":
-                return tmp_path / "does-not-exist.flac"
+        def present_audio(self, rel: str | None) -> Path | None:
+            if rel in {"jail.flac", "missing.flac"}:
+                return None
             return good
 
     rows = [
@@ -149,7 +146,7 @@ def test_resolve_failure_omits_row(tmp_path):
 def test_snapshot_has_no_source_tech(tmp_path):
     path = tmp_path / "a.flac"
     path.write_bytes(b"x")
-    lib = SimpleNamespace(resolve=lambda _rel: path)
+    lib = SimpleNamespace(present_audio=lambda _rel: path)
     snap = snapshot_from_rows(
         lib,  # type: ignore[arg-type]
         [EligibleRow("t1", "a.flac", 180_000, "alb", "art")],

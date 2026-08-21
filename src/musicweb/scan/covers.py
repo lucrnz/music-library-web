@@ -35,10 +35,10 @@ def album_cover_sources(session: Session, library: Library) -> dict[str, Path]:
     for album_id, rel_path in rows:
         if album_id is None or rel_path is None or album_id in out:
             continue
-        try:
-            out[album_id] = library.resolve(rel_path)
-        except (OSError, ValueError):
+        path = library.present_audio(rel_path)
+        if path is None:
             continue
+        out[album_id] = path
     return out
 
 
