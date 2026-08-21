@@ -4,6 +4,7 @@
  */
 import { computed } from "vue";
 import { coverUrl } from "@/api";
+import { resolveRowCover } from "@/components/library/rowCover";
 import { formatTrackLabel } from "@/util";
 import DownloadIcon from "@/components/downloads/DownloadIcon.vue";
 import Icon from "@/components/icons/Icon.vue";
@@ -14,12 +15,12 @@ import { playOrQueueTrack, queueOnly } from "@/components/library/rows";
 import type { Track } from "@/models/track";
 const props = withDefaults(defineProps<{
   track: Track | null;
-  coverSrc?: string;
+  coverSrc?: string | null;
   showDownload?: boolean;
   titleMode?: string;
   subtitleMode?: string;
   showMenu?: boolean;
-}>(), { coverSrc: "", showDownload: true, titleMode: "label", subtitleMode: "artist", track: null, showMenu: false });
+}>(), { coverSrc: null, showDownload: true, titleMode: "label", subtitleMode: "artist", track: null, showMenu: false });
 const emit = defineEmits<{
   play: [track: Track];
   queue: [track: Track];
@@ -27,10 +28,9 @@ const emit = defineEmits<{
   "row-contextmenu": [track: Track, e: MouseEvent];
 }>();
 const desktop = useDesktopViewport();
-const cover = computed(() => {
-      if (props.coverSrc) return props.coverSrc;
-      return coverUrl(props.track, "thumb", false);
-    });
+const cover = computed(() =>
+      resolveRowCover(props.coverSrc, coverUrl(props.track, "thumb", false))
+    );
 
     const title = computed(() => {
       if (!props.track) return "";

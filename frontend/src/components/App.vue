@@ -7,7 +7,6 @@ import PlaylistView from "@/components/playlist/PlaylistView.vue";
 import PlayerBar from "@/components/player/PlayerBar.vue";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import DownloadsModal from "@/components/downloads/DownloadsModal.vue";
-import DownloadsLibraryView from "@/components/downloads/DownloadsLibraryView.vue";
 import AppDialog from "@/components/dialog/AppDialog.vue";
 import ImageCropper from "@/components/artistArt/ImageCropper.vue";
 import TabBar from "@/components/layout/TabBar.vue";
@@ -21,15 +20,13 @@ import RadioView from "@/components/radio/RadioView.vue";
 const route = useRoute();
     const onQueue = computed(() => route.meta.pane === "queue");
     const onRadio = computed(() => route.meta.pane === "radio");
-    const onDownloads = computed(() => route.meta.mode === "downloads");
 </script>
 
 <template>
     <main>
       <RadioView v-if="onRadio" />
       <template v-else>
-        <DownloadsLibraryView v-if="onDownloads" :class="{ hidden: onQueue }" />
-        <LibraryView v-else :class="{ hidden: onQueue }" />
+        <LibraryView :class="{ hidden: onQueue }" />
         <PlaylistView :class="{ hidden: !onQueue }" />
       </template>
     </main>

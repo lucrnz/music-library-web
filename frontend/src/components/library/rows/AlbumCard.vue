@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { coverUrl } from "@/api";
+import { resolveRowCover } from "@/components/library/rowCover";
 import { kindForAlbum } from "@/lossyKind";
 import { useDesktopViewport } from "@/layout";
 import Icon from "@/components/icons/Icon.vue";
@@ -8,19 +9,20 @@ import LossyMark from "@/components/lossy/LossyMark.vue";
 import type { LibraryAlbum } from "@/components/library/loaders";
 const props = withDefaults(defineProps<{
   album: LibraryAlbum;
-  coverSrc?: string;
+  coverSrc?: string | null;
   showMenu?: boolean;
-}>(), { coverSrc: "", showMenu: false });
+}>(), { coverSrc: null, showMenu: false });
 const emit = defineEmits<{
   open: [album: LibraryAlbum];
   "menu-click": [album: LibraryAlbum, e: MouseEvent];
   "row-contextmenu": [album: LibraryAlbum, e: MouseEvent];
 }>();
 const desktop = useDesktopViewport();
-const cover = computed(
-      () =>
-        props.coverSrc ||
-        coverUrl({ albumId: props.album.id }, "thumb", false)
+const cover = computed(() =>
+      resolveRowCover(
+        props.coverSrc,
+        coverUrl({ albumId: props.album.id }, "thumb", false),
+      )
     );
     const sub = computed(() =>
       [props.album.artist, props.album.year].filter(Boolean).join(" · ")

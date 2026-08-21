@@ -13,8 +13,13 @@ export function libraryShowTree({
   mode: string;
 }): boolean {
   if (layout !== "tree") return false;
-  if (isSearch || mode === "search") return false;
-  return mode === "folders" || mode === "artists" || mode === "albums";
+  if (isSearch || mode === "search" || mode === "stats") return false;
+  return (
+    mode === "folders" ||
+    mode === "artists" ||
+    mode === "albums" ||
+    mode === "downloads"
+  );
 }
 
 export function libraryShowLayoutToggle({
@@ -34,28 +39,12 @@ export function libraryShowLayoutToggle({
   if (showTree) return true;
   if (albumId || bodyKind === "tracks") return false;
   if (bodyKind === "search") return false;
-  return mode === "folders" || mode === "artists" || mode === "albums";
-}
-
-export function downloadsShowTree({
-  layout,
-  routeMode,
-}: {
-  layout: string;
-  routeMode: string | undefined;
-}): boolean {
-  return layout === "tree" && routeMode === "downloads";
-}
-
-export function downloadsShowLayoutToggle({
-  showTree,
-  routeName,
-}: {
-  showTree: boolean;
-  routeName: string;
-}): boolean {
-  if (showTree) return true;
-  return routeName !== "downloads-album";
+  return (
+    mode === "folders" ||
+    mode === "artists" ||
+    mode === "albums" ||
+    mode === "downloads"
+  );
 }
 
 export function browseIsGrid({

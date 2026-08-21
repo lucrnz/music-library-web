@@ -1,46 +1,16 @@
 /**
  * Pure loader for the offline Downloads library browse mode.
- * Track lists are projected to the client Track type.
+ * Returns the shared LibraryPage shape.
  */
 
-import { kindForTracks, type AlbumLossyKind } from "@/lossyKind";
-import { fromCatalogRecord, type Track } from "@/models/track";
+import { kindForTracks } from "@/lossyKind";
+import { fromCatalogRecord } from "@/models/track";
 import { getLocalArtistImageUrl, getLocalCoverUrl } from "@/downloads/catalog";
-import type { ArtistListItem } from "@/api";
-import type { LibraryAlbum } from "@/components/library/loaders";
+import { emptyPage, page, type LibraryPage } from "@/components/library/loaders";
 import {
   buildDownloadsHierarchy,
   type DownloadsHierarchyAlbum,
 } from "@/downloads/hierarchy";
-
-export interface DownloadsBrowseArtist {
-  id: string;
-  name: string;
-  album_count: number;
-  track_count: number;
-}
-
-export interface DownloadsBrowseAlbum {
-  id: string;
-  title: string;
-  artist: string;
-  trackCount: number;
-  lossyKind: AlbumLossyKind | null;
-}
-
-export interface DownloadsBrowseState {
-  title: string;
-  showBack: boolean;
-  emptyMsg: string;
-  artists: DownloadsBrowseArtist[];
-  albums: DownloadsBrowseAlbum[];
-  tracks: Track[];
-  albumGrid: boolean;
-  artUrls: Record<string, string>;
-  parentArtistId?: string;
-  headerArtist?: ArtistListItem | null;
-  headerAlbum?: LibraryAlbum | null;
-}
 
 export interface DownloadsBrowseOpts {
   routeName: string;
@@ -51,23 +21,13 @@ export interface DownloadsBrowseOpts {
 
 export async function loadDownloadsView(
   opts: DownloadsBrowseOpts,
-): Promise<DownloadsBrowseState> {
-  const empty: DownloadsBrowseState = {
-    title: "Downloads",
-    showBack: false,
-    emptyMsg: "",
-    artists: [],
-    albums: [],
-    tracks: [],
-    albumGrid: false,
-    artUrls: {},
-  };
-
+): Promise<LibraryPage> {
   if (!opts.enabled) {
-    return {
-      ...empty,
-      emptyMsg: "Enable downloads in Settings to browse offline library",
-    };
+    return emptyPage({
+      title: "Downloads",
+      showBack: false,
+      message: "Enable downloads in Settings to browse offline library",
+    });
   }
 
   const tree = await buildDownloadsHierarchy();
@@ -87,45 +47,46 @@ export async function loadDownloadsView(
       }
     }
     if (!found) {
-      return {
-        ...empty,
+      return emptyPage({
         title: "Album",
         showBack: true,
-        emptyMsg: "Album not in downloads",
-      };
+        message: "Album not in downloads",
+      });
     }
     if (found.hasThumb) {
       const u = await getLocalCoverUrl(found.albumId, "thumb");
       if (u) artUrls[`al:${found.albumId}`] = u;
     }
-    return {
-      title: found.title || "Album",
-      showBack: true,
-      emptyMsg: "",
-      artists: [],
-      albums: [],
-      tracks: found.tracks.map((t) => fromCatalogRecord(t)),
-      albumGrid: false,
-      artUrls,
-      parentArtistId,
-      headerAlbum: {
-        id: found.albumId,
-        title: found.title,
-        artist: parentArtistName,
-        trackCount: found.tracks.length,
+    return page(
+      {
+        title: found.title || "Album",
+        showBack: true,
+        backArtistId: parentArtistId,
       },
-    };
+      {
+        kind: "tracks",
+        tracks: found.tracks.map((t) => fromCatalogRecord(t)),
+      },
+      {
+        artUrls,
+        headerAlbum: {
+          id: found.albumId,
+          title: found.title,
+          artist: parentArtistName,
+          trackCount: found.tracks.length,
+        },
+      },
+    );
   }
 
   if (opts.routeName === "downloads-artist") {
     const ar = tree.artists.find((a) => a.artistId === opts.artistId);
     if (!ar) {
-      return {
-        ...empty,
+      return emptyPage({
         title: "Artist",
         showBack: true,
-        emptyMsg: "Artist not in downloads",
-      };
+        message: "Artist not in downloads",
+      });
     }
     if (ar.hasThumb) {
       const u = await getLocalArtistImageUrl(ar.artistId, "thumb");
@@ -137,52 +98,57 @@ export async function loadDownloadsView(
         if (u) artUrls[`al:${al.albumId}`] = u;
       }
     }
-    return {
-      title: ar.name || "Artist",
-      showBack: true,
-      emptyMsg: ar.albums.length ? "" : "No albums",
-      artists: [],
-      albums: ar.albums.map((al) => ({
-        id: al.albumId,
-        title: al.title,
-        artist: ar.name,
-        trackCount: al.tracks.length,
-        lossyKind: kindForTracks(al.tracks),
-      })),
-      tracks: [],
-      albumGrid: true,
-      artUrls,
-      headerArtist: {
-        id: ar.artistId,
-        name: ar.name,
-        album_count: ar.albums.length,
-        track_count: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
+    return page(
+      { title: ar.name || "Artist", showBack: true },
+      {
+        kind: "albumGrid",
+        albums: ar.albums.map((al) => ({
+          id: al.albumId,
+          title: al.title,
+          artist: ar.name,
+          trackCount: al.tracks.length,
+          lossyKind: kindForTracks(al.tracks),
+        })),
       },
-    };
+      {
+        artUrls,
+        headerArtist: {
+          id: ar.artistId,
+          name: ar.name,
+          album_count: ar.albums.length,
+          track_count: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
+        },
+      },
+    );
   }
 
-  // Root: artist list
   for (const ar of tree.artists) {
     if (ar.hasThumb) {
       const u = await getLocalArtistImageUrl(ar.artistId, "thumb");
       if (u) artUrls[`a:${ar.artistId}`] = u;
     }
   }
-  return {
-    title: "Downloads",
-    showBack: false,
-    emptyMsg: tree.artists.length
-      ? ""
-      : "No downloads yet — download tracks from the library",
-    artists: tree.artists.map((ar) => ({
-      id: ar.artistId,
-      name: ar.name,
-      album_count: ar.albums.length,
-      track_count: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
-    })),
-    albums: [],
-    tracks: [],
-    albumGrid: false,
-    artUrls,
-  };
+  if (!tree.artists.length) {
+    return page(
+      { title: "Downloads", showBack: false },
+      {
+        kind: "empty",
+        message: "No downloads yet — download tracks from the library",
+      },
+      { artUrls },
+    );
+  }
+  return page(
+    { title: "Downloads", showBack: false },
+    {
+      kind: "artists",
+      artists: tree.artists.map((ar) => ({
+        id: ar.artistId,
+        name: ar.name,
+        album_count: ar.albums.length,
+        track_count: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
+      })),
+    },
+    { artUrls },
+  );
 }

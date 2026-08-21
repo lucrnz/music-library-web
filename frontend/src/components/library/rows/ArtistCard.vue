@@ -2,17 +2,18 @@
 /** Grid card for an artist (image + name + counts). */
 import { computed } from "vue";
 import { artistImageUrl } from "@/api";
+import { resolveRowCover } from "@/components/library/rowCover";
 import { isDesktopContextMenu } from "@/components/menu/rowActionMenu";
 import { useDesktopViewport } from "@/layout";
 import Icon from "@/components/icons/Icon.vue";
 import type { ArtistListItem } from "@/api";
 const props = withDefaults(defineProps<{
   artist: ArtistListItem;
-  coverSrc?: string;
+  coverSrc?: string | null;
   showCounts?: boolean;
   showMenu?: boolean;
   includePhoto?: boolean;
-}>(), { coverSrc: "", showCounts: true, showMenu: false, includePhoto: false });
+}>(), { coverSrc: null, showCounts: true, showMenu: false, includePhoto: false });
 const emit = defineEmits<{
   open: [artist: ArtistListItem];
   "menu-click": [artist: ArtistListItem, e: MouseEvent];
@@ -20,8 +21,11 @@ const emit = defineEmits<{
   "thumb-drop": [artist: ArtistListItem, file: File];
 }>();
 const desktop = useDesktopViewport();
-const cover = computed(
-      () => props.coverSrc || artistImageUrl(props.artist, "thumb", false)
+const cover = computed(() =>
+      resolveRowCover(
+        props.coverSrc,
+        artistImageUrl(props.artist, "thumb", false),
+      )
     );
     const sub = computed(() => {
       if (!props.showCounts) return "";

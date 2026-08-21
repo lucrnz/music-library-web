@@ -66,6 +66,8 @@ export interface LibraryPage {
   body: LibraryBody;
   headerArtist?: ArtistListItem | null;
   headerAlbum?: LibraryAlbum | null;
+  /** Offline browse blob URLs (`a:{id}`, `al:{id}`). Online pages omit this. */
+  artUrls?: Record<string, string>;
 }
 
 /**
@@ -76,7 +78,7 @@ export interface LibraryPage {
 export function page(
   chrome: LibraryChrome,
   body: LibraryBody,
-  extra?: Pick<LibraryPage, "headerArtist" | "headerAlbum">,
+  extra?: Pick<LibraryPage, "headerArtist" | "headerAlbum" | "artUrls">,
 ): LibraryPage {
   return { chrome, body, ...extra };
 }

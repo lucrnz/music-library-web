@@ -58,14 +58,14 @@ const emit = defineEmits<{
   "select-folder": [dir: BrowseDir];
   "select-file": [file: FileRowModel];
 }>();
-function artistSrc(artist: ArtistListItem) {
-      return props.artistCover ? props.artistCover(artist) : "";
+function artistSrc(artist: ArtistListItem): string | null {
+      return props.artistCover ? props.artistCover(artist) : null;
     }
-    function albumSrc(album: LibraryAlbum) {
-      return props.albumCover ? props.albumCover(album) : "";
+    function albumSrc(album: LibraryAlbum): string | null {
+      return props.albumCover ? props.albumCover(album) : null;
     }
-    function trackSrc(track: Track) {
-      return props.trackCover ? props.trackCover(track) : "";
+    function trackSrc(track: Track): string | null {
+      return props.trackCover ? props.trackCover(track) : null;
     }
     function selected(path: string) {
       return props.isSelected ? props.isSelected(path) : false;
