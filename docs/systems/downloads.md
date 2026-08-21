@@ -9,7 +9,7 @@ Optional client-side offline music: users can download stream-profile audio to t
   - User download with confirm: `ui.ts`
   - Reactive fields: `state.ts`
   - Filename / MIME: `media.ts`
-  - Catalog / projection / art / records + write mutex: `catalog.ts`
+  - Catalog barrel: `catalog.ts` re-exports `projection.ts` (status join), `art.ts` (OPFS art + blob URLs), `writer.ts` (IDB lock, pin/refcount, commit/delete)
   - Queue store and pump side: `queue.ts`, `queuePolicy.ts`, `worker.ts`
   - OPFS binary storage: `opfs.ts`
   - IndexedDB metadata: `db.ts` (no `blobs` store; binaries live in OPFS)
@@ -56,7 +56,9 @@ Durable split so `index.ts` does not become a barrel:
 | User download + near-quota confirm | `ui.ts` only |
 | Reactive `downloads` fields | `state.ts` |
 | Filename / MIME | `media.ts` |
-| Catalog projection, record CRUD, art, write mutex, finalize | `catalog.ts` |
+| Catalog projection / UI join | `projection.ts` (via `catalog.ts`) |
+| Local art files + blob URLs | `art.ts` (via `catalog.ts`) |
+| Catalog write mutex, pin/refcount, finalize, delete | `writer.ts` (via `catalog.ts`) |
 | Play/cover URL resolution | `resolve.ts` |
 | Queue guts / worker | internals (`queue.ts`, `queuePolicy.ts`, `worker.ts`) |
 

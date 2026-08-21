@@ -4,7 +4,7 @@
 
 - Job orchestration (scan + regen kinds): `src/musicweb/jobs/runner.py` (one `_begin`; `_progress` logs; a completed scan writes `last_scan_finished_at` for radio via `radio_repo.scan_finished_at`)
 - Walk / formats: `src/musicweb/scan/walk.py`, `formats.py`
-- Album lossy-kind reduce: `src/musicweb/scan/lossy_kind.py` (finalize SQL is a cache of the same reduce)
+- Album lossy-kind reduce: SQL in `finalize.recount_entities` (`mp3` / `aac` / `lossy` / `mixed`)
 - Fingerprints / identity: `src/musicweb/scan/fingerprint.py`, `identity.py`
 - Batch upsert: `src/musicweb/scan/batch.py`
 - Covers / artist images / lyrics phases: `scan/covers.py`, `scan/artist_images.py`, `scan/lyrics.py`

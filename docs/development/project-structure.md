@@ -38,7 +38,9 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `library.py` | Path jail (`resolve`) and present indexable audio (`present_audio`) under `MUSIC_LIBRARY_PATH` |
 | `metadata.py` | Tag / audio tech reading (mutagen) |
 | `cache.py` | Process-scoped temp caches (streams) |
-| `cover.py` / `artist_image.py` | Persisted WebP cover and portrait stores under the data dir |
+| `cover.py` | Persisted album WebP covers under the data dir |
+| `images/` | WebP render/store helpers (`WebpAssetStore`; scanned portraits at `covers/artists/`) |
+| `timeutil.py` | Shared UTC ISO helpers (`utc_now_iso`, `format_iso_utc`, `parse_iso_utc`) |
 | `http_client.py` | Shared HTTP client helpers for outbound fetch |
 | `pwa_shell.py` | Dist path, inventory walk, SW render, theme/manifest chrome constants |
 | `sw.template.js` | Service worker template (Python-injected precache list) |
@@ -48,8 +50,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `radio/` | Household station clock, picker, tuner prepare (reuses Transcoder) |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
-| `images/` | WebP render/store helpers |
-| `routes/` | HTTP API routers (health, scan, discovery, folders, media, playlists, listens, radio, diag) + SPA pages |
+| `routes/` | HTTP API routers (health, scan, discovery, folders, `media.py` stream/cover, `artist_images.py` portraits, playlists, listens, radio, diag) + SPA pages |
 
 ## Ownership rules
 
