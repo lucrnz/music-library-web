@@ -2,7 +2,6 @@
  * Playback control + Media Session. Transport goes through the active sink
  * (htmlAudio or exclusive companion) — HTMLAudioElement is not exported.
  */
-import { requestPrepare, streamUrl } from "@/api";
 import {
   canReachServer,
   canUseRemoteMedia,
@@ -11,7 +10,6 @@ import {
 import { beginPlay, emit } from "@/diag/log";
 import { isLocallyPlayableDownload } from "@/downloads/catalog";
 import { markDownloadBroken } from "@/downloads/index";
-import { resolvePlaySource, type PlaySource } from "@/downloads/resolve";
 import { downloads } from "@/downloads/state";
 import { createCompanionSink } from "@/playback/sinks/companionSink";
 import { createHtmlAudioSink } from "@/playback/sinks/htmlAudioSink";
@@ -21,6 +19,11 @@ import { supportsCodecKind } from "@/codecSupport";
 import { SOURCE_TAG, deliveryCodec } from "@/lossyKind";
 import type { Track } from "@/models/track";
 import { PLAY_BLOCK_MESSAGES, type PlayBlockReason } from "@/playBlock";
+import {
+  resolvePlayIntent,
+  type PlayIntent,
+} from "@/playback/playIntent";
+import { prepareTracks } from "@/playback/prepare";
 import { showToast } from "@/stores/ui";
 import {
   consumeMissingTechToast,
@@ -33,7 +36,7 @@ import {
   resumeSeconds,
   writePlaybackPosition,
 } from "@/stores/playbackPosition";
-import { pl, commit, trackNeedsStreamPrepare } from "@/stores/playlist";
+import { pl, commit } from "@/stores/playlist";
 import { readVolume, writeVolume } from "@/stores/playerPrefs";
 import {
   invalidateCoverCache,
@@ -55,13 +58,9 @@ import {
 } from "@/listens/bridge";
 import {
   bindOnDemandControl,
+  claimOnDemand,
   installOnDemandMediaSession,
 } from "@/playback/onDemandControl";
-import {
-  exitToQueue,
-  radioChromeActive,
-  setVolume as setRadioVolume,
-} from "@/stores/radio";
 
 export { player };
 
@@ -161,39 +160,21 @@ function invalidateLoads() {
   playGen += 1;
 }
 
-/**
- * Apply resolvePlaySource result onto player face state (same vocabulary).
- */
-function applyResolvedSource(
-  source: PlaySource,
-  activeCodec: string | null | undefined,
-) {
-  if (source.type === "unavailable") {
-    setPlaySourceState(
-      "unavailable",
-      source.codec || activeCodec || null,
-      source.reason || "missing"
-    );
+function applyIntent(intent: PlayIntent) {
+  if (intent.source === "unavailable") {
+    setPlaySourceState("unavailable", intent.profile, intent.block);
     emit(
       "player.unavailable",
-      failCtx({ reason: source.reason || "missing" }),
-      "error"
+      failCtx({ reason: intent.block }),
+      "error",
     );
     return;
   }
-  if (source.type === "downloaded") {
-    setPlaySourceState("downloaded", source.codec || null, null);
-  } else {
-    setPlaySourceState(
-      "streaming",
-      source.codec || activeCodec || null,
-      null
-    );
-  }
+  setPlaySourceState(intent.source, intent.profile, null);
   emit(
     "player.resolve",
-    { type: source.type, profile: source.codec || activeCodec || null },
-    "info"
+    { type: intent.source, profile: intent.profile },
+    "info",
   );
 }
 
@@ -412,7 +393,7 @@ function wireSinkHandlers() {
 }
 
 export function stopPlayback() {
-  exitToQueue();
+  claimOnDemand();
   invalidateLoads();
   discardListen();
   clearPlaySourceState();
@@ -464,15 +445,7 @@ function maybePrepareNext() {
 }
 
 async function issueNearEndPrepare(nextTrack: Track) {
-  if (isExclusiveEnabled()) {
-    const tag = getExclusiveProfileTag(nextTrack);
-    if (!tag) return;
-    requestPrepare([nextTrack], tag, { urgent: true });
-    return;
-  }
-  const activeCodec = getActiveStreamCodec();
-  if (!trackNeedsStreamPrepare(nextTrack, activeCodec)) return;
-  requestPrepare([nextTrack], activeCodec, { urgent: true });
+  prepareTracks([nextTrack], { urgent: true, limit: 1 });
 }
 
 async function attemptPlay(
@@ -500,178 +473,132 @@ async function attemptPlay(
   }
 }
 
-/**
- * Absolute stream URL for companion (must hit the browser's origin host).
- */
-function absoluteStreamUrl(track: Track | null | undefined, tag: string) {
-  const path = streamUrl(track, tag);
-  if (!path) return null;
-  try {
-    return new URL(path, location.origin).href;
-  } catch {
-    return null;
-  }
+async function sourceKindSupported(track: Track | null | undefined) {
+  const kind = (track?.sourceCodec || "").toLowerCase();
+  return (kind === "mp3" || kind === "aac") && (await supportsCodecKind(kind));
 }
 
-async function playExclusive(gen: number, track: Track | null | undefined) {
-  if (track?.isLossy) {
-    const notice = PLAY_BLOCK_MESSAGES.exclusive_lossy;
-    failPlayback(null, "exclusive_lossy", notice);
-    showToast(notice);
-    syncTransportFlags();
-    return;
+async function intentForTrack(
+  track: Track | null | undefined,
+  gen: number,
+  extra: { localBroken?: boolean } = {},
+): Promise<PlayIntent | null> {
+  const exclusive = isExclusiveEnabled();
+  let exclusiveGate: { ok: boolean; reason?: string } | undefined;
+  if (exclusive && !track?.isLossy) {
+    exclusiveGate = await ensurePreferredDevice({ timeoutMs: 1500 });
+    if (!still(gen)) return null;
   }
-  const gate = await ensurePreferredDevice({ timeoutMs: 1500 });
-  if (!still(gen)) return;
-  if (!gate.ok) {
-    selectSink("htmlAudio");
-    const reason = gate.reason || "exclusive_not_ready";
-    const notice =
-      PLAY_BLOCK_MESSAGES[reason] || PLAY_BLOCK_MESSAGES.exclusive_not_ready;
-    failPlayback(null, reason, notice);
-    showToast(notice);
-    if (reason === "exclusive_needs_device") {
-      openSettings();
-    }
-    syncTransportFlags();
-    return;
+  const activeCodec =
+    deliveryCodec(track, getActiveStreamCodec()) || getActiveStreamCodec();
+  let sourceOk: boolean | undefined;
+  if (!exclusive && activeCodec === SOURCE_TAG) {
+    sourceOk = await sourceKindSupported(track);
+    if (!still(gen)) return null;
   }
+  return resolvePlayIntent(track, {
+    exclusiveEnabled: exclusive,
+    exclusiveTag: exclusive ? getExclusiveProfileTag(track) : null,
+    exclusiveGate,
+    enabled: downloads.enabled,
+    offline: !canUseRemoteMedia(),
+    activeStreamCodec: getActiveStreamCodec(),
+    playbackPolicy: settings.playbackPolicy,
+    catalog: settings.options,
+    localBroken: extra.localBroken,
+    sourceKindSupported: sourceOk,
+    absoluteStream: exclusive,
+  });
+}
 
-  const tag = getExclusiveProfileTag(track);
-  if (!tag) {
-    selectSink("companion");
-    failPlayback(
-      null,
-      "exclusive_no_format",
-      PLAY_BLOCK_MESSAGES.exclusive_no_format
-    );
-    showToast(PLAY_BLOCK_MESSAGES.exclusive_no_format);
+async function loadIntent(
+  gen: number,
+  track: Track | null | undefined,
+  intent: PlayIntent,
+) {
+  applyIntent(intent);
+  if (intent.source === "unavailable") {
+    const title = track?.title || "Track";
+    const exclusive = intent.block.startsWith("exclusive");
+    const notice = exclusive
+      ? intent.message
+      : intent.message
+        ? `${title}: ${intent.message}`
+        : intent.message;
+    setPlayNotice(notice);
+    if (exclusive) {
+      showToast(intent.message || PLAY_BLOCK_MESSAGES.exclusive_failed);
+      if (intent.block === "exclusive_needs_device") openSettings();
+    }
     syncTransportFlags();
     return;
   }
 
   if (
+    intent.sink === "companion" &&
     (track?.sampleRateHz == null || track?.bitDepth == null) &&
     track?.id &&
     consumeMissingTechToast(track.id)
   ) {
     showToast(
-      `${track.title || "Track"}: source format unknown — using device max`
+      `${track.title || "Track"}: source format unknown — using device max`,
     );
   }
 
-  const url = absoluteStreamUrl(track, tag);
-  if (!url) {
-    failPlayback(tag, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
-    syncTransportFlags();
-    return;
-  }
-
-  selectSink("companion");
-  setPlaySourceState("streaming", tag, null);
+  selectSink(intent.sink);
   player.playNotice = null;
-  const result = await attemptPlay(url, gen);
+  if (intent.source === "downloaded") {
+    localPlayUrl = intent.url;
+  }
+
+  let result = await attemptPlay(intent.url, gen);
   if (!still(gen)) return;
-  if (!result.ok) {
-    console.error("Exclusive playback failed", result.err);
-    hardStopCompanion(
-      result.err instanceof Error
-        ? result.err.message
-        : PLAY_BLOCK_MESSAGES.exclusive_failed,
-      "exclusive_failed"
-    );
-    return;
-  }
-  maybeStartListenCycle(track);
-  syncTransportFlags();
-}
-
-async function playHtml(gen: number, track: Track | null | undefined) {
-  selectSink("htmlAudio");
-  const activeCodec =
-    deliveryCodec(track, getActiveStreamCodec()) || getActiveStreamCodec();
-  if (activeCodec === SOURCE_TAG) {
-    const kind = (track?.sourceCodec || "").toLowerCase();
-    const ok =
-      (kind === "mp3" || kind === "aac") && (await supportsCodecKind(kind));
-    if (!still(gen)) return;
-    if (!ok) {
-      failPlayback(
-        SOURCE_TAG,
-        "codec_unsupported",
-        PLAY_BLOCK_MESSAGES.codec_unsupported
-      );
-      syncTransportFlags();
-      return;
-    }
-  }
-  const source = await resolvePlaySource(track, {
-    enabled: downloads.enabled,
-    activeStreamCodec: activeCodec,
-    playbackPolicy: settings.playbackPolicy,
-    catalog: settings.options,
-    offline: !canUseRemoteMedia(),
-  });
-  if (!still(gen)) return;
-
-  applyResolvedSource(source, activeCodec);
-
-  if (source.type === "unavailable") {
-    const title = track?.title || "Track";
-    setPlayNotice(source.message ? `${title}: ${source.message}` : source.message);
-    syncTransportFlags();
-    return;
-  }
-
-  if (source.type === "downloaded") {
-    localPlayUrl = source.url;
-  }
-
-  let result = await attemptPlay(source.url, gen);
-  if (!still(gen)) return;
-  if (!result.ok && source.type === "downloaded") {
+  if (!result.ok && intent.source === "downloaded") {
     console.warn("Local playback failed, falling back to stream", result.err);
     if (track?.id) markDownloadBroken(track.id).catch(() => {});
     revokeLocalPlayUrl();
-
-    if (!canUseRemoteMedia()) {
-      failPlayback(
-        source.codec || null,
-        "broken",
-        `${track?.title || "Track"}: ${PLAY_BLOCK_MESSAGES.broken}`
-      );
+    const retry = await intentForTrack(track, gen, { localBroken: true });
+    if (!retry || !still(gen)) return;
+    applyIntent(retry);
+    if (retry.source === "unavailable") {
+      const title = track?.title || "Track";
+      setPlayNotice(retry.message ? `${title}: ${retry.message}` : retry.message);
       syncTransportFlags();
       return;
     }
-    const remote = streamUrl(track, activeCodec);
-    if (remote) {
-      setPlaySourceState("streaming", activeCodec || null, null);
-      result = await attemptPlay(remote, gen);
-      if (!still(gen)) return;
-      if (!result.ok) {
-        console.error("Playback failed", result.err);
-        failPlayback(
-          activeCodec,
-          "play_failed",
-          PLAY_BLOCK_MESSAGES.play_failed
-        );
-      }
-    } else {
-      failPlayback(activeCodec, "play_failed", PLAY_BLOCK_MESSAGES.play_failed);
+    result = await attemptPlay(retry.url, gen);
+    if (!still(gen)) return;
+    if (!result.ok) {
+      console.error("Playback failed", result.err);
+      failPlayback(
+        retry.profile,
+        "play_failed",
+        PLAY_BLOCK_MESSAGES.play_failed,
+      );
     }
   } else if (!result.ok) {
+    if (intent.sink === "companion") {
+      console.error("Exclusive playback failed", result.err);
+      hardStopCompanion(
+        result.err instanceof Error
+          ? result.err.message
+          : PLAY_BLOCK_MESSAGES.exclusive_failed,
+        "exclusive_failed",
+      );
+      return;
+    }
     console.error("Playback failed", result.err);
     failPlayback(
-      player.playProfileId || activeCodec || null,
+      intent.profile,
       "play_failed",
-      PLAY_BLOCK_MESSAGES.play_failed
+      PLAY_BLOCK_MESSAGES.play_failed,
     );
   }
   if (still(gen) && result.ok) {
     emit(
       "player.load.ok",
       { play_source: player.playSource, profile: player.playProfileId },
-      "info"
+      "info",
     );
     maybeStartListenCycle(track);
   }
@@ -679,7 +606,7 @@ async function playHtml(gen: number, track: Track | null | undefined) {
 }
 
 export async function playIndex(index: number) {
-  exitToQueue();
+  claimOnDemand();
   if (index < 0 || index >= pl.length) return;
   const cold = player.playSource === "none";
   const nextTrack = pl.tracks[index];
@@ -710,11 +637,9 @@ export async function playIndex(index: number) {
   revokeLocalPlayUrl();
   setPlayNotice(null);
 
-  if (isExclusiveEnabled()) {
-    await playExclusive(gen, track);
-  } else {
-    await playHtml(gen, track);
-  }
+  const intent = await intentForTrack(track, gen);
+  if (!still(gen) || !intent) return;
+  await loadIntent(gen, track, intent);
   if (still(gen)) flushPendingResume();
 }
 
@@ -816,7 +741,6 @@ export function setVolume(v: number) {
   const n = Math.min(1, Math.max(0, Number(v)));
   player.volume = n;
   activeSink.setVolume(n);
-  if (radioChromeActive()) setRadioVolume(n);
   writeVolume(n);
 }
 
@@ -824,7 +748,6 @@ export function applyVolume() {
   const stored = readVolume();
   if (stored != null) player.volume = stored;
   activeSink.setVolume(player.volume);
-  if (radioChromeActive()) setRadioVolume(player.volume);
 }
 
 export function initAudioListeners() {

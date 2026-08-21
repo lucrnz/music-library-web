@@ -10,19 +10,11 @@ import {
   apiDelete,
   fetchPlaylistTracks,
   fetchTracksMeta,
-  requestPrepare,
   preparedKeys,
   requestForget,
 } from "@/api";
 import { coerceTrack, isTrack, mapTracks, type Track } from "@/models/track";
-import { catalogIndex } from "@/downloads/catalog";
-import { shouldPreferLocalOnline } from "@/downloads/resolve";
-import { downloads } from "@/downloads/state";
-import {
-  getExclusiveProfileTag,
-  isExclusiveEnabled,
-} from "@/stores/exclusiveAudio";
-import { getActiveStreamCodec, settings } from "@/stores/settings";
+import { prepareTracks } from "@/playback/prepare";
 
 const STORAGE_KEY = "musicweb.playlist.v1";
 
@@ -381,85 +373,7 @@ export async function addToQueue(
   if (!playable.length) return;
   pl.add(playable);
   commit();
-
-  // Exclusive: prepare by per-track exclusive tags (never browser codec).
-  if (isExclusiveEnabled()) {
-    requestExclusivePrepare(playable);
-    return;
-  }
-  // Skip prepare when playback policy will prefer a local download.
-  const active = getActiveStreamCodec();
-  const toPrepare = tracksNeedingPrepare(playable, active);
-  if (toPrepare.length) requestPrepare(toPrepare, active);
-}
-
-/**
- * Group tracks by exclusive profile tag and prepare each group.
- * Caps depth to next N when queue is long (worker pressure).
- */
-export function requestExclusivePrepare(
-  tracks: Track[],
-  opts: { urgent?: boolean; limit?: number } = {},
-) {
-  const limit = opts.limit ?? 24;
-  const list = (tracks || []).filter((t) => t?.id).slice(0, limit);
-  const byTag = new Map<string, Track[]>();
-  for (const t of list) {
-    const tag = getExclusiveProfileTag(t);
-    if (!tag) continue;
-    let bucket = byTag.get(tag);
-    if (!bucket) {
-      bucket = [];
-      byTag.set(tag, bucket);
-    }
-    bucket.push(t);
-  }
-  for (const [tag, group] of byTag) {
-    requestPrepare(group, tag, { urgent: !!opts.urgent });
-  }
-}
-
-/**
- * Tracks that still need a server stream prepare under current playback policy.
- * Skips ids that will prefer a local download when online, using in-memory
- * catalog projection (missing entry ⇒ still prepare; no IDB).
- */
-export function tracksNeedingPrepare(
-  tracks: Array<Track | null | undefined>,
-  activeCodec: string,
-): Track[] {
-  const eligible = (tracks || []).filter((t): t is Track => !!(t?.id && !t.isLossy));
-  // Exclusive always needs server stream tags (never skip for downloads).
-  if (isExclusiveEnabled()) {
-    return eligible;
-  }
-  if (!downloads.enabled) {
-    return eligible;
-  }
-  const out: Track[] = [];
-  const policy = settings.playbackPolicy;
-  const codecCatalog = settings.options;
-  const byTrack = catalogIndex.byTrack;
-  for (const t of eligible) {
-    const proj = byTrack[t.id];
-    if (
-      proj &&
-      proj.status !== "broken" &&
-      proj.codec &&
-      shouldPreferLocalOnline(proj.codec, activeCodec, policy, codecCatalog)
-    ) {
-      continue;
-    }
-    out.push(t);
-  }
-  return out;
-}
-
-export function trackNeedsStreamPrepare(
-  track: Track | null | undefined,
-  activeCodec: string,
-): boolean {
-  return tracksNeedingPrepare(track ? [track] : [], activeCodec).length > 0;
+  prepareTracks(playable);
 }
 
 export function idsLeavingQueue(

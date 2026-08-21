@@ -12,6 +12,7 @@ vi.mock("@/playback/onDemandControl", () => ({
   restoreMediaSession: vi.fn(),
   stopOnDemandSinks: vi.fn(),
   suspendMediaSession: vi.fn(),
+  setOnDemandClaimHook: vi.fn(),
 }));
 vi.mock("@/stores/ui", () => ({ showToast: vi.fn() }));
 

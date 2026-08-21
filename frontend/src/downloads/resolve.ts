@@ -76,6 +76,24 @@ export function shouldPreferLocalOnline(
   return localAtLeastAsGood(localCodec, activeStreamCodec, catalog);
 }
 
+/** In-memory projection: will online playback prefer this local file? */
+export function willPreferLocal(
+  projection: { codec?: string; status?: string } | null | undefined,
+  activeCodec: string,
+  policy: PlaybackPolicy,
+  catalog: { id: string }[] = [],
+): boolean {
+  if (!projection || projection.status === "broken" || !projection.codec) {
+    return false;
+  }
+  return shouldPreferLocalOnline(
+    projection.codec,
+    activeCodec,
+    policy,
+    catalog,
+  );
+}
+
 /**
  * Open local blob only after policy decides local wins.
  * @param {object} rec

@@ -9,9 +9,11 @@ import { fromApiTrack, type Track } from "@/models/track";
 import { discard as discardListen } from "@/listens/bridge";
 import {
   restoreMediaSession,
+  setOnDemandClaimHook,
   stopOnDemandSinks,
   suspendMediaSession,
 } from "@/playback/onDemandControl";
+import { player } from "@/stores/playerState";
 import { createRadioAudio } from "@/radio/audio";
 import { createFailureCap } from "@/radio/failures";
 import { needsReseek } from "@/radio/sync";
@@ -61,6 +63,8 @@ let lastLoadedTrackId: string | null = null;
 let lastLoadedLossy: boolean | null = null;
 let connectivityBound = false;
 let visibilityBound = false;
+let volumeBound = false;
+let claimHookBound = false;
 
 interface TuneAck {
   ok: boolean;
@@ -357,8 +361,29 @@ function waitForSnapshot(timeoutMs = 4000): Promise<void> {
   });
 }
 
+function bindVolumeWatch(): void {
+  if (volumeBound) return;
+  volumeBound = true;
+  watch(
+    () => player.volume,
+    (v) => {
+      audio.setVolume(v);
+    },
+  );
+}
+
+function bindClaimHook(): void {
+  if (claimHookBound) return;
+  claimHookBound = true;
+  setOnDemandClaimHook(() => {
+    exitToQueue();
+  });
+}
+
 export async function connect(): Promise<void> {
   if (radio.chrome === "inactive") radio.chrome = "preview";
+  bindClaimHook();
+  bindVolumeWatch();
   bindConnectivity();
   bindVisibility();
   if (!hydrateInFlight) {
@@ -411,6 +436,7 @@ export async function tuneIn(): Promise<void> {
     showToast("Radio is not on air yet");
     return;
   }
+  suspendMediaSession();
   stopOnDemandSinks();
   discardListen();
   radio.chrome = "tuning";

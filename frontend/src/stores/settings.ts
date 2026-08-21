@@ -3,7 +3,8 @@
  * when a download exists.
  */
 import { reactive } from "vue";
-import { apiGet, requestPrepare, preparedKeys } from "@/api";
+import { apiGet, preparedKeys } from "@/api";
+import { prepareTracks } from "@/playback/prepare";
 import { reportFailure, reportSuccess } from "@/connectivity";
 import { emit } from "@/diag/log";
 import {
@@ -11,10 +12,7 @@ import {
   type CodecOption as ProbeCodecOption,
 } from "@/codecSupport";
 import type { Track } from "@/models/track";
-import {
-  getExclusiveProfileTag,
-  isExclusiveEnabled,
-} from "@/stores/exclusiveAudio";
+import { isExclusiveEnabled } from "@/stores/exclusiveAudio";
 import { acquireModalLock, releaseModalLock } from "@/stores/modalLock";
 
 const KEY_STREAM = "musicweb.streamCodec";
@@ -320,28 +318,11 @@ function applyActiveStreamSideEffects(
   tracks?: Track[] | null,
   opts: ApplyStreamOpts = {},
 ) {
-  // Exclusive: prepare by exclusive tags only; skip browser codec prewarm.
+  const list = tracks || (getTracksFn ? getTracksFn() : []) || [];
   if (isExclusiveEnabled()) {
     lastPreparedActive = null;
     preparedKeys.clear();
-    const list = tracks || (getTracksFn ? getTracksFn() : []) || [];
-    const byTag = new Map<string, Track[]>();
-    for (const t of list) {
-      if (!t || typeof t !== "object" || !t.id) {
-        continue;
-      }
-      const tag = getExclusiveProfileTag(t);
-      if (!tag) continue;
-      let bucket = byTag.get(tag);
-      if (!bucket) {
-        bucket = [];
-        byTag.set(tag, bucket);
-      }
-      bucket.push(t);
-    }
-    for (const [tag, group] of byTag) {
-      requestPrepare(group, tag, { replace: true });
-    }
+    prepareTracks(list, { replace: true });
     return;
   }
 
@@ -350,12 +331,7 @@ function applyActiveStreamSideEffects(
   if (changed || opts.force) {
     lastPreparedActive = active;
     preparedKeys.clear();
-    const raw = tracks || (getTracksFn ? getTracksFn() : []) || [];
-    const list = raw.filter((t) => {
-      if (!t || typeof t !== "object") return false;
-      return !!t.id && !t.isLossy;
-    });
-    requestPrepare(list, active, { replace: true });
+    prepareTracks(list, { replace: true });
   }
   if (
     opts.restartPlayback &&

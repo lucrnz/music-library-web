@@ -11,7 +11,6 @@ import {
   RADIO_EXCLUSIVE_SNAP,
   radioPlayState,
   radioSubtitle,
-  setVolume as setRadioVolume,
   tuneIn,
   tuneOut,
 } from "@/stores/radio";
@@ -84,7 +83,6 @@ function onTune() {
 function onVolume(v: number) {
   player.volume = v;
   writeVolume(v);
-  setRadioVolume(v);
 }
 
 function openRadio() {

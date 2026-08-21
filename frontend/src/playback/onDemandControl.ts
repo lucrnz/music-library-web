@@ -18,6 +18,7 @@ let stopSinksFn: (() => void) | null = null;
 let bumpLoadFn: (() => void) | null = null;
 let onDemandHandlers: OnDemandMediaHandlers | null = null;
 let suspended = false;
+let onDemandClaimHook: (() => void) | null = null;
 
 export function bindOnDemandControl(opts: {
   stopSinks: () => void;
@@ -36,6 +37,16 @@ export function stopOnDemandSinks(): void {
   bumpLoadFn?.();
   clearPlaySourceState();
   stopSinksFn?.();
+}
+
+/** Radio registers exit-to-inactive here so player.ts need not import radio. */
+export function setOnDemandClaimHook(fn: (() => void) | null): void {
+  onDemandClaimHook = fn;
+}
+
+export function claimOnDemand(): void {
+  onDemandClaimHook?.();
+  restoreMediaSession();
 }
 
 export function suspendMediaSession(): void {
