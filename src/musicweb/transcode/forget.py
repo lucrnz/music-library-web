@@ -7,6 +7,7 @@ from collections.abc import Set as AbstractSet
 from sqlalchemy.orm import Session
 
 from musicweb.db.repositories import tracks as tracks_repo
+from musicweb.transcode.passthrough import can_encode
 
 
 def resolve_forget(
@@ -17,7 +18,7 @@ def resolve_forget(
     """Map requested ids to ``rel_path``s that should be forgotten.
 
     Returns ``(paths, forgotten, skipped)``. Counts are over unique ids.
-    Retained, unknown, missing, lossy, and pathless ids are skipped.
+    Retained, unknown, missing, non-encode, and pathless ids are skipped.
     """
     unique = list(dict.fromkeys(i for i in ids if i))
     if not unique:
@@ -35,7 +36,7 @@ def resolve_forget(
             track is None
             or track.is_missing
             or not track.rel_path
-            or track.is_lossy
+            or not can_encode(is_lossy=bool(track.is_lossy))
         ):
             skipped += 1
             continue

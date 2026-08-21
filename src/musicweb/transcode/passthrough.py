@@ -2,37 +2,53 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
 from musicweb.transcode.profiles import get_profile
 
 SOURCE_TAG = "source"
 
-StreamPlan = Literal["passthrough", "encode"]
+StreamIntentKind = Literal["passthrough", "encode", "reject"]
 
 
-class StreamConflict(Exception):
-    """Track kind and codec tag cannot be combined (HTTP 409)."""
+@dataclass(frozen=True)
+class StreamIntent:
+    """Product decision for one (is_lossy, codec) pair."""
 
-    def __init__(self, message: str) -> None:
-        self.message = message
-        super().__init__(message)
+    kind: StreamIntentKind
+    detail: str = ""
+    status: int = 409
 
 
-def plan_stream(*, is_lossy: bool, codec: str) -> StreamPlan:
-    """Decide passthrough vs encode, or raise ``StreamConflict`` / ``ValueError``."""
+def stream_intent(*, is_lossy: bool, codec: str) -> StreamIntent:
+    """Decide passthrough vs encode vs reject (409 conflict / 400 unknown tag)."""
     if codec == SOURCE_TAG:
         if is_lossy:
-            return "passthrough"
-        raise StreamConflict(
-            "Lossless tracks cannot be requested as source; pick a stream profile"
+            return StreamIntent(kind="passthrough")
+        return StreamIntent(
+            kind="reject",
+            detail=(
+                "Lossless tracks cannot be requested as source; pick a stream profile"
+            ),
+            status=409,
         )
-    get_profile(codec)
+    try:
+        get_profile(codec)
+    except ValueError as exc:
+        return StreamIntent(kind="reject", detail=str(exc), status=400)
     if is_lossy:
-        raise StreamConflict(
-            "This track is a lossy source and must be requested as source"
+        return StreamIntent(
+            kind="reject",
+            detail="This track is a lossy source and must be requested as source",
+            status=409,
         )
-    return "encode"
+    return StreamIntent(kind="encode")
+
+
+def can_encode(*, is_lossy: bool) -> bool:
+    """True when a track can have encode-cache files (lossy originals never do)."""
+    return not is_lossy
 
 
 def passthrough_media(source_codec: str | None) -> tuple[str, str]:

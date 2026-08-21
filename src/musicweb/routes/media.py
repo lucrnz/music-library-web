@@ -46,12 +46,7 @@ from musicweb.transcode.enqueue import enqueue_prepare
 from musicweb.transcode.forget import resolve_forget
 from musicweb.transcode.null_tech_log import warn_null_track_tech
 from musicweb.diag.emit import emit
-from musicweb.transcode.passthrough import (
-    SOURCE_TAG,
-    StreamConflict,
-    passthrough_media,
-    plan_stream,
-)
+from musicweb.transcode.passthrough import passthrough_media, stream_intent
 
 router = APIRouter(prefix="/api", tags=["media"])
 
@@ -156,14 +151,11 @@ async def stream(
         if track is None:
             raise HTTPException(status_code=404, detail="Track not found")
         resolved = _resolve_track_file(lib, track)
-        try:
-            plan = plan_stream(is_lossy=bool(track.is_lossy), codec=codec)
-        except StreamConflict as exc:
-            raise HTTPException(status_code=409, detail=exc.message) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        intent = stream_intent(is_lossy=bool(track.is_lossy), codec=codec)
+        if intent.kind == "reject":
+            raise HTTPException(status_code=intent.status, detail=intent.detail)
 
-        if plan == "passthrough":
+        if intent.kind == "passthrough":
             try:
                 media_type, ext = passthrough_media(track.source_codec)
             except ValueError as exc:
@@ -196,7 +188,7 @@ async def stream(
             request,
             "http.stream",
             level="info",
-            data={"track_id": id, "codec": codec, "plan": plan},
+            data={"track_id": id, "codec": codec, "plan": intent.kind},
         )
         return FileResponse(
             path=media_path,
@@ -233,15 +225,9 @@ def transcode_prepare(
 ) -> dict:
     lib = library(request)
     tc = transcoder(request)
-    if payload.codec == SOURCE_TAG:
-        counts = {"queued": 0, "already": 0, "ready": 0, "skipped": 0}
-        counts["skipped"] = len(payload.ids)
-        _emit_prepare(request, payload, counts)
-        return counts
-    try:
-        get_profile(payload.codec)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    probe = stream_intent(is_lossy=False, codec=payload.codec)
+    if probe.kind == "reject" and probe.status == 400:
+        raise HTTPException(status_code=400, detail=probe.detail)
 
     if payload.replace:
         tc.drop_pending_prewarm()

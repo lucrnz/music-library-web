@@ -1,39 +1,48 @@
-"""Reserved source passthrough vs encode fork."""
+"""Reserved source passthrough vs encode vs reject."""
 
 import pytest
 
 from musicweb.transcode.passthrough import (
     SOURCE_TAG,
-    StreamConflict,
+    can_encode,
     passthrough_media,
-    plan_stream,
+    stream_intent,
 )
 from musicweb.transcode.profiles import DEFAULT_PROFILE_TAG
 
 
 def test_lossless_opus_encodes():
-    assert plan_stream(is_lossy=False, codec=DEFAULT_PROFILE_TAG) == "encode"
+    intent = stream_intent(is_lossy=False, codec=DEFAULT_PROFILE_TAG)
+    assert intent.kind == "encode"
 
 
-def test_lossless_source_conflicts():
-    with pytest.raises(StreamConflict):
-        plan_stream(is_lossy=False, codec=SOURCE_TAG)
+def test_lossless_source_rejects():
+    intent = stream_intent(is_lossy=False, codec=SOURCE_TAG)
+    assert intent.kind == "reject"
+    assert intent.status == 409
 
 
 def test_lossy_source_passthrough():
-    assert plan_stream(is_lossy=True, codec=SOURCE_TAG) == "passthrough"
+    intent = stream_intent(is_lossy=True, codec=SOURCE_TAG)
+    assert intent.kind == "passthrough"
 
 
-def test_lossy_opus_conflicts():
-    with pytest.raises(StreamConflict):
-        plan_stream(is_lossy=True, codec=DEFAULT_PROFILE_TAG)
+def test_lossy_opus_rejects():
+    intent = stream_intent(is_lossy=True, codec=DEFAULT_PROFILE_TAG)
+    assert intent.kind == "reject"
+    assert intent.status == 409
 
 
-def test_unknown_tag_is_value_error():
-    with pytest.raises(ValueError):
-        plan_stream(is_lossy=False, codec="src")
-    with pytest.raises(ValueError):
-        plan_stream(is_lossy=True, codec="src")
+def test_unknown_tag_is_400():
+    lossless = stream_intent(is_lossy=False, codec="src")
+    lossy = stream_intent(is_lossy=True, codec="src")
+    assert lossless.kind == "reject" and lossless.status == 400
+    assert lossy.kind == "reject" and lossy.status == 400
+
+
+def test_can_encode_is_not_lossy():
+    assert can_encode(is_lossy=False) is True
+    assert can_encode(is_lossy=True) is False
 
 
 def test_passthrough_media_types():

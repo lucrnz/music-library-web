@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from musicweb.db.repositories import tracks as tracks_repo
 from musicweb.library import Library
 from musicweb.transcode.null_tech_log import warn_null_track_tech
+from musicweb.transcode.passthrough import stream_intent
 from musicweb.transcode.probe import tech_from_track
 from musicweb.transcode.worker import Transcoder
 
@@ -21,7 +22,7 @@ def enqueue_prepare(
     urgent: bool = False,
     log_label: str | None = None,
 ) -> dict[str, int]:
-    """Resolve ids and queue encodes. Skips missing, lossy, and unreadable rows."""
+    """Resolve ids and queue encodes. Skips missing, non-encode, and unreadable."""
     counts = {"queued": 0, "already": 0, "ready": 0, "skipped": 0}
     if not ids:
         return counts
@@ -29,7 +30,12 @@ def enqueue_prepare(
         if track.is_missing or not track.rel_path:
             counts["skipped"] += 1
             continue
-        if track.is_lossy:
+        if (
+            stream_intent(
+                is_lossy=bool(track.is_lossy), codec=profile_tag
+            ).kind
+            != "encode"
+        ):
             counts["skipped"] += 1
             continue
         try:

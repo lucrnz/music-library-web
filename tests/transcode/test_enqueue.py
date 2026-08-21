@@ -52,6 +52,32 @@ def test_skips_lossy_and_missing_forwards_label(monkeypatch):
     assert tc.prepare.call_args.kwargs["urgent"] is True
 
 
+def test_skips_source_tag_without_prepare(monkeypatch):
+    lossless = SimpleNamespace(
+        id="ok",
+        is_missing=False,
+        rel_path="ok.flac",
+        is_lossy=False,
+    )
+    monkeypatch.setattr(
+        "musicweb.transcode.enqueue.tracks_repo.get_many",
+        lambda _session, _ids: [lossless],
+    )
+    path = SimpleNamespace(is_file=lambda: True)
+    lib = SimpleNamespace(resolve=lambda _rel: path, is_audio=lambda _p: True)
+    tc = SimpleNamespace(prepare=Mock(return_value="queued"))
+    counts = enqueue_prepare(
+        SimpleNamespace(),
+        lib,
+        tc,
+        ["ok"],
+        profile_tag="source",
+    )
+    assert counts["skipped"] == 1
+    assert counts["queued"] == 0
+    tc.prepare.assert_not_called()
+
+
 def test_job_log_label_prefers_radio_label():
     from musicweb.transcode.worker import _Job, job_log_label
     from musicweb.transcode.profiles import get_profile
