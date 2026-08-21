@@ -9,13 +9,13 @@
 - Shared enqueue: `src/musicweb/transcode/enqueue.py`
 - Id → path for forget: `src/musicweb/transcode/forget.py`
 - HTTP stream / prepare / forget: `src/musicweb/routes/media.py`
-- Reserved `source` passthrough: `src/musicweb/transcode/passthrough.py`
+- Reserved `source` passthrough, `stream_intent`, and `can_encode`: `src/musicweb/transcode/passthrough.py`
 - Idle eviction (last HTTP + in-flight): `src/musicweb/transcode/idle.py`
 - Process cache lifecycle: `src/musicweb/cache.py`
 
 ## Purpose
 
-Deliver browser-playable audio from a lossless library using **explicit stream profiles** (Opus or FLAC at defined rates/depths). Conversion always goes through ffmpeg with quality-first resampling policy. Lossy-indexed tracks are **not** a profile — they use reserved `source` passthrough and never enter this encode pipeline. Passthrough mime/extension are defined for MP3 and AAC only; an unknown stored source codec is a 400, not an encode and not a guessed container.
+Deliver browser-playable audio from a lossless library using **explicit stream profiles** (Opus or FLAC at defined rates/depths). Conversion always goes through ffmpeg with quality-first resampling policy. Lossy-indexed tracks are **not** a profile — they use reserved `source` passthrough and never enter this encode pipeline. `stream_intent(is_lossy, codec)` is the only product decision (`passthrough` / `encode` / `reject`). Stream HTTP maps `reject` to 409 (kind mismatch) or 400 (unknown tag). `enqueue_prepare` and radio prepare skip when the kind is not `encode`. Forget skips via `can_encode(*, is_lossy)` (lossy originals have no encode cache) — not `stream_intent` with a default profile. Passthrough mime/extension are defined for MP3 and AAC only; an unknown stored source codec is a 400, not an encode and not a guessed container.
 
 ## Startup requirements
 

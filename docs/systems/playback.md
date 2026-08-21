@@ -4,11 +4,14 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 
 ## Source of truth
 
-- Player store: `frontend/src/stores/player.ts` (loaders); `playerState.ts`, `playerSession.ts`, `playerPrefs.ts`, `playbackPosition.ts`
-- Quality / network prefs: `frontend/src/stores/settings.ts`
-- Session queue + prepare helpers: `frontend/src/stores/playlist.ts`
+- Player store: `frontend/src/stores/player.ts` (on-demand session: gen, sink, load); `playerState.ts`, `playerSession.ts`, `playerPrefs.ts`, `playbackPosition.ts`
+- Play decision: `frontend/src/playback/playIntent.ts` (`resolvePlayIntent`)
+- Shared prepare: `frontend/src/playback/prepare.ts` (`prepareTracks`)
+- Session handoff: `frontend/src/playback/onDemandControl.ts` (`claimOnDemand`; tune-in uses `suspendMediaSession`)
+- Quality prefs: `frontend/src/stores/settings.ts`
+- Session queue: `frontend/src/stores/playlist.ts`
 - Delivery tag / lossy kind: `frontend/src/lossyKind.ts`
-- Play source resolution: `frontend/src/downloads/resolve.ts`
+- HTML play-source resolution: `frontend/src/downloads/resolve.ts`
 - Exclusive profile pick: `frontend/src/stores/exclusiveAudio.ts`
 - Block reasons / copy: `frontend/src/playBlock.ts`
 - Quality ranking: `frontend/src/qualityRank.ts`
@@ -37,9 +40,9 @@ Resolution is decision-first: load catalog record when downloads are enabled, ap
 
 When downloads are enabled and `connectivity.canUseRemote` is false, queue rows without a playable local file (`trackDownloadState` `ready` or `other`) are shown unavailable (`PlaylistView`). Cursor advance is `stepNext` / `stepPrev` on a record; skip is `pl.advanceToPlayable` (clone + those steps). `playNext` / `playPrev` stay thin; a tap still `playIndex`s that index. `computeNextIndex` / `peekNextIndex` stay download-agnostic. Current playback is not yanked when reachability drops.
 
-The reactive `player` record lives in `playerState.js`. Cover / Media Session metadata: `playerSession.js`. Volume / expanded storage: `playerPrefs.js`. Resume position: `playbackPosition.ts` (`musicweb.playbackPosition.v1`). Load and sinks stay in `player.js`.
+The reactive `player` record lives in `playerState.ts`. Cover / Media Session metadata: `playerSession.ts`. Volume / expanded storage: `playerPrefs.ts`. Resume position: `playbackPosition.ts` (`musicweb.playbackPosition.v1`). `player.ts` owns the on-demand session (generation, active sink, load). `resolvePlayIntent` is the single play decision (unavailable with a block, or ready with a required url): exclusive is companion + streaming (never OPFS; refuse lossy); HTML uses `resolvePlaySource`. Exclusive blocks toast without a title prefix; other blocks prefix `Title:`. A broken local blob is a second `resolvePlayIntent({ localBroken: true })`. `prepareTracks` is the only prepare path (queue add, settings codec change, near-end). `player.ts` does not import `radio.ts`.
 
-Household radio is **not** stream-vs-download resolve. The radio element loads `/api/stream` for the current official id and instructed-seeks to the station clock. Display clocks: not tuned / tuning follow the official snapshot; tuned follows `audio.currentTime` (re-seek if drift > 2s). Radio now-playing reuses `NowPlayingView` (`setRangeFill`, injected `PlaybackStatusLine`) — not a second badge. On `/radio` the codec line mounts only while tuned; the status wrap stays reserved. After Tune out the stopped radio face stays on the off-radio mini or compact bar. A library/queue play calls `exitToQueue()` and takes the player. See `docs/systems/radio.md`.
+Household radio is **not** stream-vs-download resolve. The radio element loads `/api/stream` for the current official id and instructed-seeks to the station clock. Display clocks: not tuned / tuning follow the official snapshot; tuned follows `audio.currentTime` (re-seek if drift > 2s). Radio now-playing reuses `NowPlayingView` (`setRangeFill`, injected `PlaybackStatusLine`) — not a second badge. On `/radio` the codec line mounts only while tuned; the status wrap stays reserved. After Tune out the stopped radio face stays on the off-radio mini or compact bar. A library/queue play calls `claimOnDemand()` (radio registers `exitToQueue` as the hook). Radio watches `player.volume`. See `docs/systems/radio.md`.
 
 The **expanded** now-playing cover (mobile sheet, desktop panel) can 3D-flip to the album-artist photo. Eligible when `GET /api/artists/{id}` reports `has_image` or `has_preferred_image` and `canReachServer()` is true; otherwise the cover is not a toggle. The peek resets on track change, collapse, or unmount. The lyrics overlay blocks the flip and does not change the face. An unreachable server disables the feature until the server is reachable again. Mini and compact-bar covers stay open-targets (expand now-playing); they do not flip. Helper: `frontend/src/components/player/coverFlip.ts`.
 

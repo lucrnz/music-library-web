@@ -8,10 +8,11 @@ Optional client-side offline music: users can download stream-profile audio to t
   - Lifecycle / queue actions: `index.ts`
   - User download with confirm: `ui.ts`
   - Reactive fields: `state.ts`
-  - Catalog / projection / art / codec helpers: `catalog.ts`
+  - Filename / MIME: `media.ts`
+  - Catalog / projection / art / records + write mutex: `catalog.ts`
   - Queue store and pump side: `queue.ts`, `queuePolicy.ts`, `worker.ts`
   - OPFS binary storage: `opfs.ts`
-  - IndexedDB metadata: `db.ts`
+  - IndexedDB metadata: `db.ts` (no `blobs` store; binaries live in OPFS)
   - Play / cover resolution: `resolve.ts`
   - Hierarchy / storage formatters: `hierarchy.ts`, `storageInfo.ts`
 - Settings that affect downloads: `frontend/src/stores/settings.ts` (download profile)
@@ -31,7 +32,7 @@ Keep a **device-local catalog** of tracks the user chose to download, so playbac
 | Track/album/artist records, download queue, lyrics cache for offline | IndexedDB under the downloads package |
 | Feature enable flag | Client preference storage (local) |
 
-OPFS is mandatory for resumable Range downloads and partials. Exact object-store and path layouts live in `db.js` / `opfs.js`.
+OPFS is mandatory for resumable Range downloads and partials. Exact object-store and path layouts live in `db.ts` / `opfs.ts`. Catalog commit/delete run under a module mutex. A finished job finalizes as one IDB transaction (catalog row + refcounts + queue delete); art network I/O runs after. Delete drops IDB first, then unlinks OPFS.
 
 ## Behavior (intent)
 
@@ -45,16 +46,17 @@ OPFS is mandatory for resumable Range downloads and partials. Exact object-store
 
 ## Ownership / import surface
 
-Durable split so `index.js` does not become a barrel:
+Durable split so `index.ts` does not become a barrel:
 
 | Concern | Module |
 |---------|--------|
-| Init, enable/disable, enqueue, pause/resume, cancel/retry/clear, manager/orphan/near-quota probes | `index.js` |
-| User download + near-quota confirm | `ui.js` only |
-| Reactive `downloads` fields | `state.js` |
-| Catalog projection, record CRUD, status helpers used outside the package | `catalog.js` |
-| Play/cover URL resolution | `resolve.js` |
-| Queue guts / worker | internals (`queue.js`, `queuePolicy.js`, `worker.js`) |
+| Init, enable/disable, enqueue, pause/resume, cancel/retry/clear, manager/orphan/near-quota probes | `index.ts` |
+| User download + near-quota confirm | `ui.ts` only |
+| Reactive `downloads` fields | `state.ts` |
+| Filename / MIME | `media.ts` |
+| Catalog projection, record CRUD, art, write mutex, finalize | `catalog.ts` |
+| Play/cover URL resolution | `resolve.ts` |
+| Queue guts / worker | internals (`queue.ts`, `queuePolicy.ts`, `worker.ts`) |
 
 Import connectivity notes from `connectivity.js` / `stores/connectivity.js`, not via downloads re-exports.
 

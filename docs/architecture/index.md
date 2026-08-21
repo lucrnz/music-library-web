@@ -31,7 +31,7 @@ Browser (Vue SFC + TypeScript SPA)
 FastAPI (routes → services)
     ├── Library (safe path I/O)
     ├── DB / repositories / FTS
-    ├── Scanner (background thread)
+    ├── Library jobs (background thread)
     ├── Cover / artist-image stores
     ├── Radio station (clock + picker; tuners enqueue Transcoder)
     └── Transcoder (ffmpeg worker)
@@ -66,7 +66,7 @@ FastAPI (routes → services)
 | `radio/` | Station clock, picker, tuner-driven prepare | Live encode pipe, listen stats |
 | `frontend/src/` | UI state, playback, connectivity, offline downloads (OPFS) | Server-side index writes |
 
-Composition root is `main.create_app`: settings, database, library, stores, scanner, process cache, and transcoder are attached to `app.state` for route deps.
+Composition root is `main.create_app`: settings, database, library, stores, jobs, process cache, and transcoder are attached to `app.state` for route deps.
 
 ## Documentation upkeep
 
