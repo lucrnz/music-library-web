@@ -12,7 +12,7 @@ import {
   fetchTracksMeta,
   requestPrepare,
   preparedKeys,
-  clearCache,
+  requestForget,
 } from "@/api";
 import { coerceTrack, isTrack, mapTracks, type Track } from "@/models/track";
 import { catalogIndex } from "@/downloads/catalog";
@@ -462,25 +462,49 @@ export function trackNeedsStreamPrepare(
   return tracksNeedingPrepare(track ? [track] : [], activeCodec).length > 0;
 }
 
+export function idsLeavingQueue(
+  removedIds: Iterable<string>,
+  remaining: Array<{ id?: string }>,
+): string[] {
+  const still = new Set(
+    remaining.map((t) => t.id).filter((id): id is string => !!id),
+  );
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of removedIds) {
+    if (!id || still.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 export function removeIndices(
   indices: number[],
   playIndex: (index: number) => void,
   stopPlayback: () => void,
 ) {
   if (!indices.length) return;
+  const removed = indices
+    .map((i) => pl.tracks[i]?.id)
+    .filter((id): id is string => !!id);
   const removingCurrent = pl.removeIndices(indices);
   commit();
   if (removingCurrent) {
     if (pl.length && pl.index >= 0) playIndex(pl.index);
     else stopPlayback();
   }
+  requestForget(idsLeavingQueue(removed, pl.tracks));
 }
 
 export function clearPlaylist(stopPlayback: () => void) {
+  const ids = [
+    ...new Set(pl.tracks.map((t) => t.id).filter((id): id is string => !!id)),
+  ];
   pl.clear();
   stopPlayback();
   preparedKeys.clear();
-  clearCache("streams");
+  requestForget(ids);
   commit();
 }
 

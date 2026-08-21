@@ -9,7 +9,7 @@ vi.mock("@/api", () => ({
   fetchTracksMeta: vi.fn(),
   requestPrepare: vi.fn(),
   preparedKeys: () => [],
-  clearCache: vi.fn(),
+  requestForget: vi.fn(),
 }));
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
 

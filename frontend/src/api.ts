@@ -340,15 +340,26 @@ export async function fetchAlbum(albumId: string): Promise<Album> {
   );
 }
 
-export function clearCache(...scopes: string[]): void {
-  const only = scopes.filter((s) => s === "streams");
-  if (!only.length) return;
-  const q = only.map((s) => `scope=${encodeURIComponent(s)}`).join("&");
-  void apiFetch(`/api/cache/clear?${q}`, { method: "POST" }).catch(() => {});
-}
-
 /** Keys already prepared: "id|codec" */
 export const preparedKeys = new Set<string>();
+
+const FORGET_CHUNK = 1000;
+
+/** POST /api/transcode/forget — fire-and-forget discarded queue ids. */
+export function requestForget(ids: string[]): void {
+  const unique = [...new Set(ids.filter((id) => !!id))];
+  if (!unique.length) return;
+  for (const id of unique) {
+    const prefix = `${id}|`;
+    for (const key of [...preparedKeys]) {
+      if (key.startsWith(prefix)) preparedKeys.delete(key);
+    }
+  }
+  for (let i = 0; i < unique.length; i += FORGET_CHUNK) {
+    const chunk = unique.slice(i, i + FORGET_CHUNK);
+    void apiPost("/api/transcode/forget", { ids: chunk }).catch(() => {});
+  }
+}
 
 /**
  * Prewarm by track ids (or track objects with .id).
