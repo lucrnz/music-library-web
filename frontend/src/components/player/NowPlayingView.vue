@@ -43,6 +43,7 @@ const props = withDefaults(
     lyricsSeekable?: boolean;
     showClose?: boolean;
     showStatus?: boolean;
+    reserveStatus?: boolean;
     showLyricsToggle?: boolean;
     showMenu?: boolean;
     sheetDismissible?: boolean;
@@ -68,6 +69,7 @@ const props = withDefaults(
     lyricsSeekable: true,
     showClose: true,
     showStatus: false,
+    reserveStatus: false,
     showLyricsToggle: false,
     showMenu: false,
     sheetDismissible: false,
@@ -359,6 +361,11 @@ defineExpose({ focusClose, closeBtn });
       v-if="showStatus"
       :play-state="playState"
       :exclusive-snap="exclusiveSnap"
+    />
+    <div
+      v-else-if="reserveStatus"
+      class="np-status-wrap"
+      aria-hidden="true"
     />
 
     <div class="player-extras">
