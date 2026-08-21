@@ -33,8 +33,3 @@ def preferred_artist_image_store(request: Request) -> WebpAssetStore:
 
 def jobs(request: Request) -> LibraryJobRunner:
     return request.app.state.jobs
-
-
-def scanner(request: Request) -> LibraryJobRunner:
-    """Back-compat alias for :func:`jobs`."""
-    return jobs(request)

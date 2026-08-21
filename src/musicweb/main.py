@@ -163,8 +163,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.artist_image_store = rt.artist_image_store
     app.state.preferred_artist_image_store = rt.preferred_artist_image_store
     app.state.jobs = rt.jobs
-    # Back-compat alias for code still using .scanner
-    app.state.scanner = rt.jobs
     app.state.process_cache = ProcessCache()
     app.state.transcoder = Transcoder()
     app.state.stream_cache_idle = StreamCacheIdle()
