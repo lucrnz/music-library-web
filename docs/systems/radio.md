@@ -36,7 +36,7 @@ Rules live in `src/musicweb/radio/`; constants are source constants in `config.p
 
 Simulation (0 tuners): clock only. No radio prepare/encode.
 
-First Tune-in starts complete-file work so `GET /api/stream?id=&codec=` + Range seek can join the official clock. There is no live stdout pipe, no concat demuxer, no `/api/radio/stream`, and no second encoder. Radio and `/transcode/prepare` share `enqueue_prepare`. Radio must not call `drop_pending_prewarm`. Radio jobs log `log_label` (`radio current` / `radio prewarm`) + profile tag — never path or title.
+First Tune-in starts complete-file work so `GET /api/stream?id=&codec=` + Range seek can join the official clock. There is no live stdout pipe, no concat demuxer, no `/api/radio/stream`, and no second encoder. Radio and `/transcode/prepare` share `enqueue_prepare`. Radio must not call `drop_pending_prewarm`. Radio jobs log `log_label` (`radio current` / `radio prewarm`) + profile tag — never path or title. On-demand `POST /api/transcode/forget` must not evict the station’s current track or any id still remaining on the live radio queue, including in simulation (0 tuners). Already-played rows in the current batch and banlist-only ids are not protected. Forget must not return or log those retained ids.
 
 `tune_in.codec` is only a `browser_listed` profile. Reject `source`, exclusive, and unknown. Lossy ids are never encoded; the client loads `source` when the snapshot is lossy. Changing Streaming while radio chrome is on omits `playIndex` and re-sends `tune_in` with the new profile (`replace: true` may drop radio prewarm until that message or the next advance).
 
@@ -63,6 +63,7 @@ Media Session: radio-owned metadata; play/pause/stop only. `onDemandControl.ts` 
 ## Guardrails
 
 - Do not log or serialize upcoming ids.
+- Do not evict radio current + remaining via forget (simulation included). Do not `clear_cache` on 1→0 tuners.
 - Do not add a radio FK from station/queue/banlist ids to `tracks.id`.
 - Do not treat radio SQLite rows as a secret.
 - Do not add a live pipe or a radio-only lossy re-encode without a new product decision.

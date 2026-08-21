@@ -74,6 +74,7 @@ Settings and download/stream pickers list only profiles the **current browser ca
 - Lossy / `source` delivery is never prepared (no encode exists). Exclusive prepare also skips those ids — there is no companion tag for them.
 - When downloads are enabled, lossless tracks that will play from a local file under the current policy need not be prepared for stream.
 - Near end of the current track, the player may send **one** urgent prepare for the next queue item so interactive encode priority can run before natural advance. Offline does not permanently suppress prepare after reconnect while still in the lead window (behavior owned by the player store).
+- **Forget** (`POST /api/transcode/forget`) runs when the user clears the queue or removes the last remaining row of a track. The client sends only ids that no longer appear in the remaining queue (duplicates stay). The call is fire-and-forget; matching `preparedKeys` (`id|…`) are dropped. Loading a saved playlist does not forget.
 
 Exact lead time and API flags live in source.
 

@@ -7,7 +7,8 @@
 - Dependency gate: `src/musicweb/transcode/deps.py`
 - Probe helpers: `src/musicweb/transcode/probe.py`
 - Shared enqueue: `src/musicweb/transcode/enqueue.py`
-- HTTP stream / prepare / cache clear: `src/musicweb/routes/media.py`
+- Id → path for forget: `src/musicweb/transcode/forget.py`
+- HTTP stream / prepare / forget: `src/musicweb/routes/media.py`
 - Reserved `source` passthrough: `src/musicweb/transcode/passthrough.py`
 - Idle eviction (last HTTP + in-flight): `src/musicweb/transcode/idle.py`
 - Process cache lifecycle: `src/musicweb/cache.py`
@@ -32,7 +33,8 @@ Exact argv fragments and profile tags live in `profiles.py`.
 ## Cache and concurrency
 
 - Completed (and in-flight) encodes live under a **process-temp** `streams/` directory, not the durable data dir.
-- Shutdown always deletes this cache. After about an hour with no in-flight HTTP and no recent request, the server also runs `Transcoder.clear_cache()` (same path as `POST /api/cache/clear`). Intervals are source constants in `idle.py`. Any HTTP to the library process counts; the control socket and exclusive companion WebSocket do not.
+- Shutdown always deletes this cache. After about an hour with no in-flight HTTP and no recent request, the server also runs `Transcoder.clear_cache()`. Those two are the only full wipes — there is no `POST /api/cache/clear`. Intervals are source constants in `idle.py`. Any HTTP to the library process counts; the control socket and exclusive companion WebSocket do not.
+- Queue clear and last-row-of-a-track remove may `POST /api/transcode/forget` with discarded track ids. The server drops those jobs and all-profile cache files unless the id is the radio current track or still remaining on the live radio queue. Body and count fields live in `media.py` / `forget.py`.
 - Concurrent requests for the same track+profile share one encode.
 - A single worker model applies: interactive play may preempt prewarm; partial files are never served as complete.
 - Seeking uses HTTP Range on completed cache files.
