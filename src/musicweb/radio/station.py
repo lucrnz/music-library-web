@@ -142,51 +142,71 @@ class RadioStation:
             (current, *self.peek_upcoming_ids(len(self._ordered_queue())))
         )
 
-    def run_catchup(self, now: datetime) -> None:
+    def _with_session(
+        self,
+        fn,
+        *,
+        persist_always: bool = False,
+        after=None,
+    ) -> None:
         session = self._database.session()
         try:
-            dirty = self._run_catchup(session, now)
-            if dirty:
+            dirty = fn(session)
+            if persist_always or dirty:
                 self._persist(session)
                 session.commit()
             else:
                 session.rollback()
-            self._catching_up = False
-            self._stash_snapshot(session)
+            if after is not None:
+                after(session)
         except Exception:
             session.rollback()
             raise
         finally:
             session.close()
 
-    def tick(self, now: datetime) -> None:
-        session = self._database.session()
-        try:
-            dirty = self._tick(session, now)
-            if dirty:
-                self._persist(session)
-                session.commit()
-            else:
-                session.rollback()
+    def run_catchup(self, now: datetime) -> None:
+        def after(session: Session) -> None:
+            self._catching_up = False
             self._stash_snapshot(session)
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
+
+        self._with_session(lambda session: self._run_catchup(session, now), after=after)
+
+    def tick(self, now: datetime) -> None:
+        self._with_session(
+            lambda session: self._tick(session, now),
+            after=lambda session: self._stash_snapshot(session),
+        )
 
     def persist_shutdown(self) -> None:
         if self._catching_up and not self._loaded:
             return
-        session = self._database.session()
-        try:
-            self._persist(session)
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
+        self._with_session(lambda _session: True, persist_always=True)
+
+    def _step(self, session: Session, now: datetime, *, skip_blocks: bool) -> bool:
+        if self._current_track_id is None:
+            return self._try_start(session, now)
+
+        row = tracks_repo.get(session, self._current_track_id)
+        if row is None or row.duration_ms is None:
+            if not skip_blocks:
+                return False
+            self._skip_current(session, "missing")
+            return True
+        reason = self._current_block_reason(session, row)
+        if reason == "path" and not skip_blocks:
+            return False
+        if reason in {"path", "probe", "skip"}:
+            self._skip_current(session, reason)
+            return True
+        if self._track_started_at is None:
+            self._track_started_at = now
+            return True
+        end = self._track_started_at + timedelta(milliseconds=row.duration_ms)
+        if end <= now:
+            self._advance(session, count_duration=True, duration_ms=row.duration_ms)
+            return True
+        return False
 
     def _run_catchup(self, session: Session, now: datetime) -> bool:
         self._load(session)
@@ -200,25 +220,12 @@ class RadioStation:
                 return dirty
 
             while self._current_track_id is not None:
-                row = tracks_repo.get(session, self._current_track_id)
-                duration_ms = row.duration_ms if row is not None else None
-                if row is None or duration_ms is None:
+                before = self._current_track_id
+                stepped = self._step(session, now, skip_blocks=False)
+                if not stepped:
                     break
-                reason = self._current_block_reason(session, row)
-                if reason == "path":
-                    break
-                if reason in {"probe", "skip"}:
-                    self._skip_current(session, reason)
-                    dirty = True
-                    advanced += 1
-                    continue
-                if self._track_started_at is None:
-                    self._track_started_at = now
-                    dirty = True
-                end = self._track_started_at + timedelta(milliseconds=duration_ms)
-                if end <= now:
-                    self._advance(session, count_duration=True, duration_ms=duration_ms)
-                    dirty = True
+                dirty = True
+                if self._current_track_id != before:
                     advanced += 1
                     continue
                 break
@@ -234,25 +241,7 @@ class RadioStation:
     def _tick(self, session: Session, now: datetime) -> bool:
         if not self._loaded:
             self._load(session)
-        if self._current_track_id is None:
-            return self._try_start(session, now)
-
-        row = tracks_repo.get(session, self._current_track_id)
-        if row is None or row.duration_ms is None:
-            self._skip_current(session, "missing")
-            return True
-        reason = self._current_block_reason(session, row)
-        if reason in {"path", "probe", "skip"}:
-            self._skip_current(session, reason)
-            return True
-        if self._track_started_at is None:
-            self._track_started_at = now
-            return True
-        end = self._track_started_at + timedelta(milliseconds=row.duration_ms)
-        if end <= now:
-            self._advance(session, count_duration=True, duration_ms=row.duration_ms)
-            return True
-        return False
+        return self._step(session, now, skip_blocks=True)
 
     def _try_start(self, session: Session, now: datetime) -> bool:
         self._refresh_catalog(session)

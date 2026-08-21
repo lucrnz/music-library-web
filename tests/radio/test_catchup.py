@@ -109,3 +109,36 @@ def test_catchup_log_has_no_upcoming_titles(tmp_home, db, caplog):
     text = caplog.text
     assert "catch-up advanced" in text
     assert walked_past not in text
+
+
+def test_catchup_stops_on_unresolvable_path(tmp_home, db):
+    with db.session() as session:
+        ids = _seed_tracks(session, tmp_home.lib, 4, duration_ms=30_000)
+    station = _station(tmp_home, db)
+    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    station.run_catchup(t0)
+    current = station.now_playing().track
+    assert current is not None
+    stuck_id = current.id
+    (tmp_home.lib / f"{stuck_id}.flac").unlink()
+    station.run_catchup(t0 + timedelta(hours=1))
+    assert station.now_playing().face == "skip_pending"
+    assert station.peek_upcoming_ids(1)
+    assert stuck_id in ids
+
+
+def test_tick_skips_unresolvable_path(tmp_home, db):
+    with db.session() as session:
+        _seed_tracks(session, tmp_home.lib, 4, duration_ms=30_000)
+    station = _station(tmp_home, db)
+    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    station.run_catchup(t0)
+    current = station.now_playing().track
+    assert current is not None
+    stuck_id = current.id
+    (tmp_home.lib / f"{stuck_id}.flac").unlink()
+    station.tick(t0 + timedelta(seconds=1))
+    nxt = station.now_playing()
+    assert nxt.face == "current"
+    assert nxt.track is not None
+    assert nxt.track.id != stuck_id
