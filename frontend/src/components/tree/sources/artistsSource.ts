@@ -11,6 +11,13 @@ import {
 } from "@/api";
 import { kindForAlbum, kindForTrack } from "@/lossyKind";
 
+export interface DownloadMeta {
+  codec?: string;
+  bytes?: number | null;
+  status?: string;
+  trackNum?: number | null;
+}
+
 export interface TreeNode {
   key: string;
   isLeaf: boolean;
@@ -20,6 +27,7 @@ export interface TreeNode {
   cover?: string;
   lossyKind?: string | null;
   data?: unknown;
+  downloadMeta?: DownloadMeta;
   children?: TreeNode[];
 }
 

@@ -3,10 +3,10 @@ import {
   albumFromDl,
   artistFromDl,
   trackFromDl,
-} from "@/components/tree/sources/downloadsMenuMap";
+} from "@/components/tree/sources/downloadsSource";
 import type { CatalogTrackRecord } from "@/models/track";
 
-describe("downloadsMenuMap", () => {
+describe("downloads tree projectors", () => {
   it("maps artistId to ArtistListItem.id", () => {
     const artist = artistFromDl({
       artistId: "ar-1",

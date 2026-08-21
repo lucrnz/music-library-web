@@ -139,11 +139,11 @@ export function focusPathFromRoute(route: RouteLike): string[] {
     return [`album:${albumId}`];
   }
   if (name === "downloads-artist" && artistId) {
-    return [`dl-artist:${artistId}`];
+    return [`artist:${artistId}`];
   }
   if (name === "downloads-album" && albumId) {
     // Parent artist resolved later when hierarchy is known; leaf key alone.
-    return [`dl-album:${albumId}`];
+    return [`album:${albumId}`];
   }
   return [];
 }
@@ -261,20 +261,20 @@ export function handleTreeRoute({
 }
 
 /**
- * Resolve dl-album-only focus into artist + album keys when hierarchy is known.
+ * Resolve album-only focus into artist + album keys when hierarchy is known.
  */
 export function resolveDownloadsFocusPath(
   path: string[],
   hierarchy: { artists?: { artistId: string; albums?: { albumId: string }[] }[] },
 ): string[] {
   if (!path?.length) return path;
-  const albumKey = path.find((k) => k.startsWith("dl-album:"));
+  const albumKey = path.find((k) => k.startsWith("album:"));
   if (!albumKey) return path;
-  if (path.some((k) => k.startsWith("dl-artist:"))) return path;
-  const albumId = albumKey.slice("dl-album:".length);
+  if (path.some((k) => k.startsWith("artist:"))) return path;
+  const albumId = albumKey.slice("album:".length);
   for (const ar of hierarchy.artists || []) {
     if (ar.albums?.some((al) => al.albumId === albumId)) {
-      return [`dl-artist:${ar.artistId}`, albumKey];
+      return [`artist:${ar.artistId}`, albumKey];
     }
   }
   return path;

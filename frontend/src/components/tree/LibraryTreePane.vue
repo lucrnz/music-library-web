@@ -7,27 +7,13 @@ import { useRoute } from "vue-router";
 import { openCropFromFile } from "@/artistArt/pickFile";
 import { coverSrc } from "@/artistArt/state";
 import { submitPreferredCrop } from "@/artistArt/submit";
-import { buildAlbumMenuItems } from "@/components/library/albumMenuItems";
-import {
-  buildArtistMenuItems,
-  runArtistDownloadAll,
-} from "@/components/library/artistMenuItems";
-import { buildFolderMenuItems } from "@/components/library/folderMenuItems";
-import { buildTrackMenuItems } from "@/components/library/trackMenuItems";
+import { browseSourceFor } from "@/components/library/browseSource";
 import { type OpenMenu } from "@/components/library/entityMenu";
+import { entityActionsFor } from "@/components/library/entityActions";
 import { useEntityMenu } from "@/components/library/useEntityMenu";
-import { addAllDownloadedAlbum, addAllDownloadedArtist } from "@/downloads/addAll";
-import {
-  albumFromDl,
-  artistFromDl,
-  trackFromDl,
-} from "@/components/tree/sources/downloadsMenuMap";
-import { queueOnly } from "@/components/library/rows";
+import { downloadsBrowse } from "@/components/library/sources/downloadsBrowse";
+import { onlineBrowse } from "@/components/library/sources/onlineBrowse";
 import type { LibraryAlbum } from "@/components/library/loaders";
-import type {
-  DownloadsHierarchyAlbum,
-  DownloadsHierarchyArtist,
-} from "@/downloads/hierarchy";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
 import { isDesktopContextMenu } from "@/components/menu/rowActionMenu";
 import { artUrlCache } from "@/downloads/catalog";
@@ -41,16 +27,8 @@ import {
 import Icon from "@/components/icons/Icon.vue";
 import FileRow from "@/components/library/rows/FileRow.vue";
 import TrackRow from "@/components/library/rows/TrackRow.vue";
-import {
-  addAllForAlbum,
-  addAllForArtist,
-  addAllForFolder,
-  downloadAlbumById,
-} from "@/components/library/libraryActions";
-import {
-  fromCatalogRecord,
-  type Track,
-} from "@/models/track";
+
+import type { Track } from "@/models/track";
 import { playOrQueueTrack } from "@/components/library/rows";
 import { listAlbumRoots, loadAlbumChildren } from "@/components/tree/sources/albumsSource";
 import {
@@ -78,7 +56,6 @@ import {
 } from "@/components/tree/treeNavigation";
 import { getTreeSession } from "@/components/tree/treeSession";
 import type { FileRowModel } from "@/components/library/loaders";
-import type { CatalogTrackRecord } from "@/models/track";
 
 const props = defineProps<{
   mode: string;
@@ -87,6 +64,9 @@ const props = defineProps<{
 const route = useRoute();
 const artistsMode = computed(() => props.mode === "artists");
 const downloadsMode = computed(() => props.mode === "downloads");
+const source = computed(() =>
+  browseSourceFor(props.mode, onlineBrowse, downloadsBrowse),
+);
 const {
   menuOpen,
   menuItems,
@@ -95,58 +75,15 @@ const {
   closeEntityMenu,
   openEntityMenu,
 } = useEntityMenu({
-  itemsFor: (target) => {
-    const photo = artistsMode.value && target.kind === "artist";
-    switch (target.kind) {
-      case "artist":
-        return buildArtistMenuItems({
-          artist: target.artist,
-          includePhoto: photo,
-          addAll: () =>
-            downloadsMode.value
-              ? addAllDownloadedArtist(target.artist.id)
-              : addAllForArtist(target.artist.id),
-          downloadAll:
-            !downloadsMode.value && downloads.enabled
-              ? () => runArtistDownloadAll(target.artist)
-              : undefined,
-        });
-      case "album":
-        return buildAlbumMenuItems({
-          album: target.album,
-          addAll: () =>
-            downloadsMode.value
-              ? addAllDownloadedAlbum(target.album.id)
-              : addAllForAlbum(target.album.id),
-          download:
-            !downloadsMode.value && downloads.enabled
-              ? () => downloadAlbumById(target.album.id)
-              : undefined,
-        });
-      case "track":
-        return buildTrackMenuItems({
-          title: target.track.title,
-          artist: target.track.artist,
-          album: target.track.album,
-          addToPlaylist: () => queueOnly(target.track),
-        });
-      case "file": {
-        const t = target.file.track;
-        return buildTrackMenuItems({
-          title: t?.title || target.file.displayName || target.file.name,
-          artist: t?.artist,
-          album: t?.album,
-          addToPlaylist: () =>
-            queueOnly(t || target.file.id || target.file.path),
-        });
-      }
-      case "folder":
-        return buildFolderMenuItems({
-          dir: target.dir,
-          addAll: () => addAllForFolder(target.dir.path || ""),
-        });
-    }
-  },
+  itemsFor: (target) =>
+    entityActionsFor(source.value, {
+      downloadsEnabled: downloads.enabled,
+      includePhoto:
+        source.value.includeArtistPhoto({
+          mode: props.mode,
+          isSearch: false,
+        }) && target.kind === "artist",
+    })(target),
 });
 
 function artistFromNode(node: TreeNode): ArtistListItem | null {
@@ -161,20 +98,12 @@ function resolveCover(node: TreeNode): string {
     const artist = artistFromNode(node);
     return artist ? coverSrc(artist) : node.cover || "";
   }
-  if (props.mode === "downloads" && node.kind === "dl-artist") {
-    const data = node.data as DownloadsHierarchyArtist | undefined;
-    const id = data?.artistId;
+  if (props.mode === "downloads" && node.kind === "artist") {
+    const artist = artistFromNode(node);
+    const id = artist?.id;
     return (id && artUrlCache.urls[`artist:${id}:thumb`]) || node.cover || "";
   }
   return node.cover || "";
-}
-
-function parentNameForAlbum(albumId: string): string {
-  if (!downloadsHierarchy) return "";
-  for (const ar of downloadsHierarchy.artists) {
-    if (ar.albums.some((al) => al.albumId === albumId)) return ar.name;
-  }
-  return "";
 }
 
 function targetFromNode(node: TreeNode): OpenMenu | null {
@@ -183,23 +112,10 @@ function targetFromNode(node: TreeNode): OpenMenu | null {
       const artist = artistFromNode(node);
       return artist ? { kind: "artist", artist } : null;
     }
-    case "dl-artist": {
-      const data = node.data as DownloadsHierarchyArtist | undefined;
-      if (!data?.artistId) return null;
-      return { kind: "artist", artist: artistFromDl(data) };
-    }
     case "album": {
       const album = node.data as LibraryAlbum | undefined;
       if (!album?.id) return null;
       return { kind: "album", album };
-    }
-    case "dl-album": {
-      const data = node.data as DownloadsHierarchyAlbum | undefined;
-      if (!data?.albumId) return null;
-      return {
-        kind: "album",
-        album: albumFromDl(data, parentNameForAlbum(data.albumId)),
-      };
     }
     case "dir":
       return {
@@ -207,18 +123,8 @@ function targetFromNode(node: TreeNode): OpenMenu | null {
         dir: { name: node.title, path: treeNodePath(node) },
       };
     case "track": {
-      const track = asTrack(node.data);
-      return track ? { kind: "track", track } : null;
-    }
-    case "dl-track": {
-      try {
-        return {
-          kind: "track",
-          track: trackFromDl(node.data as CatalogTrackRecord),
-        };
-      } catch {
-        return null;
-      }
+      const track = node.data as Track | undefined;
+      return track?.id ? { kind: "track", track } : null;
     }
     case "file": {
       const file = fileFromNode(node);
@@ -399,14 +305,6 @@ async function onActivateLeaf(node: TreeNode) {
     const file = fileFromNode(node);
     const t = file?.track || file?.id;
     if (t) await playOrQueueTrack(t);
-    return;
-  }
-  if (node.kind === "dl-track" && node.data) {
-    try {
-      await playOrQueueTrack(fromCatalogRecord(node.data as CatalogTrackRecord));
-    } catch (err: unknown) {
-      console.error(err);
-    }
   }
 }
 
@@ -414,9 +312,7 @@ function showGroupMenu(node: TreeNode) {
   return (
     node.kind === "artist" ||
     node.kind === "album" ||
-    node.kind === "dir" ||
-    node.kind === "dl-artist" ||
-    node.kind === "dl-album"
+    node.kind === "dir"
   );
 }
 
@@ -431,14 +327,6 @@ function onSelectFile(file: FileRowModel) {
 function onSelectDir(node: TreeNode, e?: MouseEvent) {
   e?.stopPropagation?.();
   toggleLibSelection(treeNodePath(node), "dir");
-}
-
-function asTrack(rec: unknown): Track | null {
-  try {
-    return fromCatalogRecord(rec as CatalogTrackRecord);
-  } catch {
-    return null;
-  }
 }
 
 watch(
@@ -500,9 +388,17 @@ onMounted(loadRoots);
       </template>
       <template #leaf="{ node }">
         <TrackRow
-          v-if="node.kind === 'track'"
-          :track="asTrack(node.data)"
+          v-if="node.kind === 'track' && !downloadsMode"
+          :track="node.data as Track"
           :show-download="showTrackDownload"
+          :show-menu="true"
+          @menu-click="(t, e) => onLeafMenuClick({ kind: 'track', track: t }, e)"
+        />
+        <TrackRow
+          v-else-if="node.kind === 'track'"
+          :track="node.data as Track"
+          :show-download="false"
+          title-mode="title"
           :show-menu="true"
           @menu-click="(t, e) => onLeafMenuClick({ kind: 'track', track: t }, e)"
         />
@@ -513,14 +409,6 @@ onMounted(loadRoots);
           :show-menu="true"
           @select="onSelectFile"
           @menu-click="(f, e) => onLeafMenuClick({ kind: 'file', file: f }, e)"
-        />
-        <TrackRow
-          v-else-if="node.kind === 'dl-track'"
-          :track="asTrack(node.data)"
-          :show-download="false"
-          title-mode="title"
-          :show-menu="true"
-          @menu-click="(t, e) => onLeafMenuClick({ kind: 'track', track: t }, e)"
         />
       </template>
     </TreeView>

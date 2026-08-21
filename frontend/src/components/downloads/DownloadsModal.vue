@@ -244,30 +244,31 @@ const roots = ref<TreeNode[]>([]);
     }
 
     function onGroupDelete(node: TreeNode) {
-      if (node.kind === "dl-artist") {
-        onDeleteArtist(dataField(node.data, "artistId"), node.title);
-      } else if (node.kind === "dl-album") {
-        onDeleteAlbum(dataField(node.data, "albumId"), node.title);
+      const id = dataField(node.data, "id");
+      if (node.kind === "artist") {
+        onDeleteArtist(id, node.title);
+      } else if (node.kind === "album") {
+        onDeleteAlbum(id, node.title);
       }
     }
 
     function onLeafDelete(node: TreeNode) {
-      if (node.kind === "dl-track") {
-        onDeleteTrack(dataField(node.data, "trackId"));
+      if (node.kind === "track") {
+        onDeleteTrack(dataField(node.data, "id"));
       }
     }
 
     function leafTrackNum(node: TreeNode) {
-      return dataNum(node.data, "trackNum");
+      return node.downloadMeta?.trackNum ?? dataNum(node.data, "track");
     }
     function leafCodec(node: TreeNode) {
-      return dataField(node.data, "codec");
+      return node.downloadMeta?.codec || dataField(node.data, "codec");
     }
     function leafBytes(node: TreeNode) {
-      return dataNum(node.data, "bytes");
+      return node.downloadMeta?.bytes ?? dataNum(node.data, "bytes");
     }
     function leafStatus(node: TreeNode) {
-      return dataField(node.data, "status");
+      return node.downloadMeta?.status || dataField(node.data, "status");
     }
 </script>
 
@@ -381,14 +382,14 @@ const roots = ref<TreeNode[]>([]);
               <button
                 type="button"
                 class="icon-btn"
-                :title="node.kind === 'dl-artist' ? 'Delete all from artist' : 'Delete album downloads'"
-                :aria-label="node.kind === 'dl-artist' ? 'Delete all from artist' : 'Delete album downloads'"
+                :title="node.kind === 'artist' ? 'Delete all from artist' : 'Delete album downloads'"
+                :aria-label="node.kind === 'artist' ? 'Delete all from artist' : 'Delete album downloads'"
                 @click="onGroupDelete(node)"
               ><Icon name="trash" /></button>
             </template>
             <template #leaf="{ node }">
               <div class="row dl-manager-track">
-                <span class="dl-track-num">{{ leafTrackNum(node) != null ? String(leafTrackNum(node)).padStart(2,'0') : '—' }}</span>
+                <span class="downloads-track-num">{{ leafTrackNum(node) != null ? String(leafTrackNum(node)).padStart(2,'0') : '—' }}</span>
                 <span class="row-meta">
                   <span class="row-title">{{ node.title }}</span>
                   <span class="row-sub">

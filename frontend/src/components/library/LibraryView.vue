@@ -1,21 +1,15 @@
 <script setup lang="ts">
 /**
- * Library pane: online + downloads browse via BrowseSource pieces.
+ * Library pane: online + downloads browse via BrowseSource.
  */
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { openCropFromFile } from "@/artistArt/pickFile";
 import { submitPreferredCrop } from "@/artistArt/submit";
-import { buildAlbumMenuItems } from "@/components/library/albumMenuItems";
-import {
-  buildArtistMenuItems,
-  runArtistDownloadAll,
-} from "@/components/library/artistMenuItems";
-import { buildFolderMenuItems } from "@/components/library/folderMenuItems";
-import { buildTrackMenuItems } from "@/components/library/trackMenuItems";
+import { browseSourceFor } from "@/components/library/browseSource";
 import { type OpenMenu } from "@/components/library/entityMenu";
+import { entityActionsFor } from "@/components/library/entityActions";
 import type { EntityActions } from "@/components/library/EntityListHost.vue";
-import { queueOnly } from "@/components/library/rows";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
 import { useEntityMenu } from "@/components/library/useEntityMenu";
 import type { ArtistListItem, BrowseDir } from "@/api";
@@ -46,11 +40,7 @@ import EntityListHost from "@/components/library/EntityListHost.vue";
 import LibraryChrome from "@/components/library/LibraryChrome.vue";
 import StatsView from "@/components/stats/StatsView.vue";
 import {
-  addAllForAlbum,
-  addAllForArtist,
-  addAllForFolder,
   addSelected as addSelectedAction,
-  downloadAlbumById,
   downloadCurrentAlbum as downloadAlbumAction,
 } from "@/components/library/libraryActions";
 import {
@@ -60,31 +50,8 @@ import {
 } from "@/components/library/loaders";
 import { useBrowseLayout } from "@/components/library/useBrowseLayout";
 import { useLibraryLocation } from "@/components/library/useLibraryLocation";
-import {
-  addAllDownloadedAlbum,
-  addAllDownloadedArtist,
-  downloadsAddAll,
-  downloadsAlbumCover,
-  downloadsArtistCover,
-  downloadsGoBack,
-  downloadsOpenAlbum,
-  downloadsOpenArtist,
-  downloadsShowAddAll,
-  downloadsTrackCover,
-  loadDownloadsPage,
-} from "@/components/library/sources/downloadsBrowse";
-import {
-  loadOnlinePage,
-  onlineAddAll,
-  onlineArtistCover,
-  onlineGoBack,
-  onlineOpenAlbum,
-  onlineOpenArtist,
-  onlineOpenFolder,
-  onlineShowAddAll,
-  onlineShowAddSelected,
-  onlineShowDownloadAlbum,
-} from "@/components/library/sources/onlineBrowse";
+import { downloadsBrowse } from "@/components/library/sources/downloadsBrowse";
+import { onlineBrowse } from "@/components/library/sources/onlineBrowse";
 import type { FileRowModel } from "@/components/library/loaders";
 import type { Track } from "@/models/track";
 
@@ -101,7 +68,9 @@ const {
   albumId,
 } = useLibraryLocation();
 
-const isDownloads = computed(() => mode.value === "downloads");
+const source = computed(() =>
+  browseSourceFor(mode.value, onlineBrowse, downloadsBrowse),
+);
 const loading = ref(false);
 const error = ref("");
 const title = ref("Folders");
@@ -126,38 +95,22 @@ const selectedCount = computed(() => ui.libSelected.size);
 const trackCount = computed(() =>
   body.value.kind === "tracks" ? body.value.tracks.length : 0,
 );
-const showAddAll = computed(() =>
-  isDownloads.value
-    ? downloadsShowAddAll({
-        showTree: showTree.value,
-        trackCount: trackCount.value,
-      })
-    : onlineShowAddAll({
-        showTree: showTree.value,
-        mode: mode.value,
-        artistId: artistId.value,
-        albumId: albumId.value,
-      }),
-);
+const chromeInput = computed(() => ({
+  showTree: showTree.value,
+  mode: mode.value,
+  artistId: artistId.value,
+  albumId: albumId.value,
+  trackCount: trackCount.value,
+  selectedCount: selectedCount.value,
+  layout: ui.libraryLayout,
+  downloadsEnabled: downloads.enabled,
+}));
+const showAddAll = computed(() => source.value.showAddAll(chromeInput.value));
 const showAddSelected = computed(() =>
-  isDownloads.value
-    ? false
-    : onlineShowAddSelected({
-        mode: mode.value,
-        selectedCount: selectedCount.value,
-        showTree: showTree.value,
-        layout: ui.libraryLayout,
-      }),
+  source.value.showAddSelected(chromeInput.value),
 );
 const showDownloadAlbum = computed(() =>
-  isDownloads.value
-    ? false
-    : onlineShowDownloadAlbum({
-        showTree: showTree.value,
-        enabled: downloads.enabled,
-        albumId: albumId.value,
-        trackCount: trackCount.value,
-      }),
+  source.value.showDownloadAlbum(chromeInput.value),
 );
 
 const showLayoutToggle = computed(() =>
@@ -179,7 +132,7 @@ const gridHost = computed(() =>
   browseGridHost({
     isGrid: isGrid.value,
     bodyKind: body.value.kind,
-    pane: isDownloads.value ? "downloads" : "library",
+    pane: source.value.showFolderSelection ? "library" : "downloads",
   }),
 );
 
@@ -243,36 +196,30 @@ async function load() {
   }
 
   const seq = ++renderSeq;
-  if (!isDownloads.value) clearLibSelection();
+  if (source.value.clearsSelectionOnLoad) clearLibSelection();
   error.value = "";
   loading.value = true;
 
   try {
-    const page = isDownloads.value
-      ? await loadDownloadsPage({
-          routeName: String(routeName.value || ""),
-          artistId: artistId.value,
-          albumId: albumId.value,
-          enabled: downloads.enabled,
-        })
-      : await loadOnlinePage({
-          mode: mode.value,
-          routeName: routeName.value,
-          folderPath: folderPath.value,
-          artistId: artistId.value,
-          albumId: albumId.value,
-          searchQuery:
-            (searchQuery.value || "").trim() ||
-            String(libLoc.value.query?.q || "").trim(),
-        });
+    const page = await source.value.load({
+      mode: mode.value,
+      routeName: routeName.value,
+      folderPath: folderPath.value,
+      artistId: artistId.value,
+      albumId: albumId.value,
+      searchQuery:
+        (searchQuery.value || "").trim() ||
+        String(libLoc.value.query?.q || "").trim(),
+      downloadsEnabled: downloads.enabled,
+    });
     if (!isCurrent(seq)) return;
     applyPage(page);
     hasLoadedOnce.value = true;
-    if (!isDownloads.value) noteServerReachable();
+    if (source.value.reportsConnectivity) noteServerReachable();
   } catch (err: unknown) {
     if (!isCurrent(seq)) return;
     const msg = err instanceof Error ? err.message : String(err);
-    if (!isDownloads.value) {
+    if (source.value.reportsConnectivity) {
       noteServerUnreachable(err);
       error.value =
         connectivityLoadError(connectivity.state, downloads.enabled) || msg;
@@ -324,14 +271,7 @@ onMounted(() => {
 });
 
 function goBack() {
-  if (isDownloads.value) {
-    downloadsGoBack(router, {
-      routeName: routeName.value,
-      backArtistId: backArtistId.value,
-    });
-    return;
-  }
-  onlineGoBack(router, {
+  source.value.goBack(router, {
     mode: mode.value,
     routeName: routeName.value,
     folderPath: folderPath.value,
@@ -340,17 +280,15 @@ function goBack() {
 }
 
 function openFolder(dir: BrowseDir) {
-  onlineOpenFolder(router, dir);
+  source.value.openFolder?.(router, dir);
 }
 
 function openArtist(artist: { id: string }) {
-  if (isDownloads.value) downloadsOpenArtist(router, artist);
-  else onlineOpenArtist(router, artist);
+  source.value.openArtist(router, artist);
 }
 
 function openAlbum(album: { id: string }) {
-  if (isDownloads.value) downloadsOpenAlbum(router, album);
-  else onlineOpenAlbum(router, album);
+  source.value.openAlbum(router, album);
 }
 
 function isSelected(path: string) {
@@ -366,22 +304,20 @@ function onFileSelect(file: FileRowModel) {
 }
 
 async function addAll() {
-  if (isDownloads.value) {
-    const tracks = body.value.kind === "tracks" ? body.value.tracks : [];
-    await downloadsAddAll(tracks);
-    return;
-  }
-  await onlineAddAll(
-    {
+  const tracks = body.value.kind === "tracks" ? body.value.tracks : [];
+  await source.value.addAll({
+    loc: {
       mode: mode.value,
       routeName: routeName.value,
       folderPath: folderPath.value,
       artistId: artistId.value,
       albumId: albumId.value,
       searchQuery: searchQuery.value,
+      downloadsEnabled: downloads.enabled,
     },
-    { showTree: showTree.value },
-  );
+    showTree: showTree.value,
+    tracks,
+  });
 }
 
 async function addSelected() {
@@ -414,8 +350,11 @@ const offlineBanner = computed(() =>
   connectivityBanner(connectivity.state, downloads.enabled),
 );
 
-const includeArtistPhoto = computed(
-  () => !isDownloads.value && mode.value === "artists" && !isSearch.value,
+const includeArtistPhoto = computed(() =>
+  source.value.includeArtistPhoto({
+    mode: mode.value,
+    isSearch: isSearch.value,
+  }),
 );
 
 const {
@@ -427,71 +366,23 @@ const {
   onEntityMenuClick,
   onEntityContext,
 } = useEntityMenu({
-  itemsFor: (target) => {
-    switch (target.kind) {
-      case "artist":
-        return buildArtistMenuItems({
-          artist: target.artist,
-          includePhoto: includeArtistPhoto.value,
-          addAll: () =>
-            isDownloads.value
-              ? addAllDownloadedArtist(target.artist.id)
-              : addAllForArtist(target.artist.id),
-          downloadAll:
-            !isDownloads.value && downloads.enabled
-              ? () => runArtistDownloadAll(target.artist)
-              : undefined,
-        });
-      case "album":
-        return buildAlbumMenuItems({
-          album: target.album,
-          addAll: () =>
-            isDownloads.value
-              ? addAllDownloadedAlbum(target.album.id)
-              : addAllForAlbum(target.album.id),
-          download:
-            !isDownloads.value && downloads.enabled
-              ? () => downloadAlbumById(target.album.id)
-              : undefined,
-        });
-      case "track":
-        return buildTrackMenuItems({
-          title: target.track.title,
-          artist: target.track.artist,
-          album: target.track.album,
-          addToPlaylist: () => queueOnly(target.track),
-        });
-      case "file": {
-        const t = target.file.track;
-        return buildTrackMenuItems({
-          title: t?.title || target.file.displayName || target.file.name,
-          artist: t?.artist,
-          album: t?.album,
-          addToPlaylist: () =>
-            queueOnly(t || target.file.id || target.file.path),
-        });
-      }
-      case "folder":
-        return buildFolderMenuItems({
-          dir: target.dir,
-          addAll: () => addAllForFolder(target.dir.path || ""),
-        });
-    }
-  },
+  itemsFor: (target) =>
+    entityActionsFor(source.value, {
+      downloadsEnabled: downloads.enabled,
+      includePhoto: includeArtistPhoto.value,
+    })(target),
 });
 
 function artistCover(artist: ArtistListItem) {
-  return isDownloads.value
-    ? downloadsArtistCover(artist, artUrls.value)
-    : onlineArtistCover(artist);
+  return source.value.artistCover(artist, artUrls.value);
 }
 
 function albumCover(album: LibraryAlbum) {
-  return downloadsAlbumCover(album, artUrls.value);
+  return source.value.albumCover(album, artUrls.value);
 }
 
 function trackCover(track: Track) {
-  return downloadsTrackCover(track, artUrls.value);
+  return source.value.trackCover(track, artUrls.value);
 }
 
 async function onArtistThumbDrop(artist: ArtistListItem, file: File) {
@@ -521,9 +412,8 @@ const entityActions = computed((): EntityActions => ({
     onRowContextMenu: (track, e) =>
       onEntityContext({ kind: "track", track }, e),
   },
-  ...(isDownloads.value
-    ? {}
-    : {
+  ...(source.value.showFolderSelection
+    ? {
         folder: {
           onMenuClick: (dir: BrowseDir, e: MouseEvent) =>
             onEntityMenuClick({ kind: "folder", dir }, e),
@@ -536,7 +426,8 @@ const entityActions = computed((): EntityActions => ({
           onRowContextMenu: (file: FileRowModel, e: MouseEvent) =>
             onEntityContext({ kind: "file", file }, e),
         },
-      }),
+      }
+    : {}),
 }));
 
 const headerMenuTarget = computed((): OpenMenu | null => {
@@ -563,7 +454,7 @@ watch(
 
 <template>
     <LibraryChrome
-      :aria-label="isDownloads ? 'Downloads library' : 'Library'"
+      :aria-label="source.ariaLabel"
       :title="title"
       :show-back="showBack && !showTree"
       :offline-banner="offlineBanner"
@@ -621,14 +512,14 @@ watch(
         v-else
         :body="body"
         :error="error"
-        :loading="isDownloads ? loading : false"
+        :loading="source.showListLoading ? loading : false"
         :is-grid="isGrid"
         :grid-host="gridHost"
-        :show-track-download="!isDownloads"
-        :is-selected="isDownloads ? null : isSelected"
+        :show-track-download="source.showTrackDownload"
+        :is-selected="source.showFolderSelection ? isSelected : null"
         :artist-cover="artistCover"
-        :album-cover="isDownloads ? albumCover : null"
-        :track-cover="isDownloads ? trackCover : null"
+        :album-cover="source.useLocalAlbumCover ? albumCover : null"
+        :track-cover="source.useLocalTrackCover ? trackCover : null"
         :entity-actions="entityActions"
         @open-artist="openArtist"
         @open-album="openAlbum"

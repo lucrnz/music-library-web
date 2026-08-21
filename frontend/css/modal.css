@@ -570,7 +570,7 @@ body.modal-open {
   margin-left: 8px;
 }
 
-.dl-track-num {
+.downloads-track-num {
   width: 28px;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
