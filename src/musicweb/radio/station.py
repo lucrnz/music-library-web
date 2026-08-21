@@ -133,6 +133,15 @@ class RadioStation:
                 break
         return ids
 
+    def retained_track_ids(self) -> frozenset[str]:
+        """Current plus remaining radio-queue ids. Internal — never serialize."""
+        current = self._current_track_id
+        if current is None:
+            return frozenset()
+        return frozenset(
+            (current, *self.peek_upcoming_ids(len(self._ordered_queue())))
+        )
+
     def run_catchup(self, now: datetime) -> None:
         session = self._database.session()
         try:

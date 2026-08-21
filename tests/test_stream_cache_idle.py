@@ -265,13 +265,13 @@ def test_sweep_loop_stop_drains_in_flight_clear() -> None:
     asyncio.run(run())
 
 
-def test_run_clear_does_not_note_swept() -> None:
+def test_run_exclusive_does_not_note_swept() -> None:
     clock = _Clock(0.0)
     idle = StreamCacheIdle(idle_after_s=1.0, clock=clock)
 
     async def run() -> None:
         clock.now = 1.0
-        assert await idle.run_clear(lambda: 3) == 3
+        assert await idle.run_exclusive(lambda: 3) == 3
         assert not idle.already_swept
         assert await idle.sweep_if_due(lambda: 1)
 

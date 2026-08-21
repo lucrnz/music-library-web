@@ -94,8 +94,8 @@ class StreamCacheIdle:
         async with self._ensure_gate():
             self.mark_exit()
 
-    async def _await_clear(self, clear_fn: Callable[[], int]) -> int:
-        task = asyncio.create_task(asyncio.to_thread(clear_fn))
+    async def _await_exclusive(self, fn: Callable[[], int]) -> int:
+        task = asyncio.create_task(asyncio.to_thread(fn))
         try:
             return await asyncio.shield(task)
         except asyncio.CancelledError:
@@ -106,13 +106,13 @@ class StreamCacheIdle:
         async with self._ensure_gate():
             if not self.due():
                 return False
-            await self._await_clear(clear_fn)
+            await self._await_exclusive(clear_fn)
             self.note_swept()
             return True
 
-    async def run_clear(self, clear_fn: Callable[[], int]) -> int:
+    async def run_exclusive(self, fn: Callable[[], int]) -> int:
         async with self._ensure_gate():
-            return await self._await_clear(clear_fn)
+            return await self._await_exclusive(fn)
 
 
 async def idle_sweep_loop(

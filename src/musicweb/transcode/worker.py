@@ -5,9 +5,9 @@ Encode argv fragments and aresample/dither *policy* live in ``profiles``
 (``StreamProfile``, ``plan_aresample``).
 
 Cache files live under the process cache ``streams/`` subdirectory and are
-wiped with the process root on shutdown, via scoped ``/api/cache/clear``,
-or by idle eviction (``Transcoder.clear_cache`` after about an hour with
-no HTTP client).
+wiped with the process root on shutdown, or by idle eviction
+(``Transcoder.clear_cache`` after about an hour with no HTTP client).
+Queue edits may drop individual paths via ``forget_paths``.
 
 All encodes run on a single background worker fed by a two-tier priority
 queue: play requests (urgent, newest first) ahead of playlist prewarm
@@ -24,12 +24,14 @@ import shutil
 import subprocess
 import threading
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from musicweb.transcode.probe import SourceAudioTech, probe_source_audio_tech
 from musicweb.transcode.profiles import (
     DEFAULT_PROFILE_TAG,
+    PROFILES,
     StreamProfile,
     get_profile,
     plan_aresample,
@@ -63,7 +65,7 @@ class _Job:
     out_path: Path | None = None
     proc: subprocess.Popen | None = None
     cancel_requested: bool = False
-    purged: bool = False  # set by clear_cache(): never re-queue this job
+    purged: bool = False  # set by clear_cache/forget_paths: never re-queue
 
 
 class Transcoder:
@@ -140,6 +142,23 @@ class Transcoder:
         for queue in queues:
             while queue:
                 job = queue.popleft()
+                self._jobs.pop(job.key, None)
+                job.error = error
+                job.done.set()
+                drained += 1
+        return drained
+
+    def _drain_matching(
+        self, error: Exception, paths: set[str], *queues: deque[_Job]
+    ) -> int:
+        """Fail queued jobs whose relative_path is in *paths*. Holds lock."""
+        drained = 0
+        for queue in queues:
+            keep = [job for job in queue if job.relative_path not in paths]
+            drop = [job for job in queue if job.relative_path in paths]
+            queue.clear()
+            queue.extend(keep)
+            for job in drop:
                 self._jobs.pop(job.key, None)
                 job.error = error
                 job.done.set()
@@ -371,6 +390,49 @@ class Transcoder:
         if dropped:
             logger.info("Dropped %d pending prewarm job(s)", dropped)
         return dropped
+
+    def forget_paths(self, relative_paths: Iterable[str]) -> int:
+        """Drop jobs and cache files for the given library paths (all profiles).
+
+        Returns the number of files removed. Does not wipe the cache tree.
+        """
+        if self._temp_dir is None:
+            raise RuntimeError("Transcoder is shut down")
+        paths = {p for p in relative_paths if p}
+        if not paths:
+            return 0
+
+        with self._queue_cond:
+            self._drain_matching(
+                RuntimeError("Stream forgotten"),
+                paths,
+                self._urgent,
+                self._prewarm,
+            )
+            current = self._current
+            if current is not None and current.relative_path in paths:
+                current.purged = True
+                self._request_cancel(current)
+                while self._current is not None:
+                    self._queue_cond.wait(timeout=5)
+
+        removed = 0
+        for rel in paths:
+            for profile in PROFILES.values():
+                out_path = self._out_path(
+                    self._cache_key(rel, profile.tag), profile
+                )
+                partial = self.temp_dir / f"{out_path.name}.partial"
+                for child in (out_path, partial):
+                    try:
+                        child.unlink()
+                    except FileNotFoundError:
+                        continue
+                    except OSError:
+                        continue
+                    removed += 1
+        logger.info("Forgot %d stream cache file(s)", removed)
+        return removed
 
     def clear_cache(self) -> int:
         """Drop every queued job, cancel any running encode, and wipe the

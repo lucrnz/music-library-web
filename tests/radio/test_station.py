@@ -248,6 +248,40 @@ def test_missing_current_is_skip_pending_then_skipped(tmp_home, db):
     assert "gone" in station.skip_ids
 
 
+def test_retained_track_ids_is_current_and_remaining(tmp_home, db):
+    with db.session() as session:
+        _seed_tracks(session, tmp_home.lib, 16, duration_ms=30_000)
+    station = _station(tmp_home, db)
+    assert station.retained_track_ids() == frozenset()
+    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    station.run_catchup(t0)
+    first = station.now_playing()
+    assert first.track is not None
+    first_id = first.track.id
+    upcoming = station.peek_upcoming_ids(32)
+    retained = station.retained_track_ids()
+    assert first_id in retained
+    assert set(upcoming) <= retained
+    assert first_id not in upcoming
+
+    station.tick(t0 + timedelta(milliseconds=30_000))
+    nxt = station.now_playing()
+    assert nxt.track is not None
+    retained = station.retained_track_ids()
+    assert first_id not in retained
+    assert nxt.track.id in retained
+    assert set(station.peek_upcoming_ids(32)) <= retained
+
+    for i in range(8):
+        station.tick(t0 + timedelta(milliseconds=30_000 * (i + 2)))
+    later = station.retained_track_ids()
+    assert first_id not in later
+    with db.session() as session:
+        persisted = radio_repo.load_station(session)
+    assert any(first_id in batch for batch in persisted.banlist)
+    assert first_id not in later
+
+
 def test_noop_tick_does_not_write(tmp_home, db):
     with db.session() as session:
         _seed_tracks(session, tmp_home.lib, 8, duration_ms=30_000)

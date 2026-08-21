@@ -1,4 +1,4 @@
-"""Stream, cover, prepare, codecs — id-primary media."""
+"""Stream, cover, prepare, forget, codecs — id-primary media."""
 
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ from musicweb.transcode import (
     tech_from_track,
 )
 from musicweb.transcode.enqueue import enqueue_prepare
+from musicweb.transcode.forget import resolve_forget
 from musicweb.transcode.null_tech_log import warn_null_track_tech
 from musicweb.diag.emit import emit
 from musicweb.transcode.passthrough import (
@@ -257,21 +258,23 @@ def transcode_prepare(
     return counts
 
 
-@router.post("/cache/clear")
-async def cache_clear(
+class ForgetRequest(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=1000)
+
+
+@router.post("/transcode/forget")
+async def transcode_forget(
     request: Request,
-    scope: list[Literal["streams"]] = Query(
-        ...,
-        description="Cache subtree(s) to wipe. Only streams (covers are persisted).",
-    ),
+    payload: ForgetRequest,
+    db: Session = Depends(get_db),
 ) -> dict:
-    scopes = set(scope)
-    removed: dict[str, int] = {}
-    if "streams" in scopes:
-        removed["streams"] = await request.app.state.stream_cache_idle.run_clear(
-            transcoder(request).clear_cache
+    retained = request.app.state.radio.retained_track_ids()
+    paths, forgotten, skipped = resolve_forget(db, payload.ids, retained)
+    if paths:
+        await request.app.state.stream_cache_idle.run_exclusive(
+            lambda: transcoder(request).forget_paths(paths)
         )
-    return {"removed": removed, "scopes": sorted(scopes)}
+    return {"forgotten": forgotten, "skipped": skipped}
 
 
 @router.get("/cover")
