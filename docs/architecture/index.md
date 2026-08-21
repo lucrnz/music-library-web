@@ -59,8 +59,9 @@ FastAPI (routes → services)
 
 | Layer | Owns | Does not own |
 |-------|------|--------------|
-| `routes/` | HTTP parse, status codes, thin orchestration | Encode policy, SQL details |
+| `routes/` | HTTP parse, status codes, thin orchestration | Encode policy, SQL details, filesystem presence |
 | `scan/` | Walk, fingerprint, upsert, enrichment passes | Serving HTTP |
+| `library.py` | Path jail (`resolve`) and present indexable audio (`present_audio`) | Encode policy, index writes |
 | `db/` | Models, sessions, FTS, migrations, repositories | Filesystem media I/O |
 | `transcode/` | Profiles, probe, worker, dependency checks, shared enqueue | Persistent media storage |
 | `radio/` | Station clock, picker, tuner-driven prepare | Live encode pipe, listen stats |

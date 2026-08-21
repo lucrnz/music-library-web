@@ -15,6 +15,8 @@ Optional client-side offline music: users can download stream-profile audio to t
   - IndexedDB metadata: `db.ts` (no `blobs` store; binaries live in OPFS)
   - Play / cover resolution: `resolve.ts`
   - Hierarchy / storage formatters: `hierarchy.ts`, `storageInfo.ts`
+  - Offline browse loader: `browse.ts` (`loadDownloadsView` → `LibraryPage`)
+- Offline browse UI is `LibraryView` (`mode === "downloads"`), not a second library SFC. Source pieces: `frontend/src/components/library/sources/downloadsBrowse.ts`. Row covers: omitted/`null` `coverSrc` = remote fallback; `""` = placeholder (do not hit `/api/cover` when local art is missing).
 - Settings that affect downloads: `frontend/src/stores/settings.ts` (download profile)
 - Connectivity signals consumed by queue policy: `frontend/src/connectivity.ts`
 - PWA shell boundary: `docs/systems/pwa.md`

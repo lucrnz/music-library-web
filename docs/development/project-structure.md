@@ -35,7 +35,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `jobs/` | Single-flight library job runner (scan + regen kinds, ScanState) |
 | `control/` | Private UDS JSON control plane (health + job RPC) for live CLI |
 | `config.py` | Settings from env + source-level tuning constants |
-| `library.py` | Safe path resolution under `MUSIC_LIBRARY_PATH` |
+| `library.py` | Path jail (`resolve`) and present indexable audio (`present_audio`) under `MUSIC_LIBRARY_PATH` |
 | `metadata.py` | Tag / audio tech reading (mutagen) |
 | `cache.py` | Process-scoped temp caches (streams) |
 | `cover.py` / `artist_image.py` | Persisted WebP cover and portrait stores under the data dir |
@@ -58,6 +58,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **ORM models** live in `db/models.py`; query helpers in `db/repositories/` (including `listens.py`).
 - **Listen stats** HTTP is `routes/listens.py`; client cycle/outbox/chips are `frontend/src/listens/`. See `docs/systems/playback-stats.md`. Do not add `src/musicweb/listens/`.
 - **Stream encode policy** (profiles, aresample/dither rules) lives under `transcode/`. Do not reimplement encode argv in routes.
+- **Present audio files** go through `Library.present_audio` (jail + exists + indexable). Stream maps `None` to 404. Enqueue, radio, scan lyrics/covers, and local artist-image folder lookup branch on `None`. Do not reimplement resolve-and-exists at those call sites. `resolve` stays for directory browse/collect.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
 - **Row action menus** live under `frontend/src/components/menu/`. Desktop media queries for new client code live in `frontend/src/layout.ts`. See `docs/frontend/conventions.md`.
