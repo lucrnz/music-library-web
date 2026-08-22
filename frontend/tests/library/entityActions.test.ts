@@ -46,14 +46,14 @@ describe("entityActionsFor", () => {
         { downloadsEnabled: true, includePhoto: false },
         { kind: "artist", artist },
       ),
-    ).toEqual(["add-all", "download-all", "copy-artist"]);
+    ).toEqual(["add-all", "play-all", "download-all", "copy-artist"]);
     expect(
       idsFor(
         onlineBrowse,
         { downloadsEnabled: true, includePhoto: false },
         { kind: "album", album },
       ),
-    ).toEqual(["add-all", "download", "copy-album", "copy-artist"]);
+    ).toEqual(["add-all", "play-all", "download", "copy-album", "copy-artist"]);
   });
 
   it("online omits download runs when disabled", () => {
@@ -63,14 +63,14 @@ describe("entityActionsFor", () => {
         { downloadsEnabled: false, includePhoto: false },
         { kind: "artist", artist },
       ),
-    ).toEqual(["add-all", "copy-artist"]);
+    ).toEqual(["add-all", "play-all", "copy-artist"]);
     expect(
       idsFor(
         onlineBrowse,
         { downloadsEnabled: false, includePhoto: false },
         { kind: "album", album },
       ),
-    ).toEqual(["add-all", "copy-album", "copy-artist"]);
+    ).toEqual(["add-all", "play-all", "copy-album", "copy-artist"]);
   });
 
   it("downloads source never injects download runs", () => {
@@ -80,14 +80,14 @@ describe("entityActionsFor", () => {
         { downloadsEnabled: true, includePhoto: false },
         { kind: "artist", artist },
       ),
-    ).toEqual(["add-all", "copy-artist"]);
+    ).toEqual(["add-all", "play-all", "copy-artist"]);
     expect(
       idsFor(
         downloadsBrowse,
         { downloadsEnabled: true, includePhoto: false },
         { kind: "album", album },
       ),
-    ).toEqual(["add-all", "copy-album", "copy-artist"]);
+    ).toEqual(["add-all", "play-all", "copy-album", "copy-artist"]);
   });
 
   it("photo items follow includePhoto", () => {
@@ -97,7 +97,7 @@ describe("entityActionsFor", () => {
         { downloadsEnabled: false, includePhoto: true },
         { kind: "artist", artist },
       ),
-    ).toEqual(["add-all", "copy-artist", "change-photo"]);
+    ).toEqual(["add-all", "play-all", "copy-artist", "change-photo"]);
     expect(
       idsFor(
         downloadsBrowse,

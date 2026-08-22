@@ -43,10 +43,12 @@ describe("buildAlbumMenuItems", () => {
     const items = buildAlbumMenuItems({
       album,
       addAll: () => {},
+      playAll: () => {},
       download: () => {},
     });
     expect(items.map((i) => i.id)).toEqual([
       "add-all",
+      "play-all",
       "download",
       "copy-album",
       "copy-artist",
@@ -61,8 +63,9 @@ describe("buildAlbumMenuItems", () => {
       buildAlbumMenuItems({
         album: { ...album, title: "", artist: "" },
         addAll: () => {},
+        playAll: () => {},
       }).map((i) => i.id),
-    ).toEqual(["add-all"]);
+    ).toEqual(["add-all", "play-all"]);
   });
 });
 
@@ -104,9 +107,11 @@ describe("buildFolderMenuItems", () => {
     const items = buildFolderMenuItems({
       dir: { name: "Jazz", path: "/music/Jazz" },
       addAll: () => {},
+      playAll: () => {},
     });
     expect(items.map((i) => i.id)).toEqual([
       "add-all",
+      "play-all",
       "copy-folder-name",
       "copy-folder-path",
     ]);

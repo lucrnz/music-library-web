@@ -8,9 +8,11 @@ import type { BrowseDir } from "@/api";
 export function buildFolderMenuItems({
   dir,
   addAll,
+  playAll,
 }: {
   dir: BrowseDir;
   addAll: () => void | Promise<void>;
+  playAll: () => void | Promise<void>;
 }): ActionItem[] {
   const items: ActionItem[] = [
     {
@@ -18,6 +20,12 @@ export function buildFolderMenuItems({
       label: "Add all to playlist",
       icon: "plus",
       run: () => addAll(),
+    },
+    {
+      id: "play-all",
+      label: "Play all",
+      icon: "play",
+      run: () => playAll(),
     },
   ];
   for (const copy of [

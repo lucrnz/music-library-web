@@ -8,10 +8,12 @@ import type { LibraryAlbum } from "@/components/library/loaders";
 export function buildAlbumMenuItems({
   album,
   addAll,
+  playAll,
   download,
 }: {
   album: LibraryAlbum;
   addAll: () => void | Promise<void>;
+  playAll: () => void | Promise<void>;
   download?: () => void | Promise<void>;
 }): ActionItem[] {
   const items: ActionItem[] = [
@@ -20,6 +22,12 @@ export function buildAlbumMenuItems({
       label: "Add all to playlist",
       icon: "plus",
       run: () => addAll(),
+    },
+    {
+      id: "play-all",
+      label: "Play all",
+      icon: "play",
+      run: () => playAll(),
     },
   ];
   if (download) {

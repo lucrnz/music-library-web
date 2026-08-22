@@ -93,9 +93,12 @@ export interface BrowseSource {
 
   artistAddAll(id: string): void | Promise<void>;
   albumAddAll(id: string): void | Promise<void>;
+  artistPlayAll(id: string): void | Promise<void>;
+  albumPlayAll(id: string): void | Promise<void>;
   artistDownloadAll?(artist: Artist): void | Promise<void>;
   albumDownload?(album: { id: string }): void | Promise<void>;
   folderAddAll?(path: string): void | Promise<void>;
+  folderPlayAll?(path: string): void | Promise<void>;
 }
 
 export function browseSourceFor(

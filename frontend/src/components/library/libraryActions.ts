@@ -14,8 +14,17 @@ import { addToQueue } from "@/stores/playlist";
 import { clearLibSelection, showToast, ui } from "@/stores/ui";
 import type { Track } from "@/models/track";
 
+async function playCollected(entries: Track[]) {
+  const { playAllTracks } = await import("@/stores/player");
+  await playAllTracks(entries);
+}
+
 export async function addAllForFolder(path: string): Promise<void> {
   await addToQueue(await collectTracks(path || ""));
+}
+
+export async function playAllForFolder(path: string): Promise<void> {
+  await playCollected(await collectTracks(path || ""));
 }
 
 export async function collectArtistDownloadTracks(
@@ -39,18 +48,31 @@ export async function collectArtistDownloadTracks(
   return { remaining, playableCount };
 }
 
-export async function addAllForArtist(artistId: string): Promise<void> {
-  if (!artistId) return;
+async function collectArtistTracks(artistId: string): Promise<Track[]> {
+  if (!artistId) return [];
   const albumList = await fetchArtistAlbums(artistId);
   const trackLists = await Promise.all(
     albumList.map((album) => fetchAlbumTracks(album.id)),
   );
-  await addToQueue(trackLists.flat());
+  return trackLists.flat();
+}
+
+export async function addAllForArtist(artistId: string): Promise<void> {
+  await addToQueue(await collectArtistTracks(artistId));
+}
+
+export async function playAllForArtist(artistId: string): Promise<void> {
+  await playCollected(await collectArtistTracks(artistId));
 }
 
 export async function addAllForAlbum(albumId: string): Promise<void> {
   if (!albumId) return;
   await addToQueue(await fetchAlbumTracks(albumId));
+}
+
+export async function playAllForAlbum(albumId: string): Promise<void> {
+  if (!albumId) return;
+  await playCollected(await fetchAlbumTracks(albumId));
 }
 
 export async function downloadAlbumById(albumId: string): Promise<void> {

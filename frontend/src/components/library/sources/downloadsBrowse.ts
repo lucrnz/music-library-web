@@ -3,7 +3,12 @@
  */
 import type { BrowseSource } from "@/components/library/browseSource";
 import type { LibraryPage } from "@/components/library/loaders";
-import { addAllDownloadedAlbum, addAllDownloadedArtist } from "@/downloads/addAll";
+import {
+  addAllDownloadedAlbum,
+  addAllDownloadedArtist,
+  playAllDownloadedAlbum,
+  playAllDownloadedArtist,
+} from "@/downloads/addAll";
 import { loadDownloadsView } from "@/downloads/browse";
 import { artUrlCache } from "@/downloads/catalog";
 import { downloads } from "@/downloads/state";
@@ -171,5 +176,13 @@ export const downloadsBrowse: BrowseSource = {
 
   albumAddAll(id) {
     return addAllDownloadedAlbum(id);
+  },
+
+  artistPlayAll(id) {
+    return playAllDownloadedArtist(id);
+  },
+
+  albumPlayAll(id) {
+    return playAllDownloadedAlbum(id);
   },
 };

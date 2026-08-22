@@ -11,6 +11,9 @@ import {
   addAllForArtist,
   addAllForFolder,
   downloadAlbumById,
+  playAllForAlbum,
+  playAllForArtist,
+  playAllForFolder,
 } from "@/components/library/libraryActions";
 import {
   loadLibraryPage,
@@ -204,6 +207,14 @@ export const onlineBrowse: BrowseSource = {
     return addAllForAlbum(id);
   },
 
+  artistPlayAll(id) {
+    return playAllForArtist(id);
+  },
+
+  albumPlayAll(id) {
+    return playAllForAlbum(id);
+  },
+
   artistDownloadAll(artist) {
     return runArtistDownloadAll(artist);
   },
@@ -214,6 +225,10 @@ export const onlineBrowse: BrowseSource = {
 
   folderAddAll(path) {
     return addAllForFolder(path);
+  },
+
+  folderPlayAll(path) {
+    return playAllForFolder(path);
   },
 };
 

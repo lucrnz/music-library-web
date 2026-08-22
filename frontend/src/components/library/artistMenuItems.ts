@@ -49,11 +49,13 @@ export function buildArtistMenuItems({
   artist,
   includePhoto,
   addAll,
+  playAll,
   downloadAll,
 }: {
   artist: Artist;
   includePhoto: boolean;
   addAll: () => void | Promise<void>;
+  playAll: () => void | Promise<void>;
   downloadAll?: () => void | Promise<void>;
 }): ActionItem[] {
   const items: ActionItem[] = [
@@ -62,6 +64,12 @@ export function buildArtistMenuItems({
       label: "Add all to playlist",
       icon: "plus",
       run: () => addAll(),
+    },
+    {
+      id: "play-all",
+      label: "Play all",
+      icon: "play",
+      run: () => playAll(),
     },
   ];
 

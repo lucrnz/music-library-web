@@ -21,6 +21,7 @@ export function entityActionsFor(
           artist: target.artist,
           includePhoto: ctx.includePhoto,
           addAll: () => source.artistAddAll(target.artist.id),
+          playAll: () => source.artistPlayAll(target.artist.id),
           downloadAll:
             ctx.downloadsEnabled && source.artistDownloadAll
               ? () => source.artistDownloadAll!(target.artist)
@@ -30,6 +31,7 @@ export function entityActionsFor(
         return buildAlbumMenuItems({
           album: target.album,
           addAll: () => source.albumAddAll(target.album.id),
+          playAll: () => source.albumPlayAll(target.album.id),
           download:
             ctx.downloadsEnabled && source.albumDownload
               ? () => source.albumDownload!(target.album)
@@ -56,6 +58,7 @@ export function entityActionsFor(
         return buildFolderMenuItems({
           dir: target.dir,
           addAll: () => source.folderAddAll?.(target.dir.path || ""),
+          playAll: () => source.folderPlayAll?.(target.dir.path || ""),
         });
     }
   };

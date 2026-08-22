@@ -33,9 +33,11 @@ describe("buildArtistMenuItems", () => {
       artist: artist(),
       includePhoto: true,
       addAll: () => {},
+      playAll: () => {},
     });
     expect(items.map((i) => i.id)).toEqual([
       "add-all",
+      "play-all",
       "copy-artist",
       "change-photo",
     ]);
@@ -48,10 +50,12 @@ describe("buildArtistMenuItems", () => {
       artist: artist({ hasPreferredImage: true }),
       includePhoto: true,
       addAll: () => {},
+      playAll: () => {},
       downloadAll: () => {},
     });
     expect(items.map((i) => i.id)).toEqual([
       "add-all",
+      "play-all",
       "download-all",
       "copy-artist",
       "change-photo",
@@ -65,10 +69,12 @@ describe("buildArtistMenuItems", () => {
       artist: artist({ hasPreferredImage: true }),
       includePhoto: false,
       addAll: () => {},
+      playAll: () => {},
       downloadAll: () => {},
     });
     expect(items.map((i) => i.id)).toEqual([
       "add-all",
+      "play-all",
       "download-all",
       "copy-artist",
     ]);
@@ -79,7 +85,8 @@ describe("buildArtistMenuItems", () => {
       artist: artist({ name: "  " }),
       includePhoto: false,
       addAll: () => {},
+      playAll: () => {},
     });
-    expect(items.map((i) => i.id)).toEqual(["add-all"]);
+    expect(items.map((i) => i.id)).toEqual(["add-all", "play-all"]);
   });
 });
