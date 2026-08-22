@@ -613,3 +613,15 @@ HTML delivery now returns `PlayIntent`, catalog split into projection/art/writer
 ```bash
 git show 8d8f91b2b560fdc3a319bb5928861c0ed72d1237
 ```
+
+## 2026-08-21-uyhmnwp9-browse-session-clock-done
+
+**Title:** Delete leftover browse, session, and clock twins
+
+**Commit:** `f8b48bf38c277dd9fc61507299cd29cc3b892ea2`
+
+Hosts consume a real `BrowseSource` object (downloads project to client types; `dl-*` dies), `become(session)` plus one volume writer, and one station `_step` with an honest `last_scan_finished_at` watermark. Open the delete commit for `loadResolved` with the exclusive gate in `companionSink.load`, `radioGen`, and Alembic 012.
+
+```bash
+git show f8b48bf38c277dd9fc61507299cd29cc3b892ea2
+```
