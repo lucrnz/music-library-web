@@ -63,7 +63,7 @@ def _in_retry_cooldown(row: TrackLyrics) -> bool:
     )
 
 
-def _sidecar_lrc_exists(abs_path: Path | None) -> bool:
+def sidecar_lrc_exists(abs_path: Path | None) -> bool:
     if abs_path is None:
         return False
     try:
@@ -107,7 +107,7 @@ class LyricsFetcher:
             return True
 
         # Cheap local re-check: sidecar appeared (or still present) → re-read.
-        if _sidecar_lrc_exists(abs_path):
+        if sidecar_lrc_exists(abs_path):
             return True
 
         if row.status in ("ok", "instrumental"):

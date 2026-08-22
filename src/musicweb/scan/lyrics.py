@@ -12,16 +12,14 @@ from musicweb.db.engine import Database
 from musicweb.db.models import Album, Track, TrackLyrics
 from musicweb.library import Library
 from musicweb.lyrics import LyricsFetcher
-from musicweb.lyrics.fetch import match_fingerprint
+from musicweb.lyrics.fetch import match_fingerprint, sidecar_lrc_exists
+from musicweb.scan.enrichment import iter_enrichment
 
 logger = logging.getLogger(__name__)
 
 # Non-success statuses that always need another resolve attempt (subject to
 # needs_fetch cooldown / force rules).
 _NON_OK_STATUSES = ("not_found", "error", "pending", "skipped")
-
-_BATCH_SIZE = 100
-
 
 def _ordered_unique(ids: list[str]) -> list[str]:
     seen: set[str] = set()
@@ -116,11 +114,8 @@ def _pass2_sidecar_ids(session: Session, library: Library) -> list[str]:
         abs_path = library.present_audio(rel_path)
         if abs_path is None:
             continue
-        try:
-            if abs_path.with_suffix(".lrc").is_file():
-                out.append(track_id)
-        except OSError:
-            continue
+        if sidecar_lrc_exists(abs_path):
+            out.append(track_id)
     return out
 
 
@@ -170,81 +165,59 @@ def fetch_track_lyrics(
         logger.info("Library scan: lyrics · nothing to do")
         return
 
-    # Rough upper bound for progress logs; cooldown may skip some.
-    total = len(todo_ids)
-    processed = 0
     ok_count = 0
     local_count = 0
     remote_count = 0
     instrumental = 0
     not_found = 0
     errors = 0
-    logger.info("Library scan: lyrics · processing up to %s tracks", total)
 
-    with database.session() as session:
-        for i in range(0, len(todo_ids), _BATCH_SIZE):
-            if cancel():
-                break
-            chunk = todo_ids[i : i + _BATCH_SIZE]
-            tracks = list(
-                session.scalars(
-                    select(Track)
-                    .where(Track.id.in_(chunk))
-                    .options(
-                        selectinload(Track.album),
-                        selectinload(Track.lyrics),
-                    )
-                ).all()
-            )
-            by_id = {t.id: t for t in tracks}
+    def load(session: Session, track_id: str) -> Track | None:
+        return session.scalars(
+            select(Track)
+            .where(Track.id == track_id)
+            .options(selectinload(Track.album), selectinload(Track.lyrics))
+        ).first()
 
-            for track_id in chunk:
-                if cancel():
-                    break
-                track = by_id.get(track_id)
-                if track is None or track.is_missing:
-                    continue
+    def needs(track: Track) -> bool:
+        if track.is_missing:
+            return False
+        abs_path = library.present_audio(track.rel_path)
+        return fetcher.needs_fetch(
+            track, track.lyrics, force=force, abs_path=abs_path
+        )
 
-                abs_path = library.present_audio(track.rel_path)
-                if not fetcher.needs_fetch(
-                    track, track.lyrics, force=force, abs_path=abs_path
-                ):
-                    continue
+    def fetch(session: Session, track: Track):
+        abs_path = library.present_audio(track.rel_path)
+        return fetcher.fetch_one(session, track, abs_path, cancel=cancel)
 
-                result = fetcher.fetch_one(
-                    session, track, abs_path, cancel=cancel
-                )
-                processed += 1
-                if result.ok and result.status == "ok":
-                    ok_count += 1
-                    if result.source and result.source.startswith("local"):
-                        local_count += 1
-                    else:
-                        remote_count += 1
-                elif result.status == "instrumental":
-                    instrumental += 1
-                elif result.status == "error":
-                    errors += 1
-                else:
-                    not_found += 1
+    def on_result(result: object) -> None:
+        nonlocal ok_count, local_count, remote_count, instrumental, not_found, errors
+        status = getattr(result, "status", None)
+        if getattr(result, "ok", False) and status == "ok":
+            ok_count += 1
+            source = getattr(result, "source", None) or ""
+            if str(source).startswith("local"):
+                local_count += 1
+            else:
+                remote_count += 1
+        elif status == "instrumental":
+            instrumental += 1
+        elif status == "error":
+            errors += 1
+        else:
+            not_found += 1
 
-                if processed % 10 == 0:
-                    session.commit()
-                    logger.info(
-                        "Library scan: lyrics · %s done "
-                        "(%s ok: %s local, %s remote; %s instrumental; "
-                        "%s not_found; %s error; candidates %s)",
-                        processed,
-                        ok_count,
-                        local_count,
-                        remote_count,
-                        instrumental,
-                        not_found,
-                        errors,
-                        total,
-                    )
-
-        session.commit()
+    processed = iter_enrichment(
+        database,
+        todo_ids,
+        load=load,
+        needs=needs,
+        fetch=fetch,
+        log_prefix="lyrics",
+        cancel=cancel,
+        on_result=on_result,
+    )
 
     if processed == 0:
         logger.info("Library scan: lyrics · nothing to do")

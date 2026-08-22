@@ -10,6 +10,7 @@ from sqlalchemy import select
 from musicweb.artist_images import ArtistImageFetcher
 from musicweb.db.engine import Database
 from musicweb.db.models import Artist
+from musicweb.scan.enrichment import iter_enrichment
 
 logger = logging.getLogger(__name__)
 
@@ -43,52 +44,38 @@ def fetch_artist_images(
         logger.info("Library scan: artist_images · nothing to do")
         return
 
-    processed = 0
     ok_count = 0
     local_count = 0
     remote_count = 0
     not_found = 0
     errors = 0
-    logger.info("Library scan: artist_images · processing %s artists", total)
 
-    with database.session() as session:
-        for artist_id in [a.id for a in todo]:
-            if cancel():
-                break
-            artist = session.get(Artist, artist_id)
-            if artist is None:
-                continue
-            if not fetcher.needs_fetch(artist, force=force):
-                processed += 1
-                continue
-            result = fetcher.fetch_one(
-                session, artist, cancel=cancel, force=force
-            )
-            processed += 1
-            if result.ok:
-                ok_count += 1
-                if result.source == "local":
-                    local_count += 1
-                else:
-                    remote_count += 1
-            elif result.status == "error":
-                errors += 1
+    def on_result(result: object) -> None:
+        nonlocal ok_count, local_count, remote_count, not_found, errors
+        status = getattr(result, "status", None)
+        if getattr(result, "ok", False):
+            ok_count += 1
+            if getattr(result, "source", None) == "local":
+                local_count += 1
             else:
-                not_found += 1
-            if processed % 10 == 0 or processed == total:
-                session.commit()
-                logger.info(
-                    "Library scan: artist_images · %s/%s "
-                    "(%s ok: %s local, %s remote; %s not_found; %s error)",
-                    processed,
-                    total,
-                    ok_count,
-                    local_count,
-                    remote_count,
-                    not_found,
-                    errors,
-                )
-        session.commit()
+                remote_count += 1
+        elif status == "error":
+            errors += 1
+        else:
+            not_found += 1
+
+    processed = iter_enrichment(
+        database,
+        [a.id for a in todo],
+        load=lambda session, artist_id: session.get(Artist, artist_id),
+        needs=lambda artist: fetcher.needs_fetch(artist, force=force),
+        fetch=lambda session, artist: fetcher.fetch_one(
+            session, artist, cancel=cancel, force=force
+        ),
+        log_prefix="artist_images",
+        cancel=cancel,
+        on_result=on_result,
+    )
 
     if cancel():
         logger.info(
