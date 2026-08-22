@@ -50,6 +50,7 @@ def test_skips_lossy_and_missing_forwards_label(monkeypatch):
     tc.prepare.assert_called_once()
     assert tc.prepare.call_args.kwargs["log_label"] == "radio current"
     assert tc.prepare.call_args.kwargs["urgent"] is True
+    assert tc.prepare.call_args.kwargs["tier"] == "playlist"
 
 
 def test_skips_source_tag_without_prepare(monkeypatch):
@@ -76,6 +77,36 @@ def test_skips_source_tag_without_prepare(monkeypatch):
     assert counts["skipped"] == 1
     assert counts["queued"] == 0
     tc.prepare.assert_not_called()
+
+
+def test_forwards_tier(monkeypatch):
+    lossless = SimpleNamespace(
+        id="ok",
+        is_missing=False,
+        rel_path="ok.flac",
+        is_lossy=False,
+        sample_rate_hz=44100,
+        bit_depth=16,
+        channels=2,
+        source_codec="flac",
+    )
+    monkeypatch.setattr(
+        "musicweb.transcode.enqueue.tracks_repo.get_many",
+        lambda _session, _ids: [lossless],
+    )
+    path = SimpleNamespace(is_file=lambda: True)
+    lib = SimpleNamespace(present_audio=lambda _rel: path)
+    tc = SimpleNamespace(prepare=Mock(return_value="queued"))
+    counts = enqueue_prepare(
+        SimpleNamespace(),
+        lib,
+        tc,
+        ["ok"],
+        profile_tag="opus_192_48000",
+        tier="download",
+    )
+    assert counts["queued"] == 1
+    assert tc.prepare.call_args.kwargs["tier"] == "download"
 
 
 def test_job_log_label_prefers_radio_label():

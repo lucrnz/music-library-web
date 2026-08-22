@@ -57,13 +57,20 @@ def test_forget_paths_cancels_queued_job_leaves_other(tmp_path: Path) -> None:
     with tc._queue_cond:
         tc._jobs[drop.key] = drop
         tc._jobs[stay.key] = stay
-        tc._prewarm.append(drop)
+        tc._playlist.append(drop)
         tc._urgent.append(stay)
+        extra = _job("a.flac", key="drop-dl")
+        extra.prewarm_class = "download"
+        tc._jobs[extra.key] = extra
+        tc._download.append(extra)
     assert tc.forget_paths(["a.flac"]) == 0
     assert drop.done.is_set()
     assert drop.error is not None
     assert drop.key not in tc._jobs
-    assert list(tc._prewarm) == []
+    assert extra.done.is_set()
+    assert extra.key not in tc._jobs
+    assert list(tc._playlist) == []
+    assert list(tc._download) == []
     assert list(tc._urgent) == [stay]
     assert stay.key in tc._jobs
     assert not stay.done.is_set()

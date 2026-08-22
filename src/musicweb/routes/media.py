@@ -176,11 +176,15 @@ async def stream(
         raise
 
 
+HTTP_PREPARE_TIERS = frozenset({"download", "playlist"})
+
+
 class PrepareRequest(BaseModel):
     ids: list[str] = Field(default_factory=list, max_length=1000)
     codec: str = DEFAULT_PROFILE_TAG
     replace: bool = False
     urgent: bool = False
+    tier: str | None = None
 
 
 @router.post("/transcode/prepare")
@@ -197,6 +201,9 @@ def transcode_prepare(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    if payload.tier is not None and payload.tier not in HTTP_PREPARE_TIERS:
+        raise HTTPException(status_code=400, detail="Invalid prepare tier")
+
     if payload.replace:
         tc.drop_pending_prewarm()
 
@@ -207,6 +214,7 @@ def transcode_prepare(
         payload.ids,
         profile_tag=payload.codec,
         urgent=payload.urgent,
+        tier=payload.tier or "playlist",
     )
     _emit_prepare(request, payload, counts)
     return counts

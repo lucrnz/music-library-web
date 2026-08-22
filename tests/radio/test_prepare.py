@@ -77,14 +77,26 @@ def test_first_tune_in_enqueues_current_and_two_prewarms():
     calls: list[tuple] = []
 
     def enqueue(_session, _lib, _tc, ids, **kwargs):
-        calls.append((tuple(ids), kwargs["profile_tag"], kwargs["urgent"], kwargs["log_label"]))
+        calls.append(
+            (
+                tuple(ids),
+                kwargs["profile_tag"],
+                kwargs["urgent"],
+                kwargs["log_label"],
+                kwargs.get("tier"),
+            )
+        )
         return {}
 
     _prepare(_station(), tuners, enqueue).refresh()
-    assert calls == [
-        (("cur",), "opus_192_48000", True, RADIO_CURRENT_LABEL),
-        (("n1", "n2"), "opus_192_48000", False, RADIO_PREWARM_LABEL),
-    ]
+    assert calls[0][:4] == (("cur",), "opus_192_48000", True, RADIO_CURRENT_LABEL)
+    assert calls[1] == (
+        ("n1", "n2"),
+        "opus_192_48000",
+        False,
+        RADIO_PREWARM_LABEL,
+        "radio",
+    )
 
 
 def test_second_profile_enqueues_that_profile_only():

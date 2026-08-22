@@ -21,6 +21,7 @@ def enqueue_prepare(
     profile_tag: str,
     urgent: bool = False,
     log_label: str | None = None,
+    tier: str = "playlist",
 ) -> dict[str, int]:
     """Resolve ids and queue encodes. Skips missing, non-encode, and unreadable."""
     counts = {"queued": 0, "already": 0, "ready": 0, "skipped": 0}
@@ -50,6 +51,7 @@ def enqueue_prepare(
             source_tech=tech_from_track(track),
             urgent=urgent,
             log_label=log_label,
+            tier=tier,
         )
         counts[result] += 1
     return counts

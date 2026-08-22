@@ -68,4 +68,5 @@ class RadioPrepare:
                         profile_tag=profile,
                         urgent=False,
                         log_label=RADIO_PREWARM_LABEL,
+                        tier="radio",
                     )

@@ -9,11 +9,12 @@ wiped with the process root on shutdown, or by idle eviction
 (``Transcoder.clear_cache`` after about an hour with no HTTP client).
 Queue edits may drop individual paths via ``forget_paths``.
 
-All encodes run on a single background worker fed by a two-tier priority
-queue: play requests (urgent, newest first) ahead of playlist prewarm
-requests (FIFO). A play request promotes its queued job or preempts a
-running prewarm encode (canceled cleanly — the .partial is deleted, never
-renamed — and re-queued to restart afterwards).
+All encodes run on a single background worker fed by four priority
+classes: play requests (urgent, newest first), then radio next-2,
+download prewarm, and playlist prewarm (each FIFO). A higher class
+promotes its queued job or preempts a running lower-class encode
+(canceled cleanly — the .partial is deleted, never renamed — and
+re-queued on its own class to restart afterwards).
 """
 
 from __future__ import annotations
@@ -39,9 +40,12 @@ from musicweb.transcode.profiles import (
 
 logger = logging.getLogger(__name__)
 
+PREWARM_CLASSES = ("radio", "download", "playlist")
+PREWARM_RANK = {"radio": 2, "download": 1, "playlist": 0}
+
 
 class TranscodeCanceled(Exception):
-    """Internal: a running encode was preempted by an urgent request."""
+    """Internal: a running encode was preempted by a higher-class request."""
 
 
 def job_log_label(job: _Job) -> str:
@@ -60,6 +64,7 @@ class _Job:
     urgent: bool
     source_tech: SourceAudioTech | None = None
     log_label: str | None = None
+    prewarm_class: str = "playlist"
     done: threading.Event = field(default_factory=threading.Event)
     error: Exception | None = None
     out_path: Path | None = None
@@ -71,13 +76,14 @@ class _Job:
 class Transcoder:
     """Transcode library audio into tagged cache files (Opus or FLAC).
 
-    All encodes flow through a single background worker with two priority
-    tiers: urgent (play requests, newest first) and prewarm (FIFO). A play
-    request for a queued job promotes it to the urgent tier; a play request
-    for any other track preempts a running *prewarm* encode, which is then
-    re-queued to restart after the urgent work drains. Encodes write a
-    ``.partial`` file that is atomically renamed only on success, so a
-    canceled encode never leaves a servable corrupt file behind.
+    All encodes flow through a single background worker with four priority
+    classes: urgent (play requests, newest first), radio next-2, download
+    prewarm, and playlist prewarm (each FIFO). A higher-class request for a
+    queued job promotes it; a higher-class request for any other track
+    preempts a running lower-class encode, which is then re-queued on its
+    own class after higher work drains. Encodes write a ``.partial`` file
+    that is atomically renamed only on success, so a canceled encode never
+    leaves a servable corrupt file behind.
     """
 
     MAX_PENDING_PREWARM = 300
@@ -88,10 +94,44 @@ class Transcoder:
         # Job queues: all guarded by _queue_cond
         self._queue_cond = threading.Condition()
         self._urgent: deque[_Job] = deque()
-        self._prewarm: deque[_Job] = deque()
+        self._radio: deque[_Job] = deque()
+        self._download: deque[_Job] = deque()
+        self._playlist: deque[_Job] = deque()
         self._jobs: dict[str, _Job] = {}
         self._current: _Job | None = None
         self._worker: threading.Thread | None = None
+
+    def _prewarm_deques(self) -> tuple[deque[_Job], deque[_Job], deque[_Job]]:
+        return self._radio, self._download, self._playlist
+
+    def _deque_for(self, prewarm_class: str) -> deque[_Job]:
+        if prewarm_class == "radio":
+            return self._radio
+        if prewarm_class == "download":
+            return self._download
+        if prewarm_class == "playlist":
+            return self._playlist
+        raise ValueError(f"Unknown prewarm class: {prewarm_class}")
+
+    def _any_prewarm(self) -> bool:
+        return bool(self._radio or self._download or self._playlist)
+
+    def _pop_next_prewarm(self) -> _Job:
+        if self._radio:
+            return self._radio.popleft()
+        if self._download:
+            return self._download.popleft()
+        return self._playlist.popleft()
+
+    def _remove_from_prewarm(self, job: _Job) -> bool:
+        """Remove *job* from whichever prewarm deque holds it. Holds lock."""
+        for queue in self._prewarm_deques():
+            try:
+                queue.remove(job)
+                return True
+            except ValueError:
+                continue
+        return False
 
     @property
     def temp_dir(self) -> Path:
@@ -123,7 +163,7 @@ class Transcoder:
             self._drain_queues(
                 RuntimeError("Transcoder is shut down"),
                 self._urgent,
-                self._prewarm,
+                *self._prewarm_deques(),
             )
             if self._current is not None:
                 # Sets cancel_requested and terminates the job's process.
@@ -265,13 +305,14 @@ class Transcoder:
         source_tech: SourceAudioTech | None = None,
         urgent: bool = False,
         log_label: str | None = None,
+        tier: str = "playlist",
     ) -> tuple[str, _Job | None]:
         """
         Queue encode work (or promote an existing job). Never waits on ffmpeg.
 
         Returns ``(status, job)``:
         - ``"ready"``: cache hit; job is None
-        - ``"already"``: job was already queued or running (promoted if urgent)
+        - ``"already"``: job was already queued or running (promoted if needed)
         - ``"queued"``: newly enqueued
         - ``"skipped"``: non-urgent only; pending-prewarm cap hit; job is None
 
@@ -279,6 +320,8 @@ class Transcoder:
         """
         if self._closed or self._temp_dir is None:
             raise RuntimeError("Transcoder is shut down")
+        if not urgent and tier not in PREWARM_RANK:
+            raise ValueError(f"Unknown prewarm class: {tier}")
         profile = get_profile(profile_tag)
         key = self._cache_key(relative_path, profile.tag)
         if self._cached(self._out_path(key, profile)):
@@ -294,6 +337,8 @@ class Transcoder:
                     job.log_label = log_label
                 if urgent:
                     self._promote_to_urgent(job, source_tech)
+                else:
+                    self._promote_prewarm_class(job, tier, source_tech)
                 return "already", job
 
             if urgent:
@@ -305,14 +350,16 @@ class Transcoder:
                     urgent=True,
                     source_tech=source_tech,
                     log_label=log_label,
+                    prewarm_class=tier if tier in PREWARM_RANK else "playlist",
                 )
                 self._jobs[key] = job
                 self._urgent.appendleft(job)
-                self._preempt_other_prewarm(job)
+                self._preempt_if_outranked(job)
                 self._queue_cond.notify_all()
                 return "queued", job
 
-            if len(self._prewarm) >= self.MAX_PENDING_PREWARM:
+            target = self._deque_for(tier)
+            if len(target) >= self.MAX_PENDING_PREWARM:
                 return "skipped", None
             job = _Job(
                 key=key,
@@ -322,32 +369,59 @@ class Transcoder:
                 urgent=False,
                 source_tech=source_tech,
                 log_label=log_label,
+                prewarm_class=tier,
             )
             self._jobs[key] = job
-            self._prewarm.append(job)
-            self._queue_cond.notify()
+            target.append(job)
+            self._preempt_if_outranked(job)
+            self._queue_cond.notify_all()
             return "queued", job
 
     def _promote_to_urgent(
         self, job: _Job, source_tech: SourceAudioTech | None
     ) -> None:
-        """Mark *job* urgent; move from prewarm queue if pending. Holds lock."""
+        """Mark *job* urgent; move from a prewarm deque if pending. Holds lock."""
         job.urgent = True
         if source_tech is not None and job.source_tech is None:
             job.source_tech = source_tech
-        try:
-            self._prewarm.remove(job)
-        except ValueError:
-            pass  # already running or already urgent
-        else:
+        if self._remove_from_prewarm(job):
             self._urgent.appendleft(job)
-        self._preempt_other_prewarm(job)
+        self._preempt_if_outranked(job)
         self._queue_cond.notify_all()
 
-    def _preempt_other_prewarm(self, job: _Job) -> None:
-        """Cancel a running non-urgent encode of a different key. Holds lock."""
+    def _promote_prewarm_class(
+        self,
+        job: _Job,
+        tier: str,
+        source_tech: SourceAudioTech | None,
+    ) -> None:
+        """Raise *job* to *tier* if higher; never demote. Holds lock."""
+        if source_tech is not None and job.source_tech is None:
+            job.source_tech = source_tech
+        if job.urgent:
+            return
+        new_rank = PREWARM_RANK[tier]
+        if new_rank <= PREWARM_RANK[job.prewarm_class]:
+            return
+        pending = self._remove_from_prewarm(job)
+        job.prewarm_class = tier
+        if pending:
+            self._deque_for(tier).append(job)
+        self._preempt_if_outranked(job)
+        self._queue_cond.notify_all()
+
+    def _preempt_if_outranked(self, job: _Job) -> None:
+        """Cancel a running lower-class encode of a different key. Holds lock."""
         current = self._current
-        if current is not None and current is not job and not current.urgent:
+        if current is None or current is job:
+            return
+        if job.urgent:
+            if not current.urgent:
+                self._request_cancel(current)
+            return
+        if current.urgent:
+            return
+        if PREWARM_RANK[job.prewarm_class] > PREWARM_RANK[current.prewarm_class]:
             self._request_cancel(current)
 
     def prepare(
@@ -359,14 +433,16 @@ class Transcoder:
         source_tech: SourceAudioTech | None = None,
         urgent: bool = False,
         log_label: str | None = None,
+        tier: str = "playlist",
     ) -> str:
         """
         Queue a background encode; never blocks on ffmpeg.
 
-        Non-urgent jobs go on the prewarm FIFO (subject to pending cap).
-        Urgent jobs go on the urgent tier (newest first), can promote an
-        existing prewarm job, and may preempt a running prewarm of another
-        key — same priority model as play, without waiting for completion.
+        Non-urgent jobs go on the matching prewarm FIFO (subject to that
+        deque's pending cap). Urgent jobs go on the urgent tier (newest
+        first), can promote an existing job, and may preempt a running
+        lower-class encode of another key — same priority model as play,
+        without waiting for completion.
 
         Returns "ready" (cached), "already" (queued or running),
         "queued" (newly enqueued), or "skipped" (pending-prewarm cap hit).
@@ -378,14 +454,15 @@ class Transcoder:
             source_tech=source_tech,
             urgent=urgent,
             log_label=log_label,
+            tier=tier,
         )
         return status
 
     def drop_pending_prewarm(self) -> int:
-        """Drop all pending prewarm jobs (e.g. codec changed). Returns count."""
+        """Drop pending playlist-prewarm jobs (e.g. codec changed). Returns count."""
         with self._queue_cond:
             dropped = self._drain_queues(
-                RuntimeError("Prewarm request dropped"), self._prewarm
+                RuntimeError("Prewarm request dropped"), self._playlist
             )
         if dropped:
             logger.info("Dropped %d pending prewarm job(s)", dropped)
@@ -407,7 +484,7 @@ class Transcoder:
                 RuntimeError("Stream forgotten"),
                 paths,
                 self._urgent,
-                self._prewarm,
+                *self._prewarm_deques(),
             )
             current = self._current
             if current is not None and current.relative_path in paths:
@@ -442,7 +519,9 @@ class Transcoder:
 
         with self._queue_cond:
             self._drain_queues(
-                RuntimeError("Cache cleared"), self._urgent, self._prewarm
+                RuntimeError("Cache cleared"),
+                self._urgent,
+                *self._prewarm_deques(),
             )
             current = self._current
             if current is not None:
@@ -524,12 +603,31 @@ class Transcoder:
             )
             proc.terminate()
 
+    def _requeue_canceled(self, job: _Job) -> None:
+        """Re-arm a preempted job on its own class, or fail it. Holds lock."""
+        self._current = None
+        self._jobs.pop(job.key, None)
+        if self._closed:
+            job.error = RuntimeError("Transcoder is shut down")
+            job.done.set()
+        elif job.purged:
+            job.error = RuntimeError("Cache cleared")
+            job.done.set()
+        else:
+            job.cancel_requested = False
+            job.proc = None
+            job.urgent = False
+            self._jobs[job.key] = job
+            self._deque_for(job.prewarm_class).appendleft(job)
+
     def _worker_loop(self) -> None:
-        """Single consumer: urgent tier (newest first), then prewarm (FIFO)."""
+        """Single consumer: urgent, then radio, download, playlist."""
         while True:
             with self._queue_cond:
                 while (
-                    not self._closed and not self._urgent and not self._prewarm
+                    not self._closed
+                    and not self._urgent
+                    and not self._any_prewarm()
                 ):
                     self._queue_cond.wait()
                 if self._closed:
@@ -537,30 +635,14 @@ class Transcoder:
                 if self._urgent:
                     job = self._urgent.popleft()
                 else:
-                    job = self._prewarm.popleft()
+                    job = self._pop_next_prewarm()
                 self._current = job
 
             try:
                 self._run_job(job)
             except TranscodeCanceled:
                 with self._queue_cond:
-                    self._current = None
-                    self._jobs.pop(job.key, None)
-                    if self._closed:
-                        job.error = RuntimeError("Transcoder is shut down")
-                        job.done.set()
-                    elif job.purged:
-                        # Cache was cleared: fail the job, never re-queue it.
-                        job.error = RuntimeError("Cache cleared")
-                        job.done.set()
-                    else:
-                        # Re-arm and restart at the head of the prewarm tier
-                        # once urgent work drains (ffmpeg restarts the file).
-                        job.cancel_requested = False
-                        job.proc = None
-                        job.urgent = False
-                        self._jobs[job.key] = job
-                        self._prewarm.appendleft(job)
+                    self._requeue_canceled(job)
                     self._queue_cond.notify_all()
             except Exception as exc:
                 logger.warning(
