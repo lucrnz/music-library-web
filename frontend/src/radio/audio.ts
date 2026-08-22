@@ -180,5 +180,5 @@ export function createRadioAudio(): RadioAudio {
     },
   };
 
-  return { ...radio, sink };
+  return Object.assign(radio, { sink });
 }

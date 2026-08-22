@@ -25,6 +25,7 @@ import {
   heardPosition,
   interpolatedPosition,
   radio,
+  radioAudio,
   radioChromeActive,
   radioPlayState,
   radioSubtitle,
@@ -87,6 +88,16 @@ describe("radio store", () => {
     expect(heardPosition(1_000)).toBe(12);
     radio.chrome = "tuned";
     expect(heardPosition(1_000)).toBe(0);
+  });
+
+  it("heardPosition when tuned follows the live element clock", () => {
+    applySnapshot(currentPayload, 1_000);
+    radio.chrome = "tuned";
+    if (!radioAudio.el) return;
+    radioAudio.el.currentTime = 44;
+    expect(heardPosition(1_000)).toBe(radioAudio.el.currentTime);
+    expect(heardPosition(1_000)).not.toBe(0);
+    expect(heardPosition(1_000)).not.toBe(interpolatedPosition(1_000));
   });
 
   it("connect hydrates via GET and does not send tune_in", async () => {

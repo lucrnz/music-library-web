@@ -29,4 +29,28 @@ describe("radio audio latch", () => {
       expect(radio.el.currentTime).toBe(3);
     }
   });
+
+  it("currentTime tracks the element after successive seeks", () => {
+    const radio = createRadioAudio();
+    if (!radio.el) return;
+    radio.sink.seek(3);
+    expect(radio.currentTime).toBe(radio.el.currentTime);
+    radio.el.currentTime = 7;
+    expect(radio.currentTime).toBe(radio.el.currentTime);
+  });
+
+  it("transport fields are live getters", () => {
+    const radio = createRadioAudio();
+    for (const key of [
+      "currentTime",
+      "paused",
+      "ended",
+      "loadInFlight",
+      "seekInFlight",
+    ] as const) {
+      expect(Object.getOwnPropertyDescriptor(radio, key)?.get).toEqual(
+        expect.any(Function),
+      );
+    }
+  });
 });
