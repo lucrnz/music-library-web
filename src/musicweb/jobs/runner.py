@@ -20,11 +20,11 @@ from musicweb.images import WebpAssetStore
 from musicweb.library import Library
 from musicweb.lyrics import LyricsFetcher
 from musicweb.scan.artist_images import fetch_artist_images
-from musicweb.scan.batch import ScanMode, process_batch
+from musicweb.scan.batch import ScanMode
 from musicweb.scan.covers import album_cover_sources, extract_covers
 from musicweb.scan.finalize import mark_missing, recount_entities
+from musicweb.scan.index_phase import run_index
 from musicweb.scan.lyrics import fetch_track_lyrics
-from musicweb.scan.walk import iter_indexable_audio
 from musicweb.timeutil import utc_now_iso
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,6 @@ JobKind = Literal[
     "regen-artist-images",
     "regen-lyrics",
 ]
-BATCH_SIZE = 100
 
 
 @dataclass
@@ -351,13 +350,19 @@ class LibraryJobRunner:
             getattr(self, f"_do_{name}")(ctx)
 
     def _do_index(self, ctx: PhaseCtx) -> None:
-        seen_count, upserted, seen_paths, cover_queue = self._phase_index(
-            ctx.mode
+        result = run_index(
+            self._db,
+            self._library,
+            ctx.mode,
+            cancel=self._cancel.is_set,
+            on_progress=lambda **kwargs: self._progress(
+                mode=ctx.mode, phase="index", **kwargs
+            ),
         )
-        ctx.seen_count = seen_count
-        ctx.upserted = upserted
-        ctx.seen_paths = seen_paths
-        ctx.cover_queue = cover_queue
+        ctx.seen_count = result.seen_count
+        ctx.upserted = result.upserted
+        ctx.seen_paths = result.seen_paths
+        ctx.cover_queue = result.cover_queue
 
     def _do_finalize(self, ctx: PhaseCtx) -> None:
         ctx.missing = self._phase_finalize(
@@ -397,63 +402,6 @@ class LibraryJobRunner:
             cancel=self._cancel.is_set,
             force=ctx.force,
         )
-
-    def _phase_index(
-        self, mode: ScanMode
-    ) -> tuple[int, int, set[str], dict[str, Path]]:
-        seen_paths: set[str] = set()
-        seen_count = 0
-        upserted = 0
-        cover_queue: dict[str, Path] = {}
-        batch: list[Path] = []
-
-        def flush(batch_paths: list[Path], *, clear_path: bool = False) -> None:
-            nonlocal seen_count, upserted, batch
-            if not batch_paths:
-                return
-            s, u, covers, skipped = process_batch(
-                self._db,
-                self._library,
-                batch_paths,
-                mode,
-                cancel=self._cancel.is_set,
-            )
-            seen_count += s
-            upserted += u
-            cover_queue.update(covers)
-            for p in batch_paths:
-                rel = self._library.relative_to_root(p)
-                if rel not in skipped:
-                    seen_paths.add(rel)
-            last_rel = (
-                None
-                if clear_path
-                else self._library.relative_to_root(batch_paths[-1])
-            )
-            self._progress(
-                mode=mode,
-                phase="index",
-                files_seen=seen_count,
-                files_upserted=upserted,
-                current_path=last_rel,
-            )
-            batch = []
-
-        for path in iter_indexable_audio(
-            self._library.root,
-            index_lossy=self._library.index_lossy,
-            cancel=self._cancel.is_set,
-        ):
-            if self._cancel.is_set():
-                break
-            batch.append(path)
-            if len(batch) >= BATCH_SIZE:
-                flush(batch)
-
-        if batch and not self._cancel.is_set():
-            flush(batch, clear_path=True)
-
-        return seen_count, upserted, seen_paths, cover_queue
 
     def _phase_finalize(
         self,
