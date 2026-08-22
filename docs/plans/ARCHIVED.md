@@ -589,3 +589,15 @@ Deleted names that did not own a model (`applyCatalogPins`, `applyOutcomeSafely`
 ```bash
 git show 3cb0616261416e03cc0f8e0e97ada7168d8c78b9
 ```
+
+## 2026-08-21-opery0np-browse-status-types-done
+
+**Title:** One browse source, session-owned status, camel Artist
+
+**Commit:** `3b1cb9b47a611f6ad697be125f05a43dfe06e5be`
+
+Tree and list now ask one `BrowseSource` for roots, children, and covers; the status line branches on `session` so `RADIO_EXCLUSIVE_SNAP` is gone; artists plus catalog records are camel at the type boundary. Open the delete commit for `fromApiArtist`, stats leaving `load()`, and art-key unification to `artist:` / `cover:` thumbs.
+
+```bash
+git show 3b1cb9b47a611f6ad697be125f05a43dfe06e5be
+```
