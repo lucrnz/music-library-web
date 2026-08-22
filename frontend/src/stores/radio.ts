@@ -1,5 +1,5 @@
 /**
- * Radio chrome + façade. Owns the household station socket.
+ * Radio chrome + façade. Socket / face machine live in radio/runtime.ts.
  * Does not import player.ts.
  */
 import { reactive, watch } from "vue";
@@ -13,17 +13,17 @@ import { createFailureCap } from "@/radio/failures";
 import {
   bumpRadioGen,
   clearLoadedKeys,
-  currentLoadKeys,
   disconnectSocket,
   initRadioRuntime,
-  loadCurrent,
+  maybeReseek,
+  onFaceOrTrack,
   openSocket,
   sendJson,
   sendTuneIn,
+  socketRequired,
   waitForSnapshot,
   writeRadioMediaSession,
 } from "@/radio/runtime";
-import { needsReseek } from "@/radio/sync";
 import { connectivity } from "@/stores/connectivity";
 import type { PlayStatusState } from "@/playbackStatus";
 import { readVolume } from "@/stores/playerPrefs";
@@ -132,57 +132,6 @@ export function applySnapshot(raw: unknown, now = performance.now()): void {
     radio.snapshotAt = now;
   }
   void onFaceOrTrack(prevId);
-}
-
-async function onFaceOrTrack(
-  prevId: string | null,
-  countsAsFailure = false,
-): Promise<void> {
-  if (radio.chrome !== "tuning" && radio.chrome !== "tuned" && radio.chrome !== "stopped") {
-    return;
-  }
-  if (radio.face === "idle" && (radio.chrome === "tuning" || radio.chrome === "tuned")) {
-    tuneOut();
-    return;
-  }
-  if (radio.face === "catching_up" || radio.face === "skip_pending") {
-    if (radio.chrome === "tuned") radio.chrome = "tuning";
-    audio.stop();
-    clearLoadedKeys();
-    bumpRadioGen();
-    return;
-  }
-  if (radio.face !== "current" || !radio.track?.id) return;
-  if (radio.chrome === "stopped") {
-    writeRadioMediaSession();
-    return;
-  }
-  const keys = currentLoadKeys();
-  const changed =
-    keys.lastLoadedTrackId == null ||
-    radio.track.id !== keys.lastLoadedTrackId ||
-    (keys.lastLoadedLossy != null && keys.lastLoadedLossy !== radio.isLossy) ||
-    (prevId != null && radio.track.id !== prevId);
-  if ((radio.chrome === "tuning" || radio.chrome === "tuned") && changed) {
-    await loadCurrent(countsAsFailure);
-  } else if (radio.chrome === "tuned") {
-    maybeReseek();
-  }
-}
-
-export function tuneInCodec(): string {
-  return getActiveStreamCodec();
-}
-
-function maybeReseek(): void {
-  if (radio.chrome !== "tuned") return;
-  if (needsReseek(audio.currentTime, interpolatedPosition())) {
-    void audio.seek(interpolatedPosition());
-  }
-}
-
-function socketRequired(): boolean {
-  return radio.tabOpen || radioChromeActive();
 }
 
 function bindVolumeWatch(): void {
@@ -346,10 +295,8 @@ initRadioRuntime({
   radio,
   audio,
   failures,
-  radioChromeActive,
   interpolatedPosition,
   applySnapshot,
-  onFaceOrTrack,
   tuneIn,
   tuneOut,
 });

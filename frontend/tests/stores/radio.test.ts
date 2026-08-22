@@ -31,7 +31,6 @@ import {
   resetRadioStore,
   setTabOpen,
   tuneIn,
-  tuneInCodec,
   tuneOut,
 } from "@/stores/radio";
 import { fetchRadioNow } from "@/api";
@@ -131,13 +130,15 @@ describe("radio store", () => {
   });
 
   it("tune_in codec is the streaming profile, never source", () => {
-    expect(tuneInCodec()).toBe(getActiveStreamCodec());
-    expect(tuneInCodec()).not.toBe(SOURCE_TAG);
+    expect(getActiveStreamCodec()).not.toBe(SOURCE_TAG);
   });
 
   it("lossy current would load SOURCE_TAG", () => {
     applySnapshot({ ...currentPayload, is_lossy: true });
-    const url = streamUrl(radio.track, radio.isLossy ? SOURCE_TAG : tuneInCodec());
+    const url = streamUrl(
+      radio.track,
+      radio.isLossy ? SOURCE_TAG : getActiveStreamCodec(),
+    );
     expect(url).toContain("codec=source");
   });
 
