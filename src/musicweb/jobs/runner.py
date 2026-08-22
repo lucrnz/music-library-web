@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -14,17 +12,12 @@ from musicweb.artist_images import ArtistImageFetcher
 from musicweb.config import Settings
 from musicweb.cover import CoverStore
 from musicweb.db.engine import Database
-from musicweb.db.fts import fts_rebuild
 from musicweb.db.models import ScanState
 from musicweb.images import WebpAssetStore
 from musicweb.library import Library
 from musicweb.lyrics import LyricsFetcher
-from musicweb.scan.artist_images import fetch_artist_images
 from musicweb.scan.batch import ScanMode
-from musicweb.scan.covers import album_cover_sources, extract_covers
-from musicweb.scan.finalize import mark_missing, recount_entities
-from musicweb.scan.index_phase import run_index
-from musicweb.scan.lyrics import fetch_track_lyrics
+from musicweb.scan import jobs as scan_jobs
 from musicweb.timeutil import utc_now_iso
 
 logger = logging.getLogger(__name__)
@@ -35,18 +28,6 @@ JobKind = Literal[
     "regen-artist-images",
     "regen-lyrics",
 ]
-
-
-@dataclass
-class PhaseCtx:
-    kind: JobKind
-    mode: ScanMode
-    force: bool
-    seen_count: int = 0
-    upserted: int = 0
-    missing: int = 0
-    seen_paths: set[str] = field(default_factory=set)
-    cover_queue: dict[str, Path] = field(default_factory=dict)
 
 
 class LibraryJobRunner:
@@ -284,7 +265,7 @@ class LibraryJobRunner:
         label = kind if kind != "scan" else f"scan({mode})"
         logger.info("Library job started (%s)", label)
         try:
-            self._run_phases(kind, mode=mode, force=force)
+            self._run_job(kind, mode=mode, force=force)
             finished = utc_now_iso()
             idle: dict[str, object] = {
                 "status": "idle",
@@ -309,125 +290,80 @@ class LibraryJobRunner:
                     last_error=str(exc)[:2000],
                 )
 
-    PHASES: dict[JobKind, tuple[str, ...]] = {
-        "scan": ("index", "finalize", "covers", "artist_images", "lyrics"),
-        "regen-covers": ("covers",),
-        "regen-artist-images": ("artist_images",),
-        "regen-lyrics": ("lyrics",),
-    }
-
-    def _begin_phase(self, ctx: PhaseCtx, name: str) -> None:
+    def _begin_phase(self, name: str, *, kind: JobKind, mode: ScanMode, force: bool) -> None:
         with self._db.session() as session:
-            self._set_state(session, phase=name, force=ctx.force)
-        if ctx.kind == "scan":
+            self._set_state(session, phase=name, force=force)
+        if kind == "scan":
             self._progress(
-                mode=ctx.mode,
+                mode=mode,
                 phase=name,
-                files_seen=ctx.seen_count,
-                files_upserted=ctx.upserted,
-                files_missing=ctx.missing,
+                files_seen=0,
+                files_upserted=0,
             )
 
-    def _run_phases(
+    def _run_job(
         self,
         kind: JobKind,
         *,
         mode: ScanMode,
         force: bool,
     ) -> None:
-        names = self.PHASES.get(kind)
-        if names is None:
-            raise ValueError(f"Unknown job kind: {kind}")
-        ctx = PhaseCtx(
-            kind=kind,
-            mode=mode,
-            force=force if kind != "scan" else mode == "full",
-        )
-        for name in names:
-            if self._cancel.is_set():
-                return
-            self._begin_phase(ctx, name)
-            getattr(self, f"_do_{name}")(ctx)
+        job_force = force if kind != "scan" else mode == "full"
 
-    def _do_index(self, ctx: PhaseCtx) -> None:
-        result = run_index(
-            self._db,
-            self._library,
-            ctx.mode,
-            cancel=self._cancel.is_set,
-            on_progress=lambda **kwargs: self._progress(
-                mode=ctx.mode, phase="index", **kwargs
-            ),
-        )
-        ctx.seen_count = result.seen_count
-        ctx.upserted = result.upserted
-        ctx.seen_paths = result.seen_paths
-        ctx.cover_queue = result.cover_queue
+        def begin_phase(name: str) -> None:
+            self._begin_phase(name, kind=kind, mode=mode, force=job_force)
 
-    def _do_finalize(self, ctx: PhaseCtx) -> None:
-        ctx.missing = self._phase_finalize(
-            ctx.mode,
-            seen_count=ctx.seen_count,
-            upserted=ctx.upserted,
-            seen_paths=ctx.seen_paths,
-        )
+        def set_counts(seen: int, upserted: int, missing: int) -> None:
+            with self._db.session() as session:
+                self._set_state(
+                    session,
+                    files_seen=seen,
+                    files_upserted=upserted,
+                    files_missing=missing,
+                )
 
-    def _do_covers(self, ctx: PhaseCtx) -> None:
-        with self._db.session() as session:
-            if ctx.kind != "scan":
-                ctx.cover_queue = album_cover_sources(session, self._library)
-            if not ctx.cover_queue:
-                return
-            extract_covers(
-                session,
+        if kind == "scan":
+            scan_jobs.run_scan(
+                self._db,
+                self._library,
                 self._covers,
-                ctx.cover_queue,
-                force=ctx.force,
+                self._artist_fetcher,
+                self._lyrics_fetcher,
+                mode=mode,
+                force=job_force,
                 cancel=self._cancel.is_set,
+                on_progress=lambda **kwargs: self._progress(mode=mode, **kwargs),
+                begin_phase=begin_phase,
+                set_counts=set_counts,
             )
-
-    def _do_artist_images(self, ctx: PhaseCtx) -> None:
-        fetch_artist_images(
-            self._db,
-            self._artist_fetcher,
-            cancel=self._cancel.is_set,
-            force=ctx.force,
-        )
-
-    def _do_lyrics(self, ctx: PhaseCtx) -> None:
-        fetch_track_lyrics(
-            self._db,
-            self._lyrics_fetcher,
-            self._library,
-            cancel=self._cancel.is_set,
-            force=ctx.force,
-        )
-
-    def _phase_finalize(
-        self,
-        mode: ScanMode,
-        *,
-        seen_count: int,
-        upserted: int,
-        seen_paths: set[str],
-    ) -> int:
-        with self._db.session() as session:
-            missing = mark_missing(session, seen_paths)
-            recount_entities(session)
-            if mode == "full":
-                fts_rebuild(session)
-            session.commit()
-            self._set_state(
-                session,
-                files_seen=seen_count,
-                files_upserted=upserted,
-                files_missing=missing,
+            return
+        if kind == "regen-covers":
+            scan_jobs.regen_covers(
+                self._db,
+                self._library,
+                self._covers,
+                force=job_force,
+                cancel=self._cancel.is_set,
+                begin_phase=begin_phase,
             )
-        self._progress(
-            mode=mode,
-            phase="finalize",
-            files_seen=seen_count,
-            files_upserted=upserted,
-            files_missing=missing,
-        )
-        return missing
+            return
+        if kind == "regen-artist-images":
+            scan_jobs.regen_artist_images(
+                self._db,
+                self._artist_fetcher,
+                force=job_force,
+                cancel=self._cancel.is_set,
+                begin_phase=begin_phase,
+            )
+            return
+        if kind == "regen-lyrics":
+            scan_jobs.regen_lyrics(
+                self._db,
+                self._lyrics_fetcher,
+                self._library,
+                force=job_force,
+                cancel=self._cancel.is_set,
+                begin_phase=begin_phase,
+            )
+            return
+        raise ValueError(f"Unknown job kind: {kind}")

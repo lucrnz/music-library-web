@@ -142,8 +142,33 @@ def test_scan_finish_sets_watermark_regen_does_not_clear(tmp_home, db):
         assert row.last_scan_finished_at == scan_stamp
 
 
-def test_phases_table_matches_do_methods():
-    for kind, names in LibraryJobRunner.PHASES.items():
-        assert names, kind
-        for name in names:
-            assert hasattr(LibraryJobRunner, f"_do_{name}"), (kind, name)
+def test_execute_dispatches_kind_to_scan_jobs(tmp_home, db, monkeypatch):
+    runner = _runner(tmp_home, db)
+    called: list[str] = []
+
+    monkeypatch.setattr(
+        "musicweb.scan.jobs.run_scan",
+        lambda *a, **k: called.append("scan"),
+    )
+    monkeypatch.setattr(
+        "musicweb.scan.jobs.regen_covers",
+        lambda *a, **k: called.append("regen-covers"),
+    )
+    monkeypatch.setattr(
+        "musicweb.scan.jobs.regen_artist_images",
+        lambda *a, **k: called.append("regen-artist-images"),
+    )
+    monkeypatch.setattr(
+        "musicweb.scan.jobs.regen_lyrics",
+        lambda *a, **k: called.append("regen-lyrics"),
+    )
+    runner.run_sync("scan")
+    runner.run_sync("regen-covers")
+    runner.run_sync("regen-artist-images")
+    runner.run_sync("regen-lyrics")
+    assert called == [
+        "scan",
+        "regen-covers",
+        "regen-artist-images",
+        "regen-lyrics",
+    ]
