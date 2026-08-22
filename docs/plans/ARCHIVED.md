@@ -601,3 +601,15 @@ Tree and list now ask one `BrowseSource` for roots, children, and covers; the st
 ```bash
 git show 3b1cb9b47a611f6ad697be125f05a43dfe06e5be
 ```
+
+## 2026-08-21-pigy8o5g-nuclear-core-deletes-done
+
+**Title:** Nuclear-review core deletes
+
+**Commit:** `8d8f91b2b560fdc3a319bb5928861c0ed72d1237`
+
+HTML delivery now returns `PlayIntent`, catalog split into projection/art/writer with a barrel, and leftover husks (`ArtistImageStore`, dummy lossless `stream_intent`, `album_lossy_kind`) are gone. Open the delete commit for the radio `track_dict` Protocol, artist-image routes out of `media.py`, and `preparedKeys` leaving `api.ts`.
+
+```bash
+git show 8d8f91b2b560fdc3a319bb5928861c0ed72d1237
+```
