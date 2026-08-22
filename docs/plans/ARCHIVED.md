@@ -529,3 +529,15 @@ Added a household-wide encode-and-seek radio station that ticks from process sta
 ```bash
 git show 7b1486150434bb8d8ca3f80ccd83dc5da130e58b
 ```
+
+## 2026-08-20-nrnijuid-transcode-forget-done
+
+**Title:** Replace wipe-all cache clear with id-scoped forget
+
+**Commit:** `59219ec9f12f9e77d2777f04623893fedcfbfe61`
+
+Replaced `POST /api/cache/clear` with `POST /api/transcode/forget` so queue clear and last-row remove drop only those tracks' process-temp encodes (radio current plus remaining stay). Open the delete commit for the retain-set primitive, the HTTP surface, and the fire-and-forget client callers that also drop `preparedKeys`.
+
+```bash
+git show 59219ec9f12f9e77d2777f04623893fedcfbfe61
+```
