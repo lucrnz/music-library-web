@@ -25,7 +25,6 @@ vi.mock("@/downloads/opfs", () => ({
 vi.mock("@/downloads/queue", () => ({
   emitQueueChange: vi.fn(),
   flushProgressToIdb: vi.fn(),
-  freezeWork: vi.fn(),
   listQueue: vi.fn(),
   markPaused: vi.fn(),
   queueHasWork: vi.fn(),

@@ -7,9 +7,11 @@ import {
   initPolicy,
 } from "@/downloads/queuePolicy";
 import {
+  cancelQueueItem,
   emitQueueChange,
   listQueue,
   markActive,
+  pauseQueuedWork,
   QueueState,
   type QueueRecord,
 } from "@/downloads/queue";
@@ -38,6 +40,22 @@ export function stopAll() {
   }
   controllers.clear();
   activeIds.clear();
+}
+
+export async function freezeActive(reason = "pause") {
+  const ids = await pauseQueuedWork(reason);
+  for (const id of ids) {
+    abortJob(id, reason);
+    activeIds.delete(id);
+  }
+}
+
+export async function cancelItem(id: number) {
+  const kind = await cancelQueueItem(id);
+  if (kind === "active") {
+    abortJob(id, "cancel");
+    activeIds.delete(id);
+  }
 }
 
 let pumpScheduled = false;
@@ -88,5 +106,5 @@ let runtimeReady = false;
 export function initQueueRuntime() {
   if (runtimeReady) return;
   runtimeReady = true;
-  initPolicy({ schedulePump });
+  initPolicy({ schedulePump, freeze: freezeActive });
 }

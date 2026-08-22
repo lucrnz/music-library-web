@@ -34,7 +34,6 @@ import {
 import { openDownloadsDb } from "@/downloads/db";
 import { requireOpfs } from "@/downloads/opfs";
 import {
-  cancelQueueItem as queueCancelItem,
   clearAllQueue,
   clearFinishedQueue as queueClearFinished,
   enqueueMany as queueEnqueueMany,
@@ -55,7 +54,7 @@ import {
   setDownloadsEnabled,
 } from "@/downloads/queuePolicy";
 import { downloads, syncQueueSummary } from "@/downloads/state";
-import { initQueueRuntime, stopAll } from "@/downloads/queueRuntime";
+import { cancelItem, initQueueRuntime, stopAll } from "@/downloads/queueRuntime";
 import {
   formatBytes,
   formatDownloadsStorageLine,
@@ -93,9 +92,8 @@ function syncControlFlags() {
   downloads.pauseBanner = getPauseBanner();
 }
 
-function overlayQueue(items: QueueRecord[]): QueueRecord[] {
+function joinLiveProgress(items: QueueRecord[]): QueueRecord[] {
   const live = getAllLiveProgress();
-  downloads.liveProgress = live;
   return items.map((q) => {
     const p = q.id != null ? live[q.id] : undefined;
     if (!p) return q;
@@ -133,10 +131,6 @@ function bindQueueListener() {
     refreshQueue({ includeStorage: true }).catch(() => {});
   });
   onProgressChange((id, loaded, total) => {
-    downloads.liveProgress = {
-      ...downloads.liveProgress,
-      [id]: { loaded, total },
-    };
     const idx = downloads.queue.findIndex((q) => q.id === id);
     if (idx >= 0) {
       const row = downloads.queue[idx];
@@ -203,7 +197,7 @@ export async function refreshStorageInfo() {
 export async function refreshQueue(opts: { includeStorage?: boolean } = {}) {
   try {
     const items = await listQueue();
-    downloads.queue = overlayQueue(items);
+    downloads.queue = joinLiveProgress(items);
   } catch {
     downloads.queue = [];
   }
@@ -302,7 +296,6 @@ export async function disableDownloads({ wipe }: { wipe: boolean }) {
   saveEnabledFlag(false);
   downloads.enabled = false;
   downloads.queue = [];
-  downloads.liveProgress = {};
   downloads.userPaused = false;
   downloads.autoPausedReason = null;
   downloads.pauseBanner = "";
@@ -366,7 +359,7 @@ export async function enqueueTracks(tracks: Track[]) {
 
 /** Thin queue manager wrappers — UI imports from index, not queue guts. */
 export async function cancelQueueItem(id: number) {
-  await queueCancelItem(id);
+  await cancelItem(id);
 }
 
 export async function retryQueueItem(id: number) {

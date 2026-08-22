@@ -7,17 +7,11 @@ import { reactive } from "vue";
 
 export type AutoPausedReason = "offline" | "server";
 
-export interface LiveProgress {
-  loaded: number;
-  total: number | null;
-}
-
 export interface DownloadsState {
   enabled: boolean;
   ready: boolean;
   managerOpen: boolean;
   queue: QueueRecord[];
-  liveProgress: Record<number, LiveProgress>;
   trackCount: number;
   downloadedBytes: number;
   storageUsage: number;
@@ -46,7 +40,6 @@ export const downloads = reactive<DownloadsState>({
   ready: false,
   managerOpen: false,
   queue: [],
-  liveProgress: {},
   trackCount: 0,
   downloadedBytes: 0,
   storageUsage: 0,

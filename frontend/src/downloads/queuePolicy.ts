@@ -21,7 +21,6 @@ import {
 import {
   emitQueueChange,
   flushProgressToIdb,
-  freezeWork,
   listQueue,
   markPaused,
   queueHasWork,
@@ -37,6 +36,7 @@ const META_USER_PAUSED = "userPaused";
 let userPaused = false;
 let policyBound = false;
 let schedulePumpFn: (() => void) | null = null;
+let freezeFn: ((reason: string) => void | Promise<void>) | null = null;
 let downloadsEnabled = false;
 
 /**
@@ -60,8 +60,12 @@ export async function syncHealthFromPolicy() {
 /**
  * @param {{ schedulePump: () => void }} hooks
  */
-export function initPolicy(hooks: { schedulePump: () => void }) {
+export function initPolicy(hooks: {
+  schedulePump: () => void;
+  freeze: (reason: string) => void | Promise<void>;
+}) {
   schedulePumpFn = hooks.schedulePump;
+  freezeFn = hooks.freeze;
   setQueueMutationSideEffects(async () => {
     await syncHealthFromPolicy();
     if (schedulePumpFn) schedulePumpFn();
@@ -72,7 +76,7 @@ export function initPolicy(hooks: { schedulePump: () => void }) {
   onConnectivityChange(() => {
     const reason = downloadAutoPauseReason();
     if (reason) {
-      freezeWork(reason).catch(console.error);
+      Promise.resolve(freezeFn?.(reason)).catch(console.error);
     } else {
       emitQueueChange();
     }
@@ -89,7 +93,7 @@ export function initPolicy(hooks: { schedulePump: () => void }) {
 export async function reapplyNetworkPolicy() {
   const reason = downloadAutoPauseReason();
   if (reason) {
-    await freezeWork(reason);
+    if (freezeFn) await freezeFn(reason);
   } else if (!userPaused) {
     await unpauseItemsToPending();
   } else {
@@ -163,7 +167,7 @@ export async function pauseAllDownloads() {
       if (it.id != null) await flushProgressToIdb(it.id);
     }
   }
-  await freezeWork("user-pause");
+  if (freezeFn) await freezeFn("user-pause");
 }
 
 export async function resumeAllDownloads() {
@@ -175,7 +179,7 @@ export async function resumeAllDownloads() {
 }
 
 export async function onJobNetworkFailure() {
-  await freezeWork(downloadAutoPauseReason() || "server");
+  if (freezeFn) await freezeFn(downloadAutoPauseReason() || "server");
 }
 
 /**

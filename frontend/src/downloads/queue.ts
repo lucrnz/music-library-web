@@ -22,7 +22,6 @@ import {
   removePartial,
 } from "@/downloads/opfs";
 import { getTrackRecord } from "@/downloads/catalog";
-import { abortJob, activeIds } from "@/downloads/queueRuntime";
 
 // ---------------------------------------------------------------------------
 // Transitions
@@ -296,7 +295,6 @@ export async function discardRow(item: QueueRecord) {
   if (item.id == null) return;
   clearLiveProgress(item.id);
   await deleteOne("queue", item.id);
-  activeIds.delete(item.id);
 }
 
 export async function listQueue(): Promise<QueueRecord[]> {
@@ -388,18 +386,21 @@ export async function enqueueMany(
   return results;
 }
 
-export async function cancelQueueItem(id: number) {
+/** IDB cancel. Returns whether the row was active (caller must abort). */
+export async function cancelQueueItem(
+  id: number,
+): Promise<"active" | "inactive" | "missing"> {
   const item = await getOne<QueueRecord>("queue", id);
-  if (!item) return;
+  if (!item) return "missing";
   if (item.state === QueueState.ACTIVE) {
     markCanceled(item);
     await putOne("queue", item);
-    abortJob(id, "cancel");
-  } else {
-    await discardRow(item);
+    emitQueueChange();
+    return "active";
   }
-  activeIds.delete(id);
+  await discardRow(item);
   emitQueueChange();
+  return "inactive";
 }
 
 /**
@@ -452,7 +453,8 @@ export async function clearAllQueue(stopWorkers: () => void) {
 /**
  * @param {string} reasonLabel
  */
-export async function freezeWork(reasonLabel: string) {
+/** IDB-only pause of pending/active rows. Returns ids that were ACTIVE. */
+export async function pauseQueuedWork(reasonLabel: string): Promise<number[]> {
   const items = await listQueue();
   const abortIds: number[] = [];
   await withStores(["queue"], "readwrite", async (stores) => {
@@ -468,11 +470,8 @@ export async function freezeWork(reasonLabel: string) {
       stores.queue.put(it);
     }
   });
-  for (const id of abortIds) {
-    abortJob(id, reasonLabel || "pause");
-    activeIds.delete(id);
-  }
   emitQueueChange();
+  return abortIds;
 }
 
 export async function unpauseItemsToPending() {
