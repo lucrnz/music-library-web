@@ -32,7 +32,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `diag/` | Diagnostic JSONL store, emit, join-key reader |
 | `exclusive/` | macOS exclusive-audio companion (loopback WS + mpv); no DB/lock |
 | `runtime/` | Data-dir flock, bootstrap, exclusive maintenance, `run_library_job` |
-| `jobs/` | Single-flight library job runner (`PHASES` + `_run_phases`; `PhaseCtx`; `_begin_phase`; one `_begin`; ScanState; scan finish stamps radio watermark) |
+| `jobs/` | Single-flight library job runner (`ScanState`, `_begin`, `_begin_phase`; scan finish stamps radio watermark). Kind dispatch calls `scan/jobs.py` (`run_scan` / `regen_*`) |
 | `control/` | Private UDS JSON control plane (health + job RPC) for live CLI |
 | `config.py` | Settings from env + source-level tuning constants |
 | `library.py` | Path jail (`resolve`) and present indexable audio (`present_audio`) under `MUSIC_LIBRARY_PATH` |
@@ -45,7 +45,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `pwa_shell.py` | Dist path, inventory walk, SW render, theme/manifest chrome constants |
 | `sw.template.js` | Service worker template (Python-injected precache list) |
 | `db/` | Engine, models, FTS helpers, repositories, Alembic migrations |
-| `scan/` | Walk, `index_phase.py` (`run_index`), fingerprint, batch upsert, covers, artist images, lyrics, finalize; shared enrichment loop in `enrichment.py` |
+| `scan/` | Walk, `index_phase.py` (`run_index`), `jobs.py` (`run_scan` / `regen_*`), fingerprint, batch upsert (shared metadata cache with siblings), covers, artist images, lyrics, finalize; shared enrichment loop in `enrichment.py` |
 | `transcode/` | Dependency check (ffmpeg + ffprobe), profiles, probe, encode worker, shared `enqueue_prepare`, idle stream-cache eviction |
 | `radio/` | Household station clock, picker, tuner prepare (reuses Transcoder); snapshot serialize lives on `routes/radio.py` |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
@@ -63,7 +63,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
 - **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`. The source owns list load, tree `loadRoots` / `loadChildren`, `flags` / `chrome` / `cover`, and tree title / empty / focus / reload; the tree pane does not switch on mode for those jobs.
-- **Playback session** is `frontend/src/playback/session.ts` (`become`). Load/fail is `frontend/src/playback/load.ts`. Radio socket / load-gen / face machine / Media Session live in `frontend/src/radio/runtime.ts`; `stores/radio.ts` is the chrome face. Exclusive companion commands are a module-level `COMMANDS` table + `_with_live` in `exclusive/session.py`.
+- **Playback session** is `frontend/src/playback/session.ts` (`become`). Load/fail is `frontend/src/playback/load.ts`. Radio socket is `frontend/src/radio/runtime.ts`; face/load and Media Session are `frontend/src/radio/session.ts`; `stores/radio.ts` is the chrome face. Stream-cache forget retain is lifespan `app.state.retain_stream_ids` + `routes/deps.retain_stream_ids` (not `media.py` → station). Exclusive companion commands are a module-level `COMMANDS` table + `_with_live` in `exclusive/session.py`.
 - **Row action menus** live under `frontend/src/components/menu/`. Desktop media queries for new client code live in `frontend/src/layout.ts`. See `docs/frontend/conventions.md`.
 - **Offline downloads** stay under `frontend/src/downloads/` (`snapshot.ts` catalog view, `queueRuntime.ts` pump + abort; `queue.ts` does not import runtime) and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.

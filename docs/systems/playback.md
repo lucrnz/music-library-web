@@ -6,12 +6,14 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 
 - Player transport: `frontend/src/stores/player.ts` (on-demand wiring, next/prev, Media Session); `playerState.ts`, `playerSession.ts`, `playerPrefs.ts`, `playbackPosition.ts`
 - Load/fail: `frontend/src/playback/load.ts` (`loadResolved`, `failCurrentLoad`, `PlayBlockError` via `playBlock.ts`)
-- Play decision: `frontend/src/playback/playIntent.ts` (`resolvePlayIntent`)
+- Play decision: `frontend/src/playback/playIntent.ts` (`resolvePlayIntent`, `shouldPrepare`, `isPlayableNow`)
+- Exclusive delivery builder: `frontend/src/playback/deliveryPolicy.ts` (`sink` + `profileFor`)
 - Shared prepare: `frontend/src/playback/prepare.ts` (`prepareTracks`)
 - Session handoff: `frontend/src/playback/session.ts` (`become("none" | "queue" | "radio")`)
 - Shared HTML element: `frontend/src/playback/sinks/htmlElement.ts`
 - Companion-stop decision: `needsCompanionStop` in `playback/playIntent.ts`
-- Quality prefs: `frontend/src/stores/settings.ts` (maps `/api/codecs` to camelCase once at hydrate)
+- Quality prefs: `frontend/src/stores/settings.ts` (maps `/api/codecs` to camelCase once at hydrate; `setStreamCodec` / `setPlaybackPolicy` persist only)
+- Prepare-on-change: `frontend/src/stores/player.ts` watches `settings.streamCodec` and `settings.playbackPolicy`
 - Session queue: `frontend/src/stores/playlist.ts`
 - Delivery tag / lossy kind: `frontend/src/lossyKind.ts`
 - HTML play-source resolution: `frontend/src/downloads/resolve.ts` (`resolvePlaySource` → delivery only)

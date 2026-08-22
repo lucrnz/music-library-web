@@ -60,11 +60,11 @@ FastAPI (routes → services)
 | Layer | Owns | Does not own |
 |-------|------|--------------|
 | `routes/` | HTTP parse, status codes, thin orchestration | Encode policy, SQL details, filesystem presence |
-| `scan/` | Walk, fingerprint, upsert, enrichment passes | Serving HTTP |
+| `scan/` | Walk, fingerprint, upsert, enrichment passes, `jobs.py` scan/regen functions | Serving HTTP |
 | `library.py` | Path jail (`resolve`) and present indexable audio (`present_audio`) | Encode policy, index writes |
 | `db/` | Models, sessions, FTS, migrations, repositories | Filesystem media I/O |
 | `transcode/` | Profiles, probe, worker, dependency checks, shared enqueue | Persistent media storage |
-| `radio/` | Station clock, picker, tuner-driven prepare | Live encode pipe, listen stats |
+| `radio/` | Station clock, picker, tuner-driven prepare | Live encode pipe, listen stats, stream-cache forget (retain hook only) |
 | `frontend/src/` | UI state, playback, connectivity, offline downloads (OPFS) | Server-side index writes |
 
 Composition root is `main.create_app`: settings, database, library, stores, jobs, process cache, and transcoder are attached to `app.state` for route deps.

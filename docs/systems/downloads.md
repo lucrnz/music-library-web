@@ -10,7 +10,7 @@ Optional client-side offline music: users can download stream-profile audio to t
   - Reactive fields: `state.ts` (`syncQueueSummary`)
   - Filename / MIME: `media.ts`
   - Catalog barrel: `catalog.ts` re-exports `projection.ts` (status join), `art.ts` (OPFS art + blob URLs), `writer.ts` (IDB lock, pin/refcount, commit/delete)
-  - Catalog view (hierarchy + art + primed roots): `snapshot.ts` (`loadDownloadsCatalogView`)
+  - Catalog view (hierarchy + art + primed roots): `snapshot.ts` (`loadDownloadsCatalogView`, cached; `invalidateDownloadsCatalogView` from `writer.ts` mutations)
   - Queue IDB CRUD / live progress: `queue.ts`
   - Queue pump + abort maps: `queueRuntime.ts`
   - Network policy: `queuePolicy.ts`

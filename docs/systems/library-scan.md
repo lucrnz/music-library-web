@@ -2,12 +2,12 @@
 
 ## Source of truth
 
-- Job orchestration (scan + regen kinds): `src/musicweb/jobs/runner.py` (`PHASES` + `_run_phases`; typed `PhaseCtx`; `_begin_phase` owns phase state + scan progress; one `_begin`; a completed scan writes `last_scan_finished_at` for radio via `radio_repo.scan_finished_at`). The runner does not walk files.
+- Job orchestration (scan + regen kinds): `src/musicweb/jobs/runner.py` (single-flight, `ScanState`, `_begin` / `_begin_phase`; a completed scan writes `last_scan_finished_at` for radio via `radio_repo.scan_finished_at`). Kind dispatch calls `src/musicweb/scan/jobs.py` (`run_scan` / `regen_covers` / `regen_artist_images` / `regen_lyrics`). The runner does not walk files.
 - Index walk + batch flush: `src/musicweb/scan/index_phase.py` (`run_index`)
 - Walk / formats: `src/musicweb/scan/walk.py`, `formats.py`
 - Album lossy-kind reduce: SQL in `finalize.recount_entities` (`mp3` / `aac` / `lossy` / `mixed`)
 - Fingerprints / identity: `src/musicweb/scan/fingerprint.py`, `identity.py`
-- Batch upsert: `src/musicweb/scan/batch.py`
+- Batch upsert: `src/musicweb/scan/batch.py` (one `read_metadata` per path; shared cache with `siblings.lossless_slots_in_dir`)
 - Enrichment loop: `src/musicweb/scan/enrichment.py` (`iter_enrichment`)
 - Covers / artist images / lyrics phases: `scan/covers.py`, `scan/artist_images.py`, `scan/lyrics.py`
 - Artist-image HTTP: `provider_json` in `src/musicweb/artist_images/providers.py`
@@ -19,7 +19,7 @@
 
 ## Purpose
 
-Build and refresh the SQLite index from the files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. The walk is **indexable** audio: packed lossless always, plus MP3/AAC when `MUSICWEB_INDEX_LOSSY` is on. Eligibility classifies a file once (lossless / lossy / not); an unreadable MP4 is not treated as AAC and is not indexed. A lossy file that shares a folder + disc/track (or stem) with a lossless sibling is skipped so leftover transcode copies do not become duplicate tracks. After finalize, albums cache a lossy kind (`mp3` / `aac` / `lossy` / `mixed` / none) using the same reduce the client uses for title marks. All library jobs (scan and regen) share a **single-flight** runner with cancel support and persisted `ScanState` progress. HTTP, CLI (local or via UDS), and startup use the same runner (`_begin` writes the running row once). Kind-to-phase lists live in `LibraryJobRunner.PHASES`; `_run_phases` calls `_begin_phase` then the phase callable. `PhaseCtx` is the typed job context. Radio catalog invalidation reads `last_scan_finished_at` (`ScanState` / `radio_repo.scan_finished_at`), not the last job kind.
+Build and refresh the SQLite index from the files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. The walk is **indexable** audio: packed lossless always, plus MP3/AAC when `MUSICWEB_INDEX_LOSSY` is on. Eligibility classifies a file once (lossless / lossy / not); an unreadable MP4 is not treated as AAC and is not indexed. A lossy file that shares a folder + disc/track (or stem) with a lossless sibling is skipped so leftover transcode copies do not become duplicate tracks. After finalize, albums cache a lossy kind (`mp3` / `aac` / `lossy` / `mixed` / none) using the same reduce the client uses for title marks. All library jobs (scan and regen) share a **single-flight** runner with cancel support and persisted `ScanState` progress. HTTP, CLI (local or via UDS), and startup use the same runner (`_begin` writes the running row once). Kind dispatch is `scan/jobs.py` (`run_scan` / `regen_*`). Lyrics still collects missing/non-ok, fingerprint-mismatch (pass1b), and sidecar upgrades. Radio catalog invalidation reads `last_scan_finished_at` (`ScanState` / `radio_repo.scan_finished_at`), not the last job kind.
 
 ## Modes and kinds
 
