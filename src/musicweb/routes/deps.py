@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Set as AbstractSet
+
 from fastapi import Request
 
 from musicweb.cover import CoverStore
@@ -32,3 +34,10 @@ def preferred_artist_image_store(request: Request) -> WebpAssetStore:
 
 def jobs(request: Request) -> LibraryJobRunner:
     return request.app.state.jobs
+
+
+def retain_stream_ids(request: Request) -> AbstractSet[str]:
+    hook = getattr(request.app.state, "retain_stream_ids", None)
+    if hook is None:
+        return frozenset()
+    return hook()

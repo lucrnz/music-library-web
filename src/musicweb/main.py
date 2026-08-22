@@ -79,6 +79,7 @@ async def lifespan(app: FastAPI):
     app.state.radio_hub = hub
     app.state.radio_tuners = tuners
     app.state.radio_prepare = prepare
+    app.state.retain_stream_ids = station.retained_track_ids
     radio_task = asyncio.create_task(
         run_radio_worker(station, radio_stop),
         name="radio-station",

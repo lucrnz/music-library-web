@@ -18,6 +18,7 @@ from musicweb.db.session import get_db
 from musicweb.routes.deps import (
     cover_store,
     library,
+    retain_stream_ids,
     transcoder,
 )
 from musicweb.transcode import (
@@ -236,7 +237,7 @@ async def transcode_forget(
     payload: ForgetRequest,
     db: Session = Depends(get_db),
 ) -> dict:
-    retained = request.app.state.radio.retained_track_ids()
+    retained = retain_stream_ids(request)
     paths, forgotten, skipped = resolve_forget(db, payload.ids, retained)
     if paths:
         await request.app.state.stream_cache_idle.run_exclusive(
