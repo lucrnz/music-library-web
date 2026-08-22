@@ -26,6 +26,7 @@ export interface CodecOption extends ProbeCodecOption {
   bitrateKbps?: number;
   bitDepth?: number;
   sampleRate?: number;
+  approxMbPerHour?: number;
 }
 
 export interface CodecCatalog {
@@ -128,7 +129,13 @@ function mapCodecOption(value: unknown): CodecOption | null {
     bitrateKbps: numField(raw, "bitrateKbps", "bitrate_kbps"),
     bitDepth: numField(raw, "bitDepth", "bit_depth"),
     sampleRate: numField(raw, "sampleRate", "sample_rate"),
+    approxMbPerHour: numField(raw, "approxMbPerHour", "approx_mb_per_hour"),
   };
+}
+
+/** Settings quality-row copy. Callers omit the hint when ``n`` is missing. */
+export function formatApproxMbPerHour(n: number): string {
+  return `~${n} MB/h`;
 }
 
 function readCachedCatalog(): CodecCatalog | null {

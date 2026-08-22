@@ -11,8 +11,11 @@ vi.mock("@/connectivity", () => ({
   reportSuccess: vi.fn(),
 }));
 
+import { apiGet } from "@/api";
 import {
+  formatApproxMbPerHour,
   getActiveStreamCodec,
+  loadCodecs,
   setDownloadCodec,
   setPlaybackPolicy,
   setStreamCodec,
@@ -54,5 +57,45 @@ describe("settings persist and active stream", () => {
   it("returns streamCodec", () => {
     settings.streamCodec = "flac_16_44100";
     expect(getActiveStreamCodec()).toBe(settings.streamCodec);
+  });
+});
+
+describe("approx size hint", () => {
+  beforeEach(() => {
+    vi.mocked(apiGet).mockReset();
+  });
+
+  it("formats decimal MB/hour with a tilde", () => {
+    expect(formatApproxMbPerHour(29)).toBe("~29 MB/h");
+  });
+
+  it("maps approx_mb_per_hour from a cached catalog", async () => {
+    vi.mocked(apiGet).mockResolvedValue({ codecs: [] });
+    localStorage.setItem(
+      "musicweb.codecCatalog.v1",
+      JSON.stringify({
+        codecs: [
+          {
+            id: "opus_64_48000",
+            label: "Opus 64k 48kHz",
+            kind: "opus",
+            approx_mb_per_hour: 29,
+          },
+          {
+            id: "opus_192_48000",
+            label: "Opus 192k 48kHz",
+            kind: "opus",
+          },
+        ],
+        default: "opus_192_48000",
+      }),
+    );
+    await loadCodecs();
+    expect(
+      settings.options.find((o) => o.id === "opus_64_48000")?.approxMbPerHour,
+    ).toBe(29);
+    expect(
+      settings.options.find((o) => o.id === "opus_192_48000")?.approxMbPerHour,
+    ).toBeUndefined();
   });
 });

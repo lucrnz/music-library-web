@@ -210,9 +210,22 @@
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-.settings-select-option-label {
+.settings-select-option-text {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-select-option-label {
+  min-width: 0;
+}
+
+.settings-select-option-hint {
+  font-weight: 400;
+  font-size: 0.8125rem;
+  color: var(--text-dim);
 }
 
 .settings-select-option .icon {

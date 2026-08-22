@@ -4,6 +4,7 @@ import { canReachServer } from "@/connectivity";
 import { connectivity } from "@/stores/connectivity";
 import {
   PLAYBACK_POLICIES,
+  formatApproxMbPerHour,
   settings,
   closeSettings,
   setStreamCodec,
@@ -61,6 +62,18 @@ const playbackPolicies = PLAYBACK_POLICIES;
       const hit = PLAYBACK_POLICIES.find((p) => p.id === settings.playbackPolicy);
       return hit?.hint || "";
     });
+
+    const qualityOptions = computed(() =>
+      settings.options.map((o) => ({
+        id: o.id,
+        label: o.label,
+        hint:
+          typeof o.approxMbPerHour === "number" &&
+          Number.isFinite(o.approxMbPerHour)
+            ? formatApproxMbPerHour(o.approxMbPerHour)
+            : undefined,
+      })),
+    );
 
     function toggleMenu(id: string) {
       openMenu.value = openMenu.value === id ? null : id;
@@ -231,7 +244,7 @@ const playbackPolicies = PLAYBACK_POLICIES;
             menu-id="stream"
             label-id="stream-codec-label"
             field-label="Streaming"
-            :options="settings.options"
+            :options="qualityOptions"
             :selected-id="settings.streamCodec"
             :open-menu="openMenu"
             @toggle="toggleMenu"
@@ -243,7 +256,7 @@ const playbackPolicies = PLAYBACK_POLICIES;
             menu-id="download"
             label-id="dl-codec-label"
             field-label="Downloads quality"
-            :options="settings.options"
+            :options="qualityOptions"
             :selected-id="settings.download"
             :open-menu="openMenu"
             @toggle="toggleMenu"

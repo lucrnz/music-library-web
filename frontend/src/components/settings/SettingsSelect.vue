@@ -9,6 +9,7 @@ import Icon from "@/components/icons/Icon.vue";
 export interface SettingsSelectOption {
   id: string;
   label?: string;
+  hint?: string;
 }
 
 const props = withDefaults(defineProps<{
@@ -87,7 +88,10 @@ const isOpen = computed(
             tabindex="-1"
             @click="onChoose(opt.id)"
           >
-            <span class="settings-select-option-label">{{ opt.label }}</span>
+            <span class="settings-select-option-text">
+              <span class="settings-select-option-label">{{ opt.label }}</span>
+              <span v-if="opt.hint" class="settings-select-option-hint">{{ opt.hint }}</span>
+            </span>
             <Icon v-if="isSelected(opt.id)" name="check" />
           </li>
         </ul>
