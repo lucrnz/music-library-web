@@ -37,6 +37,10 @@ vi.mock("@/downloads/resolve", () => ({
 vi.mock("@/downloads/catalog", () => ({
   markTrackBroken: vi.fn(() => Promise.resolve()),
 }));
+vi.mock("@/radio/runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/radio/runtime")>();
+  return { ...actual, sendTuneIn: vi.fn(async () => true) };
+});
 
 import { streamUrl } from "@/api";
 import { markTrackBroken } from "@/downloads/catalog";
@@ -47,6 +51,7 @@ import {
   loadCurrent,
   onFaceOrTrack,
 } from "@/radio/session";
+import { sendTuneIn } from "@/radio/runtime";
 import { radio, radioAudio, resetRadioStore } from "@/stores/radio";
 
 describe("radio session", () => {
@@ -64,6 +69,7 @@ describe("radio session", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -80,7 +86,7 @@ describe("radio session", () => {
     radio.face = "current";
     radio.track = { id: "t1", title: "Song", artist: "A", album: "B" } as never;
     radio.tunerProfile = "opus_192_48000";
-    await loadCurrent(false);
+    await loadCurrent();
     expect(resolvePlaySource).toHaveBeenCalledWith(
       radio.track,
       expect.objectContaining({
@@ -123,7 +129,7 @@ describe("radio session", () => {
     radio.face = "current";
     radio.track = { id: "t1", title: "Song" } as never;
     radio.tunerProfile = "opus_192_48000";
-    await loadCurrent(false);
+    await loadCurrent();
     expect(radioAudio.load).toHaveBeenCalledWith("blob:local-radio");
     expect(radio.playSource).toBe("downloaded");
     expect(radio.playProfileId).toBe("flac_16_44100");
@@ -150,7 +156,7 @@ describe("radio session", () => {
     radio.face = "current";
     radio.track = { id: "t1", title: "Song" } as never;
     radio.tunerProfile = "opus_192_48000";
-    await loadCurrent(false);
+    await loadCurrent();
     expect(markTrackBroken).toHaveBeenCalledWith("t1");
     expect(radioAudio.load).toHaveBeenNthCalledWith(1, "blob:local-radio");
     expect(radioAudio.load).toHaveBeenNthCalledWith(
@@ -173,7 +179,7 @@ describe("radio session", () => {
     radio.chrome = "tuning";
     radio.face = "current";
     radio.track = { id: "t1", title: "Song" } as never;
-    const pending = loadCurrent(false);
+    const pending = loadCurrent();
     bumpRadioGen();
     finishLoad?.();
     await pending;
@@ -198,7 +204,7 @@ describe("radio session", () => {
     radio.chrome = "tuning";
     radio.face = "current";
     radio.track = { id: "t1", title: "Song" } as never;
-    const pending = loadCurrent(false);
+    const pending = loadCurrent();
     await vi.waitFor(() => {
       expect(radioAudio.load).toHaveBeenCalledWith("blob:local-radio");
     });
@@ -225,7 +231,7 @@ describe("radio session", () => {
       duration: 180,
     } as never;
     radio.tunerProfile = "opus_192_48000";
-    await loadCurrent(false);
+    await loadCurrent();
     expect(discard).toHaveBeenCalled();
     expect(startCycle).toHaveBeenCalledTimes(1);
     expect(startCycle).toHaveBeenCalledWith({
@@ -237,7 +243,7 @@ describe("radio session", () => {
     });
     vi.mocked(startCycle).mockClear();
     vi.mocked(discard).mockClear();
-    await loadCurrent(false);
+    await loadCurrent();
     expect(discard).toHaveBeenCalled();
     expect(startCycle).toHaveBeenCalledTimes(1);
     expect(startCycle).toHaveBeenCalledWith(
@@ -252,5 +258,67 @@ describe("radio session", () => {
     expect(discard).toHaveBeenCalled();
     expect(startCycle).not.toHaveBeenCalled();
     expect(radio.chrome).toBe("tuning");
+  });
+
+  it("official id change while tuned reloads and stays in session", async () => {
+    radio.chrome = "tuned";
+    radio.face = "current";
+    radio.track = { id: "t2", title: "Next" } as never;
+    radio.tunerProfile = "opus_192_48000";
+    await onFaceOrTrack("t1");
+    expect(radioAudio.load).toHaveBeenCalled();
+    expect(radio.chrome).toBe("tuned");
+    expect(radio.chrome).not.toBe("stopped");
+  });
+
+  it("unavailable delivery while tuned stays tuning", async () => {
+    vi.mocked(resolvePlaySource).mockResolvedValue({
+      source: "unavailable",
+      profile: null,
+      block: "play_failed",
+      message: null,
+    });
+    radio.chrome = "tuned";
+    radio.face = "current";
+    radio.track = { id: "t1", title: "Song" } as never;
+    await loadCurrent();
+    expect(radio.chrome).toBe("tuning");
+    expect(radio.chrome).not.toBe("stopped");
+  });
+
+  it("pause while tuning does not tune out", async () => {
+    radio.chrome = "tuning";
+    radio.face = "catching_up";
+    await onFaceOrTrack(null);
+    expect(radio.chrome).toBe("tuning");
+    radioAudio.el?.dispatchEvent(new Event("pause"));
+    expect(radio.chrome).toBe("tuning");
+  });
+
+  it("failed load stays tuning and retries to tuned", async () => {
+    vi.useFakeTimers();
+    vi.mocked(sendTuneIn).mockResolvedValue(true);
+    vi.mocked(resolvePlaySource)
+      .mockResolvedValueOnce({
+        source: "unavailable",
+        profile: null,
+        block: "play_failed",
+        message: null,
+      })
+      .mockResolvedValue({
+        source: "streaming",
+        url: "/api/stream?id=t1&codec=opus_192_48000",
+        profile: "opus_192_48000",
+      });
+    radio.chrome = "tuning";
+    radio.face = "current";
+    radio.track = { id: "t1", title: "Song" } as never;
+    radio.tunerProfile = "opus_192_48000";
+    radio.connected = true;
+    await loadCurrent();
+    expect(radio.chrome).toBe("tuning");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(radio.chrome).toBe("tuned");
+    vi.useRealTimers();
   });
 });

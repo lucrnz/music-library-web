@@ -1,11 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createRadioAudio,
+  RADIO_LOAD_TIMEOUT_MS,
   shouldIgnorePause,
   shouldIgnoreTransport,
 } from "@/radio/audio";
 
 describe("radio audio latch", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("ignores pause/ended while load or seek is in flight", () => {
     expect(shouldIgnoreTransport(true, false)).toBe(true);
     expect(shouldIgnoreTransport(false, true)).toBe(true);
@@ -52,5 +57,15 @@ describe("radio audio latch", () => {
         expect.any(Function),
       );
     }
+  });
+
+  it("load rejects after 8s if canplay never fires", async () => {
+    vi.useFakeTimers();
+    const radio = createRadioAudio();
+    if (!radio.el) return;
+    const pending = radio.load("");
+    await vi.advanceTimersByTimeAsync(RADIO_LOAD_TIMEOUT_MS);
+    await expect(pending).rejects.toThrow();
+    expect(radio.loadInFlight).toBe(false);
   });
 });

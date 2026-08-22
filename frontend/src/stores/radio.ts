@@ -9,10 +9,11 @@ import { discard as discardListen } from "@/listens/bridge";
 import { become, onLeaveRadio } from "@/playback/session";
 import { player } from "@/stores/playerState";
 import { createRadioAudio } from "@/radio/audio";
-import { createFailureCap } from "@/radio/failures";
+import { createRejoinClock } from "@/radio/rejoin";
 import {
   bumpRadioGen,
   clearLoadedKeys,
+  loadCurrent,
   maybeReseek,
   onFaceOrTrack,
   writeRadioMediaSession,
@@ -66,9 +67,37 @@ export const radio = reactive<RadioStore>({
 });
 
 export const radioAudio = createRadioAudio();
-export const radioFailures = createFailureCap();
 const audio = radioAudio;
-const failures = radioFailures;
+
+async function rejoinAttempt(): Promise<void> {
+  if (radio.chrome !== "tuning") return;
+  if (radio.connected) {
+    const ok = await sendTuneIn();
+    if (!ok) {
+      rejoinClock.schedule();
+      return;
+    }
+  } else {
+    rejoinClock.schedule();
+    return;
+  }
+  if (radio.face !== "current" || !radio.track?.id) return;
+  await loadCurrent();
+}
+
+const rejoinClock = createRejoinClock(rejoinAttempt);
+
+export function kickRadioRejoin(): void {
+  rejoinClock.kick();
+}
+
+export function scheduleRadioRejoin(): void {
+  rejoinClock.schedule();
+}
+
+export function cancelRadioRejoin(): void {
+  rejoinClock.cancel();
+}
 let hydrateInFlight: Promise<void> | null = null;
 let connectivityBound = false;
 let visibilityBound = false;
@@ -178,6 +207,7 @@ function bindSession(): void {
 
 function leaveRadio(): void {
   if (radio.chrome === "inactive") return;
+  cancelRadioRejoin();
   if (radioChromeActive()) sendJson({ type: "tune_out" });
   audio.stop();
   clearLoadedKeys();
@@ -238,16 +268,15 @@ export async function tuneIn(): Promise<void> {
   audio.setVolume(readVolume() ?? 1);
   const ok = await sendTuneIn();
   if (!ok) {
-    showToast("Could not tune in");
-    radio.chrome = "stopped";
-    writeRadioMediaSession();
+    scheduleRadioRejoin();
     return;
   }
-  await onFaceOrTrack(null, true);
+  await onFaceOrTrack(null);
 }
 
 export function tuneOut(): void {
   if (radio.chrome === "inactive") return;
+  cancelRadioRejoin();
   sendJson({ type: "tune_out" });
   audio.stop();
   clearLoadedKeys();
@@ -262,7 +291,10 @@ export async function onRadioSocketReconnect(): Promise<void> {
     radio.chrome = "tuning";
     clearLoadedKeys();
     const ok = await sendTuneIn();
-    if (!ok) return;
+    if (!ok) {
+      scheduleRadioRejoin();
+      return;
+    }
   }
   await onFaceOrTrack(null);
 }
@@ -292,10 +324,15 @@ function bindConnectivity(): void {
   watch(
     () => connectivity.state,
     (state) => {
-      if (state === "online") return;
+      if (state === "online") {
+        if (radio.chrome === "tuning") kickRadioRejoin();
+        return;
+      }
       if (radio.chrome === "tuning" || radio.chrome === "tuned") {
-        tuneOut();
-        showToast("Connection lost — tuned out");
+        radio.chrome = "tuning";
+        audio.stop();
+        clearLoadedKeys();
+        bumpRadioGen();
       }
     },
   );
@@ -310,6 +347,7 @@ function bindVisibility(): void {
 }
 
 export function resetRadioStore(): void {
+  cancelRadioRejoin();
   disconnect();
   audio.stop();
   radio.chrome = "inactive";
@@ -325,5 +363,4 @@ export function resetRadioStore(): void {
   radio.playProfileId = null;
   clearLoadedKeys();
   bumpRadioGen();
-  failures.reset();
 }

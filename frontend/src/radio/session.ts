@@ -16,15 +16,15 @@ import { SOURCE_TAG } from "@/lossyKind";
 import { suspendMediaSession } from "@/playback/session";
 import { needsReseek } from "@/radio/sync";
 import {
+  cancelRadioRejoin,
   interpolatedPosition,
   radio,
   radioAudio,
-  radioFailures,
+  scheduleRadioRejoin,
   tuneIn,
   tuneOut,
 } from "@/stores/radio";
 import { getActiveStreamCodec, settings } from "@/stores/settings";
-import { showToast } from "@/stores/ui";
 
 let lastLoadedTrackId: string | null = null;
 let lastLoadedLossy: boolean | null = null;
@@ -71,10 +71,7 @@ export function maybeReseek(): void {
   }
 }
 
-export async function onFaceOrTrack(
-  prevId: string | null,
-  countsAsFailure = false,
-): Promise<void> {
+export async function onFaceOrTrack(prevId: string | null): Promise<void> {
   bindAudioHandlers();
   if (!isChromeActive(radio.chrome)) return;
   if (radio.face === "idle" && (radio.chrome === "tuning" || radio.chrome === "tuned")) {
@@ -83,6 +80,7 @@ export async function onFaceOrTrack(
   }
   if (radio.face === "catching_up" || radio.face === "skip_pending") {
     if (radio.chrome === "tuned") radio.chrome = "tuning";
+    cancelRadioRejoin();
     radioAudio.stop();
     clearLoadedKeys();
     bumpRadioGen();
@@ -99,7 +97,8 @@ export async function onFaceOrTrack(
     (lastLoadedLossy != null && lastLoadedLossy !== radio.isLossy) ||
     (prevId != null && radio.track.id !== prevId);
   if ((radio.chrome === "tuning" || radio.chrome === "tuned") && changed) {
-    await loadCurrent(countsAsFailure);
+    radio.chrome = "tuning";
+    await loadCurrent();
   } else if (radio.chrome === "tuned") {
     maybeReseek();
   }
@@ -142,23 +141,19 @@ function rememberDelivery(
   radio.playProfileId = radio.isLossy ? null : profile;
 }
 
-function failTuneIn(countsAsFailure: boolean): void {
-  if (countsAsFailure && radioFailures.record()) {
-    showToast("Radio could not start — tuned out");
-    tuneOut();
-  }
+function failTuneIn(): void {
+  scheduleRadioRejoin();
 }
 
 async function loadResolvedRadio(
   track: { id: string; title?: string },
   gen: number,
-  countsAsFailure: boolean,
   localBroken: boolean,
 ): Promise<void> {
   const resolved = await resolveRadioDelivery(track, localBroken);
   if (gen !== radioGen) return;
   if (resolved.source === "unavailable") {
-    failTuneIn(countsAsFailure);
+    failTuneIn();
     return;
   }
   const prevBlob = localRadioUrl;
@@ -177,6 +172,7 @@ async function loadResolvedRadio(
     lastLoadedTrackId = track.id;
     lastLoadedLossy = radio.isLossy;
     radio.chrome = "tuned";
+    cancelRadioRejoin();
     if (resolved.profile) {
       startListenCycle({
         trackId: track.id,
@@ -193,18 +189,19 @@ async function loadResolvedRadio(
       console.warn("Local radio playback failed, falling back to stream");
       markTrackBroken(track.id).catch(() => {});
       revokeRadioLocalUrl();
-      return loadResolvedRadio(track, gen, countsAsFailure, true);
+      return loadResolvedRadio(track, gen, true);
     }
-    failTuneIn(countsAsFailure);
+    failTuneIn();
   }
 }
 
-export async function loadCurrent(countsAsFailure: boolean): Promise<void> {
+export async function loadCurrent(): Promise<void> {
   const track = radio.track;
   if (!track?.id) return;
+  if (radio.chrome === "tuned") radio.chrome = "tuning";
   discardListen();
   const gen = ++radioGen;
-  await loadResolvedRadio(track, gen, countsAsFailure, false);
+  await loadResolvedRadio(track, gen, false);
 }
 
 export function writeRadioMediaSession(): void {
@@ -222,7 +219,14 @@ export function writeRadioMediaSession(): void {
     void tuneIn();
   });
   navigator.mediaSession.setActionHandler("pause", () => {
-    if (!radioAudio.loadInFlight && !radioAudio.seekInFlight) tuneOut();
+    if (
+      radio.chrome === "tuned" &&
+      !radioAudio.loadInFlight &&
+      !radioAudio.seekInFlight &&
+      !radioAudio.ended
+    ) {
+      tuneOut();
+    }
   });
   navigator.mediaSession.setActionHandler("stop", () => {
     tuneOut();
@@ -254,9 +258,8 @@ export function bindAudioHandlers(): void {
     },
   });
   radioAudio.onError(() => {
-    if (radioFailures.record()) {
-      showToast("Radio could not start — tuned out");
-      tuneOut();
-    }
+    if (radio.chrome !== "tuning" && radio.chrome !== "tuned") return;
+    radio.chrome = "tuning";
+    scheduleRadioRejoin();
   });
 }

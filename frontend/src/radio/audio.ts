@@ -13,6 +13,8 @@ export function shouldIgnoreTransport(loadInFlight: boolean, seekInFlight: boole
   return loadInFlight || seekInFlight;
 }
 
+export const RADIO_LOAD_TIMEOUT_MS = 8000;
+
 export function shouldIgnorePause(
   loadInFlight: boolean,
   seekInFlight: boolean,
@@ -97,12 +99,22 @@ export function createRadioAudio(): RadioAudio {
     async load(url: string) {
       if (!el) return;
       loadInFlight = true;
+      let timer: ReturnType<typeof setTimeout> | null = null;
       try {
         el.pause();
         setHtmlAudioSrc(el, url);
         el.load();
-        await waitAudioEvent(el, "canplay");
+        await Promise.race([
+          waitAudioEvent(el, "canplay"),
+          new Promise<void>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error("audio canplay timeout")),
+              RADIO_LOAD_TIMEOUT_MS,
+            );
+          }),
+        ]);
       } finally {
+        if (timer != null) clearTimeout(timer);
         loadInFlight = false;
       }
     },

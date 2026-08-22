@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/api", () => ({
   fetchRadioNow: vi.fn(),
@@ -37,11 +37,17 @@ vi.mock("@/downloads/resolve", () => ({
 vi.mock("@/downloads/catalog", () => ({
   markTrackBroken: vi.fn(() => Promise.resolve()),
 }));
+vi.mock("@/radio/runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/radio/runtime")>();
+  return { ...actual, sendTuneIn: vi.fn(actual.sendTuneIn) };
+});
 
 import { fromApiTrack } from "@/models/track";
 import { SOURCE_TAG } from "@/lossyKind";
 import { discard, startCycle } from "@/listens/bridge";
 import { streamUrl } from "@/api";
+import { resolvePlaySource } from "@/downloads/resolve";
+import { loadCurrent } from "@/radio/session";
 import {
   applySnapshot,
   connect,
@@ -59,7 +65,11 @@ import {
   tuneOut,
 } from "@/stores/radio";
 import { fetchRadioNow } from "@/api";
+import { sendTuneIn } from "@/radio/runtime";
+import { connectivity } from "@/stores/connectivity";
 import { getActiveStreamCodec } from "@/stores/settings";
+import { showToast } from "@/stores/ui";
+import { nextTick } from "vue";
 
 const currentPayload = {
   face: "current",
@@ -76,10 +86,15 @@ const currentPayload = {
 describe("radio store", () => {
   beforeEach(() => {
     resetRadioStore();
+    connectivity.state = "online";
     vi.mocked(fetchRadioNow).mockReset();
     vi.mocked(streamUrl).mockClear();
     vi.mocked(startCycle).mockClear();
     vi.mocked(discard).mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("does not call fromApiTrack without an id", () => {
@@ -220,12 +235,13 @@ describe("radio store", () => {
     expect(radioChromeActive()).toBe(false);
   });
 
-  it("stays tuned when the official current id changes", async () => {
+  it("stays in session when the official current id changes", async () => {
     applySnapshot(currentPayload);
     radio.chrome = "tuned";
     applySnapshot({ ...currentPayload, id: "t2", title: "Next" });
     await Promise.resolve();
-    expect(radio.chrome).toBe("tuned");
+    expect(radio.chrome).not.toBe("stopped");
+    expect(["tuning", "tuned"]).toContain(radio.chrome);
     expect(radio.track?.id).toBe("t2");
   });
 
@@ -271,5 +287,70 @@ describe("radio store", () => {
     load.mockClear();
     await onPlaybackPolicyChanged();
     expect(load).not.toHaveBeenCalled();
+  });
+
+  it("tuneIn stays tuning when sendTuneIn fails", async () => {
+    vi.mocked(fetchRadioNow).mockResolvedValue(currentPayload);
+    vi.mocked(sendTuneIn).mockResolvedValueOnce(false);
+    await connect();
+    await tuneIn();
+    expect(radio.chrome).toBe("tuning");
+    expect(radio.chrome).not.toBe("stopped");
+    expect(showToast).not.toHaveBeenCalledWith("Could not tune in");
+  });
+
+  it("connectivity loss while tuned stays tuning", async () => {
+    vi.mocked(fetchRadioNow).mockResolvedValue(currentPayload);
+    await connect();
+    radio.chrome = "tuned";
+    connectivity.state = "offline";
+    await nextTick();
+    expect(radio.chrome).toBe("tuning");
+    expect(radio.chrome).not.toBe("stopped");
+    expect(showToast).not.toHaveBeenCalledWith("Connection lost — tuned out");
+  });
+
+  it("tuneOut cancels a pending rejoin", async () => {
+    vi.useFakeTimers();
+    vi.mocked(resolvePlaySource).mockResolvedValue({
+      source: "unavailable",
+      profile: null,
+      block: "play_failed",
+      message: null,
+    });
+    applySnapshot(currentPayload);
+    radio.chrome = "tuning";
+    radio.connected = true;
+    vi.mocked(sendTuneIn).mockResolvedValue(true);
+    const load = vi.spyOn(radioAudio, "load").mockResolvedValue();
+    await loadCurrent();
+    expect(radio.chrome).toBe("tuning");
+    const calls = load.mock.calls.length;
+    tuneOut();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(load.mock.calls.length).toBe(calls);
+    vi.useRealTimers();
+  });
+
+  it("resetRadioStore cancels a pending rejoin", async () => {
+    vi.useFakeTimers();
+    vi.mocked(resolvePlaySource).mockResolvedValue({
+      source: "unavailable",
+      profile: null,
+      block: "play_failed",
+      message: null,
+    });
+    applySnapshot(currentPayload);
+    radio.chrome = "tuning";
+    radio.connected = true;
+    vi.mocked(sendTuneIn).mockResolvedValue(true);
+    const load = vi.spyOn(radioAudio, "load").mockResolvedValue();
+    await loadCurrent();
+    expect(radio.chrome).toBe("tuning");
+    const calls = load.mock.calls.length;
+    resetRadioStore();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(load.mock.calls.length).toBe(calls);
+    vi.useRealTimers();
   });
 });
