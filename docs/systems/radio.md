@@ -76,3 +76,4 @@ Media Session: radio-owned metadata; play/pause/stop only. `playback/session.ts`
 - Do not treat radio SQLite rows as a secret.
 - Do not add a live pipe or a radio-only lossy re-encode without a new product decision.
 - Do not import `player.ts` from radio tests or `radio.ts`.
+- `createRadioAudio` returns one object with live getters (`currentTime`, `paused`, `ended`, `loadInFlight`, `seekInFlight`) and `sink`. Do not object-spread that object to attach `PlaybackSink` — spread copies getter values at construction (`currentTime` stays `0`), so tuned `heardPosition` / `maybeReseek` see `0` and every tick reseeks.
