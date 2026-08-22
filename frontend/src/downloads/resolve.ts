@@ -8,7 +8,6 @@ import {
   playBlockMessage,
   type PlayBlockReason,
 } from "@/playBlock";
-import type { PlayIntent } from "@/playback/playIntent";
 import { localAtLeastAsGood } from "@/qualityRank";
 import type { CatalogTrackRecord } from "@/models/track";
 import type { PlaybackPolicy } from "@/stores/settings";
@@ -21,11 +20,24 @@ import {
 
 export type { PlaybackPolicy };
 
+export type PlayDelivery =
+  | {
+      source: "unavailable";
+      profile: string | null;
+      block: PlayBlockReason;
+      message: string | null;
+    }
+  | {
+      source: "streaming" | "downloaded";
+      url: string;
+      profile: string | null;
+    };
+
 function unavailable(
   block: PlayBlockReason,
   profile: string | null = null,
   message?: string | null,
-): PlayIntent {
+): PlayDelivery {
   return {
     source: "unavailable",
     profile,
@@ -34,12 +46,12 @@ function unavailable(
   };
 }
 
-function htmlReady(
+function ready(
   source: "streaming" | "downloaded",
   url: string,
   profile: string | null,
-): PlayIntent {
-  return { sink: "htmlAudio", source, profile, url };
+): PlayDelivery {
+  return { source, url, profile };
 }
 
 /**
@@ -96,11 +108,11 @@ export function willPreferLocal(
 /** Open local blob only after policy decides local wins. */
 async function openDownloadedSource(
   rec: CatalogTrackRecord & { codec: string },
-): Promise<PlayIntent> {
+): Promise<PlayDelivery> {
   try {
     const url = await getLocalAudioUrlForRecord(rec);
     if (url) {
-      return htmlReady("downloaded", url, rec.codec);
+      return ready("downloaded", url, rec.codec);
     }
   } catch (err: unknown) {
     console.warn("Local download open failed", err);
@@ -129,7 +141,7 @@ export async function resolvePlaySource(
     playbackPolicy?: PlaybackPolicy;
     catalog?: { id: string }[];
   },
-): Promise<PlayIntent> {
+): Promise<PlayDelivery> {
   if (!track?.id) {
     return unavailable("no_id");
   }
@@ -169,7 +181,7 @@ export async function resolvePlaySource(
   if (!remote) {
     return unavailable("no_id", active || null);
   }
-  return htmlReady("streaming", remote, active || null);
+  return ready("streaming", remote, active || null);
 }
 
 /**

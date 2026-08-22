@@ -81,7 +81,6 @@ describe("resolvePlayIntent", () => {
       enabled: true,
       offline: false,
       activeStreamCodec: "opus_192_48000",
-      absoluteStream: false,
     });
     expect(intent.source).toBe("streaming");
     if (intent.source === "unavailable") return;
@@ -124,7 +123,6 @@ describe("resolvePlayIntent", () => {
 
   it("HTML prefer-local download is downloaded", async () => {
     vi.mocked(resolvePlaySource).mockResolvedValue({
-      sink: "htmlAudio",
       source: "downloaded",
       url: "blob:local",
       profile: "flac_16_44100",

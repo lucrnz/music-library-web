@@ -40,7 +40,6 @@ export interface PlayIntentCtx {
   catalog?: { id: string }[];
   localBroken?: boolean;
   sourceKindSupported?: boolean;
-  absoluteStream?: boolean;
 }
 
 function blocked(
@@ -82,7 +81,7 @@ function exclusiveIntent(
   if (!tag) {
     return blocked("exclusive_no_format");
   }
-  const url = hrefForStream(track, tag, ctx.absoluteStream !== false);
+  const url = hrefForStream(track, tag, true);
   if (!url) {
     return blocked("play_failed", tag);
   }
@@ -142,8 +141,10 @@ export async function resolvePlayIntent(
   }
 
   return {
-    ...source,
+    sink: "htmlAudio",
+    source: source.source,
     profile: source.profile || activeCodec || null,
+    url: source.url,
   };
 }
 
