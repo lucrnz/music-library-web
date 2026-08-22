@@ -541,3 +541,15 @@ Replaced `POST /api/cache/clear` with `POST /api/transcode/forget` so queue clea
 ```bash
 git show 59219ec9f12f9e77d2777f04623893fedcfbfe61
 ```
+
+## 2026-08-20-yi1n4gv2-radio-status-when-tuned-done
+
+**Title:** Radio stream details only when tuned
+
+**Commit:** `e30239e8fe3dc82dd4075a9323001ac55d241380`
+
+The Radio room codec-line badge mounts only while `chrome === "tuned"` and leaves an empty same-height hole otherwise. Open the delete commit for the `showStatus` / `reserveStatus` props on `NowPlayingView` and the wrap min-height that keeps extras from jumping.
+
+```bash
+git show e30239e8fe3dc82dd4075a9323001ac55d241380
+```
