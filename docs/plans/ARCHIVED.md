@@ -505,3 +505,15 @@ Large now-playing covers (expanded on-demand and the radio room) flip to the alb
 ```bash
 git show 066ce0136b9bbb51b98e0d30480f01ecd8008b9d
 ```
+
+## 2026-08-20-ddwppkpb-fix-radio-player-done
+
+**Title:** Fix radio now-playing and stay-tuned
+
+**Commit:** `90f80f00c5ec53eafa3e784daac8aaf03ee32a1f`
+
+Radio now shares `NowPlayingView` with on-demand, hides `#player` on `/radio`, and no longer Tunes out on station `ended`. Open the delete commit for the stay-tuned pause latch, Tune in/out glyphs, and the mobile-mini / desktop-compact off-radio chrome.
+
+```bash
+git show 90f80f00c5ec53eafa3e784daac8aaf03ee32a1f
+```
