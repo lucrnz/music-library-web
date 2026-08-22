@@ -577,3 +577,15 @@ One on-demand teardown pair (always stop HTML; companion only on unavailable or 
 ```bash
 git show 5f80411735ac287c956712929610029e0b4fcfb8
 ```
+
+## 2026-08-21-lbaziki9-review-leftovers-done
+
+**Title:** Delete leftover wrappers; make PlayIntent the load contract
+
+**Commit:** `3cb0616261416e03cc0f8e0e97ada7168d8c78b9`
+
+Deleted names that did not own a model (`applyCatalogPins`, `applyOutcomeSafely`, `claimRadio`, `prepareTag`) and made `PlayIntent` a discriminated union so `loadIntent` is apply plus `sink.load`. Open the delete commit for tagless `can_encode` on forget and the flattened exclusive-notice branch.
+
+```bash
+git show 3cb0616261416e03cc0f8e0e97ada7168d8c78b9
+```
