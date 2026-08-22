@@ -80,7 +80,7 @@ The Streaming setting is the active stream profile for prepare and play. Changin
 
 ## Honest codecs
 
-Settings and download/stream pickers list only profiles the **current browser can decode**, via runtime media probes — not UA marketing lists alone. The server catalog comes from `/api/codecs` (cached in `settings.js` for offline boot); the client filters and ranks.
+Settings and download/stream pickers list only profiles the **current browser can decode**, via runtime media probes — not UA marketing lists alone. The server catalog comes from `/api/codecs` (cached in `settings.js` for offline boot); the client filters and ranks. Settings Streaming and Downloads quality **open lists** may show a `~N MB/h` hint from mapped `approxMbPerHour`. The closed trigger, now-playing status/details, downloads manager, radio, Exclusive Audio, and every other codec label must not display that hint.
 
 ## Prepare and near-end urgent prepare
 

@@ -15,7 +15,7 @@
 
 ## Purpose
 
-Deliver browser-playable audio from a lossless library using **explicit stream profiles** (Opus or FLAC at defined rates/depths). Conversion always goes through ffmpeg with quality-first resampling policy. Lossy-indexed tracks are **not** a profile — they use reserved `source` passthrough and never enter this encode pipeline. `stream_intent(is_lossy, codec)` is the only product decision (`passthrough` / `encode` / `reject`). Stream HTTP maps `reject` to 409 (kind mismatch) or 400 (unknown tag). Prepare HTTP validates unknown tags with `get_profile` (400); reserved `SOURCE_TAG` is a valid prepare request (200, enqueue skips all) — not a dummy `stream_intent(is_lossy=False)` probe. `enqueue_prepare` and radio prepare skip when the kind is not `encode`. Forget skips via `can_encode(*, is_lossy)` (lossy originals have no encode cache) — not `stream_intent` with a default profile. Passthrough mime/extension are defined for MP3 and AAC only; an unknown stored source codec is a 400, not an encode and not a guessed container.
+Deliver browser-playable audio from a lossless library using **explicit stream profiles** (Opus or FLAC at defined rates/depths). The browser marketing set is the `browser_listed` rows in `profiles.py`: Opus 192/160/128/96/64 kbps at 48 kHz plus the three listed FLACs. Exclusive-only FLAC tags stay off `GET /api/codecs`. Conversion always goes through ffmpeg with quality-first resampling policy. Lossy-indexed tracks are **not** a profile — they use reserved `source` passthrough and never enter this encode pipeline. `stream_intent(is_lossy, codec)` is the only product decision (`passthrough` / `encode` / `reject`). Stream HTTP maps `reject` to 409 (kind mismatch) or 400 (unknown tag). Prepare HTTP validates unknown tags with `get_profile` (400); reserved `SOURCE_TAG` is a valid prepare request (200, enqueue skips all) — not a dummy `stream_intent(is_lossy=False)` probe. `enqueue_prepare` and radio prepare skip when the kind is not `encode`. Forget skips via `can_encode(*, is_lossy)` (lossy originals have no encode cache) — not `stream_intent` with a default profile. Passthrough mime/extension are defined for MP3 and AAC only; an unknown stored source codec is a 400, not an encode and not a guessed container.
 
 ## Startup requirements
 
@@ -45,7 +45,7 @@ Client quality prefs, play-source resolution, and prepare timing are owned by `d
 
 - Stream by stable track id (preferred) with a codec/profile tag.
 - Settings UI should only offer profiles the browser can decode (client probes).
-- Client may pick one stream tag and one download tag; `/api/codecs` exposes bitrate/depth/rate so the client can rank quality.
+- Client may pick one stream tag and one download tag; `/api/codecs` exposes bitrate/depth/rate so the client can rank quality, plus `approx_mb_per_hour` as a product size constant for Settings (not an encode input). `GET /api/exclusive-formats` stays estimate-free.
 - Optional prepare endpoint prewarms encodes without blocking the main UX path. Radio and that endpoint share `enqueue_prepare`. Radio must not call `drop_pending_prewarm`. Radio jobs log `log_label` + profile tag, not paths. The 1-hour idle wipe is unchanged. Vite `/api` proxy sets `ws: true` so the radio WebSocket upgrades in `pnpm --dir frontend dev`.
 - Client may send prepare with `urgent: true` (near end of the current track, once per playback load) so the next queue item is promoted to the urgent encode tier before natural advance.
 

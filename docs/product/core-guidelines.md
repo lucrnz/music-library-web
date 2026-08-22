@@ -31,7 +31,7 @@ Intentional policies (implementation in `transcode/`):
 
 - **Resampling:** libsoxr via ffmpeg at SoX Very High Quality equivalents — not the OS mixer’s cheap resampler.
 - **Dither:** Shibata-style dither **only when reducing bit depth**. Never dither when increasing bit depth or when depth is unchanged. If sample rate and bit depth already match the stream profile, skip aresample entirely.
-- **Encoders:** best practical quality knobs for each codec (e.g. Opus VBR at the selected bitrate; true 24-bit FLAC when that profile is chosen).
+- **Encoders:** best practical quality knobs for each codec (e.g. Opus VBR at the selected bitrate; true 24-bit FLAC when that profile is chosen). Lower Opus targets (96 and 64 kbps) are allowed marketing options for size and bandwidth on that same libopus path. They do not relax soxr/dither policy.
 - **Source library:** packed lossless is the default. MP3/AAC may be indexed when opted in; those files are marked and played as stored (on-demand **and** radio) — do not re-encode them.
 - **Radio tab:** one household station; Tune in joins the official clock via `/api/stream` + seek. Exclusive-mode radio is TODO (Tune-in stops the hog; radio stays HTML-only). See `docs/systems/radio.md`.
 
@@ -46,4 +46,4 @@ Tweaking small pipeline details for transparent delivery is preferred over simpl
 
 - Prefer transparent audio paths over convenience shortcuts that degrade quality.
 - Keep the product filesystem-layout agnostic; do not require a single vendor library layout.
-- Do not add other lossy formats or a lossy transcode path without a new product decision. Exclusive remux of lossy and data-saver transcode of lossy are still out of scope.
+- Do not add other lossy formats or a lossy transcode path without a new product decision. Exclusive remux of lossy and data-saver transcode of lossy are still out of scope. Opus 64/96 kbps is not a new format and does not authorize transcoding indexed MP3/AAC.
