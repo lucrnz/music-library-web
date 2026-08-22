@@ -1,8 +1,9 @@
 /**
  * Single play decision: sink + source + profile + url + block.
- * Exclusive is companion+streaming. HTML uses resolvePlaySource.
+ * Companion uses exclusiveTag. HTML uses resolvePlaySource.
  */
 import { streamUrl } from "@/api";
+import { catalogIndex, isLocallyPlayableDownload } from "@/downloads/catalog";
 import { SOURCE_TAG, deliveryCodec } from "@/lossyKind";
 import type { Track } from "@/models/track";
 import {
@@ -12,7 +13,9 @@ import {
 import {
   resolvePlaySource,
   type PlaybackPolicy,
+  willPreferLocal,
 } from "@/downloads/resolve";
+import { settings } from "@/stores/settings";
 
 export type PlaySink = "htmlAudio" | "companion";
 
@@ -31,7 +34,7 @@ export type PlayIntent =
     };
 
 export interface PlayIntentCtx {
-  exclusiveEnabled: boolean;
+  sink: PlaySink;
   exclusiveTag: string | null;
   enabled: boolean;
   offline: boolean;
@@ -97,7 +100,7 @@ export async function resolvePlayIntent(
   track: Track | null | undefined,
   ctx: PlayIntentCtx,
 ): Promise<PlayIntent> {
-  if (ctx.exclusiveEnabled) {
+  if (ctx.sink === "companion") {
     return exclusiveIntent(track, ctx);
   }
 
@@ -155,4 +158,27 @@ export function needsCompanionStop(
 ): boolean {
   if (intent.source === "unavailable") return true;
   return intent.sink !== activeKind;
+}
+
+/** HTML prewarm: lossless id that will not prefer a local download. */
+export function shouldPrepare(track: Track, activeCodec: string): boolean {
+  if (!track.id || track.isLossy) return false;
+  const policy = settings.playbackPolicy;
+  const codecCatalog = settings.options;
+  return !willPreferLocal(
+    catalogIndex.byTrack[track.id],
+    activeCodec,
+    policy,
+    codecCatalog,
+  );
+}
+
+/** Offline queue skip: remote usable, or a local download exists. */
+export function isPlayableNow(
+  track: Track | undefined,
+  opts: { downloadsEnabled: boolean; canUseRemote: boolean },
+): boolean {
+  if (!track?.id) return false;
+  if (!opts.downloadsEnabled || opts.canUseRemote) return true;
+  return isLocallyPlayableDownload(track.id);
 }

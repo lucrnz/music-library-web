@@ -8,13 +8,9 @@ import { loadPlaylist } from "@/stores/playlist";
 import { applyExpanded, applyPlaybackPosition } from "@/stores/playerPrefs";
 import { updateMediaSession } from "@/stores/playerSession";
 import { applyVolume, initAudioListeners } from "@/stores/player";
-import {
-  bindSettingsPrepareTracks,
-  loadCodecs,
-} from "@/stores/settings";
+import { loadCodecs } from "@/stores/settings";
 import { syncCompanionConnection } from "@/exclusive/companionClient";
 import { initExclusiveAudio } from "@/stores/exclusiveAudio";
-import { pl } from "@/stores/playlist";
 import { bindConnectivityToasts } from "@/connectivityUi";
 import { initArtistArtPending } from "@/artistArt/pending";
 import { initDownloads } from "@/downloads/index";
@@ -34,7 +30,6 @@ initAudioListeners();
 bindConnectivityStore();
 loadCodecs();
 void initExclusiveAudio().then(() => syncCompanionConnection());
-bindSettingsPrepareTracks(() => pl.tracks);
 bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.
 initDownloads().then(() => updateMediaSession());

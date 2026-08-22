@@ -5,16 +5,6 @@ vi.mock("@/api", () => ({
   apiFetch: vi.fn(),
   apiPost: vi.fn(),
 }));
-vi.mock("@/playback/prepare", async () => {
-  const actual = await vi.importActual<typeof import("@/playback/prepare")>(
-    "@/playback/prepare",
-  );
-  return {
-    ...actual,
-    prepareTracks: vi.fn(),
-    preparedKeys: { clear: vi.fn() },
-  };
-});
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
 vi.mock("@/connectivity", () => ({
   reportFailure: vi.fn(),
@@ -57,12 +47,7 @@ describe("settings persist and active stream", () => {
     expect(localStorage.getItem("musicweb.playbackPolicy")).toBe("prefer_stream");
     expect(setDownloadCodec("flac_16_44100")).toBe(true);
     expect(localStorage.getItem("musicweb.downloadCodec")).toBe("flac_16_44100");
-    expect(
-      setStreamCodec("flac_16_44100", {
-        tracks: [],
-        index: 0,
-      }),
-    ).toBe(true);
+    expect(setStreamCodec("flac_16_44100")).toBe(true);
     expect(localStorage.getItem("musicweb.streamCodec")).toBe("flac_16_44100");
   });
 

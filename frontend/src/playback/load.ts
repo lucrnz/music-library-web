@@ -23,11 +23,8 @@ import {
   type PlaySink,
 } from "@/playback/playIntent";
 import { showToast } from "@/stores/ui";
-import {
-  consumeMissingTechToast,
-  getExclusiveProfileTag,
-  isExclusiveEnabled,
-} from "@/stores/exclusiveAudio";
+import { consumeMissingTechToast } from "@/stores/exclusiveAudio";
+import { activeDelivery } from "@/playback/deliveryPolicy";
 import { pl } from "@/stores/playlist";
 import {
   clearPlaySourceState,
@@ -242,17 +239,17 @@ async function intentForTrack(
   gen: number,
   extra: { localBroken?: boolean } = {},
 ): Promise<PlayIntent | null> {
-  const exclusive = isExclusiveEnabled();
+  const policy = activeDelivery();
   const activeCodec =
     deliveryCodec(track, getActiveStreamCodec()) || getActiveStreamCodec();
   let sourceOk: boolean | undefined;
-  if (!exclusive && activeCodec === SOURCE_TAG) {
+  if (policy.sink !== "companion" && activeCodec === SOURCE_TAG) {
     sourceOk = await sourceKindSupported(track);
     if (!still(gen)) return null;
   }
   return resolvePlayIntent(track, {
-    exclusiveEnabled: exclusive,
-    exclusiveTag: exclusive ? getExclusiveProfileTag(track) : null,
+    sink: policy.sink,
+    exclusiveTag: policy.sink === "companion" ? policy.profileFor(track) : null,
     enabled: downloads.enabled,
     offline: !canUseRemoteMedia(),
     activeStreamCodec: getActiveStreamCodec(),

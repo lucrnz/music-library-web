@@ -4,15 +4,12 @@
  */
 import { reactive } from "vue";
 import { apiGet } from "@/api";
-import { preparedKeys, prepareTracks } from "@/playback/prepare";
 import { reportFailure, reportSuccess } from "@/connectivity";
 import { emit } from "@/diag/log";
 import {
   filterCodecsByDecodeSupport,
   type CodecOption as ProbeCodecOption,
 } from "@/codecSupport";
-import type { Track } from "@/models/track";
-import { isExclusiveEnabled } from "@/stores/exclusiveAudio";
 import { acquireModalLock, releaseModalLock } from "@/stores/modalLock";
 
 const KEY_STREAM = "musicweb.streamCodec";
@@ -43,15 +40,6 @@ export interface SettingsState {
   options: CodecOption[];
   default: string;
   open: boolean;
-}
-
-export interface StreamChangeCtx {
-  tracks: Track[];
-  index: number;
-}
-
-interface ApplyStreamOpts {
-  force?: boolean;
 }
 
 export const PLAYBACK_POLICIES = [
@@ -95,12 +83,6 @@ export const settings = reactive<SettingsState>({
   /** Settings modal open state */
   open: false,
 });
-
-/** Last active stream used for prepare bookkeeping */
-let lastPreparedActive: string | null = null;
-
-/** Playlist tracks getter from boot bind */
-let getTracksFn: (() => Track[]) | null = null;
 
 function pickDefault() {
   const ids = new Set(settings.options.map((o) => o.id));
@@ -285,7 +267,6 @@ export async function loadCodecs() {
     await applyServerCatalog(cached);
   }
   loadPrefs({ catalogIsAuthoritative: !!cached });
-  lastPreparedActive = getActiveStreamCodec();
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 4000);
@@ -315,31 +296,7 @@ export async function loadCodecs() {
   }
 }
 
-/**
- * Single path for lastPreparedActive + preparedKeys + requestPrepare.
- */
-function applyActiveStreamSideEffects(
-  tracks?: Track[] | null,
-  opts: ApplyStreamOpts = {},
-) {
-  const list = tracks || (getTracksFn ? getTracksFn() : []) || [];
-  if (isExclusiveEnabled()) {
-    lastPreparedActive = null;
-    preparedKeys.clear();
-    prepareTracks(list, { replace: true });
-    return;
-  }
-
-  const active = getActiveStreamCodec();
-  const changed = active !== lastPreparedActive;
-  if (changed || opts.force) {
-    lastPreparedActive = active;
-    preparedKeys.clear();
-    prepareTracks(list, { replace: true });
-  }
-}
-
-export function setStreamCodec(v: string, ctx: StreamChangeCtx) {
+export function setStreamCodec(v: string) {
   if (!settings.options.some((o) => o.id === v)) return false;
   if (v === settings.streamCodec) {
     settings.open = false;
@@ -348,7 +305,6 @@ export function setStreamCodec(v: string, ctx: StreamChangeCtx) {
   settings.streamCodec = v;
   persistAll();
   settings.open = false;
-  applyActiveStreamSideEffects(ctx.tracks);
   return true;
 }
 
@@ -361,10 +317,7 @@ export function setDownloadCodec(v: string) {
   return true;
 }
 
-/**
- * Persist playback policy and invalidate prepare bookkeeping so background
- * prepare matches the new policy. Does not restart the current track.
- */
+/** Persist playback policy. Prepare-on-change lives in player.ts. */
 export function setPlaybackPolicy(v: PlaybackPolicy) {
   if (v !== "prefer_better" && v !== "prefer_offline" && v !== "prefer_stream") {
     return false;
@@ -372,7 +325,6 @@ export function setPlaybackPolicy(v: PlaybackPolicy) {
   if (v === settings.playbackPolicy) return false;
   settings.playbackPolicy = v;
   persistAll();
-  applyActiveStreamSideEffects(undefined, { force: true });
   return true;
 }
 
@@ -386,10 +338,4 @@ export function closeSettings() {
   releaseModalLock("settings");
 }
 
-/**
- * Store a playlist-tracks getter so prepare-on-policy-change can run
- * without importing the playlist store.
- */
-export function bindSettingsPrepareTracks(getTracks: () => Track[]) {
-  getTracksFn = getTracks;
-}
+

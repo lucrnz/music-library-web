@@ -1,20 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/stores/exclusiveAudio", () => ({
-  isExclusiveEnabled: vi.fn(() => false),
-  getExclusiveProfileTag: vi.fn(() => null),
+vi.mock("@/playback/deliveryPolicy", () => ({
+  activeDelivery: vi.fn(),
 }));
 
 import { catalogIndex } from "@/downloads/catalog";
+import { activeDelivery } from "@/playback/deliveryPolicy";
 import {
   preparedKeys,
   prepareTracks,
   tracksToPrepare,
 } from "@/playback/prepare";
-import {
-  getExclusiveProfileTag,
-  isExclusiveEnabled,
-} from "@/stores/exclusiveAudio";
 import { settings } from "@/stores/settings";
 import type { Track } from "@/models/track";
 
@@ -67,8 +63,10 @@ describe("prepareTracks", () => {
         text: async () => "",
       }),
     );
-    vi.mocked(isExclusiveEnabled).mockReturnValue(false);
-    vi.mocked(getExclusiveProfileTag).mockReturnValue(null);
+    vi.mocked(activeDelivery).mockReturnValue({
+      sink: "htmlAudio",
+      profileFor: () => settings.streamCodec,
+    });
     catalogIndex.byTrack = {};
     settings.playbackPolicy = "prefer_better";
     settings.options = [
@@ -83,10 +81,10 @@ describe("prepareTracks", () => {
   });
 
   it("exclusive groups by tag and does not pass the browser codec", () => {
-    vi.mocked(isExclusiveEnabled).mockReturnValue(true);
-    vi.mocked(getExclusiveProfileTag).mockImplementation((t) =>
-      t?.id === "a" ? "flac_16_44100" : "flac_24_96000",
-    );
+    vi.mocked(activeDelivery).mockReturnValue({
+      sink: "companion",
+      profileFor: (t) => (t?.id === "a" ? "flac_16_44100" : "flac_24_96000"),
+    });
     prepareTracks([track("a"), track("b")]);
     const tags = prepareBodies().map((b) => b.codec);
     expect(tags).toHaveLength(2);

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
-import { pl } from "@/stores/playlist";
 import { canReachServer } from "@/connectivity";
 import { connectivity } from "@/stores/connectivity";
 import {
@@ -68,7 +67,7 @@ const playbackPolicies = PLAYBACK_POLICIES;
     }
 
     function chooseStream(id: string) {
-      setStreamCodec(id, { tracks: pl.tracks, index: pl.index });
+      setStreamCodec(id);
     }
 
     function chooseDownload(id: string) {

@@ -20,7 +20,7 @@ import {
 
 export type { PlaybackPolicy };
 
-export type PlayDelivery =
+type HtmlSource =
   | {
       source: "unavailable";
       profile: string | null;
@@ -37,7 +37,7 @@ function unavailable(
   block: PlayBlockReason,
   profile: string | null = null,
   message?: string | null,
-): PlayDelivery {
+): HtmlSource {
   return {
     source: "unavailable",
     profile,
@@ -50,7 +50,7 @@ function ready(
   source: "streaming" | "downloaded",
   url: string,
   profile: string | null,
-): PlayDelivery {
+): HtmlSource {
   return { source, url, profile };
 }
 
@@ -108,7 +108,7 @@ export function willPreferLocal(
 /** Open local blob only after policy decides local wins. */
 async function openDownloadedSource(
   rec: CatalogTrackRecord & { codec: string },
-): Promise<PlayDelivery> {
+): Promise<HtmlSource> {
   try {
     const url = await getLocalAudioUrlForRecord(rec);
     if (url) {
@@ -141,7 +141,7 @@ export async function resolvePlaySource(
     playbackPolicy?: PlaybackPolicy;
     catalog?: { id: string }[];
   },
-): Promise<PlayDelivery> {
+): Promise<HtmlSource> {
   if (!track?.id) {
     return unavailable("no_id");
   }

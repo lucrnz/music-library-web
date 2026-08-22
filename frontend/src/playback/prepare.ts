@@ -2,14 +2,10 @@
  * Shared stream prepare for queue add, settings codec change, and near-end.
  */
 import { apiFetch, apiPost } from "@/api";
-import { catalogIndex } from "@/downloads/catalog";
-import { willPreferLocal } from "@/downloads/resolve";
 import type { Track } from "@/models/track";
-import {
-  getExclusiveProfileTag,
-  isExclusiveEnabled,
-} from "@/stores/exclusiveAudio";
-import { getActiveStreamCodec, settings } from "@/stores/settings";
+import { activeDelivery } from "@/playback/deliveryPolicy";
+import { shouldPrepare } from "@/playback/playIntent";
+import { getActiveStreamCodec } from "@/stores/settings";
 
 export interface PrepareTracksOpts {
   urgent?: boolean;
@@ -74,14 +70,8 @@ export function tracksToPrepare(
   tracks: Array<Track | null | undefined>,
   activeCodec: string,
 ): Track[] {
-  const eligible = (tracks || []).filter(
-    (t): t is Track => !!(t?.id && !t.isLossy),
-  );
-  const policy = settings.playbackPolicy;
-  const codecCatalog = settings.options;
-  const byTrack = catalogIndex.byTrack;
-  return eligible.filter(
-    (t) => !willPreferLocal(byTrack[t.id], activeCodec, policy, codecCatalog),
+  return (tracks || []).filter(
+    (t): t is Track => !!t && shouldPrepare(t, activeCodec),
   );
 }
 
@@ -93,10 +83,11 @@ export function prepareTracks(
   const list = (tracks || []).filter((t): t is Track => !!t?.id).slice(0, limit);
   if (!list.length) return;
 
-  if (isExclusiveEnabled()) {
+  const { sink, profileFor } = activeDelivery();
+  if (sink === "companion") {
     const byTag = new Map<string, Track[]>();
     for (const t of list) {
-      const tag = getExclusiveProfileTag(t);
+      const tag = profileFor(t);
       if (!tag) continue;
       let bucket = byTag.get(tag);
       if (!bucket) {

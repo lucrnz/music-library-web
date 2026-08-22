@@ -48,7 +48,7 @@ describe("resolvePlayIntent", () => {
 
   it("blocks exclusive lossy", async () => {
     const intent = await resolvePlayIntent(track({ isLossy: true }), {
-      exclusiveEnabled: true,
+      sink: "companion",
       exclusiveTag: "flac_16_44100",
       enabled: false,
       offline: false,
@@ -62,7 +62,7 @@ describe("resolvePlayIntent", () => {
 
   it("exclusive without a gate is ready companion (sink owns the device poll)", async () => {
     const intent = await resolvePlayIntent(track(), {
-      exclusiveEnabled: true,
+      sink: "companion",
       exclusiveTag: "flac_16_44100",
       enabled: false,
       offline: false,
@@ -76,7 +76,7 @@ describe("resolvePlayIntent", () => {
 
   it("exclusive lossless is companion streaming with exclusive tag", async () => {
     const intent = await resolvePlayIntent(track(), {
-      exclusiveEnabled: true,
+      sink: "companion",
       exclusiveTag: "flac_16_44100",
       enabled: true,
       offline: false,
@@ -91,7 +91,7 @@ describe("resolvePlayIntent", () => {
 
   it("exclusive without a tag is exclusive_no_format", async () => {
     const intent = await resolvePlayIntent(track(), {
-      exclusiveEnabled: true,
+      sink: "companion",
       exclusiveTag: null,
       enabled: false,
       offline: false,
@@ -110,7 +110,7 @@ describe("resolvePlayIntent", () => {
       message: "You're offline and this track isn't downloaded.",
     });
     const intent = await resolvePlayIntent(track(), {
-      exclusiveEnabled: false,
+      sink: "htmlAudio",
       exclusiveTag: null,
       enabled: true,
       offline: true,
@@ -128,7 +128,7 @@ describe("resolvePlayIntent", () => {
       profile: "flac_16_44100",
     });
     const intent = await resolvePlayIntent(track(), {
-      exclusiveEnabled: false,
+      sink: "htmlAudio",
       exclusiveTag: null,
       enabled: true,
       offline: false,
@@ -142,7 +142,7 @@ describe("resolvePlayIntent", () => {
 
   it("localBroken online falls back to streaming", async () => {
     const intent = await resolvePlayIntent(track(), {
-      exclusiveEnabled: false,
+      sink: "htmlAudio",
       exclusiveTag: null,
       enabled: true,
       offline: false,
@@ -159,7 +159,7 @@ describe("resolvePlayIntent", () => {
     const intent = await resolvePlayIntent(
       track({ isLossy: true, sourceCodec: "mp3" }),
       {
-        exclusiveEnabled: false,
+        sink: "htmlAudio",
         exclusiveTag: null,
         enabled: false,
         offline: false,

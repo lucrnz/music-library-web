@@ -5,10 +5,10 @@
  */
 import { canReachServer, canUseRemoteMedia } from "@/connectivity";
 import { emit } from "@/diag/log";
-import { isLocallyPlayableDownload } from "@/downloads/catalog";
 import { downloads } from "@/downloads/state";
 import type { SinkErrorDetails } from "@/playback/sinks/types";
 import { type PlayBlockError, isOfflineUnplayable } from "@/playBlock";
+import { isPlayableNow } from "@/playback/playIntent";
 import {
   beginLoad,
   companionSink,
@@ -285,11 +285,15 @@ export async function playIndex(index: number) {
   if (still(gen)) flushPendingResume();
 }
 
-function shouldSkipUnplayableQueue() {
-  return isOfflineUnplayable(undefined, {
+function queuePlayableOpts() {
+  return {
     downloadsEnabled: downloads.enabled,
     canUseRemote: canUseRemoteMedia(),
-  });
+  };
+}
+
+function shouldSkipUnplayableQueue() {
+  return isOfflineUnplayable(undefined, queuePlayableOpts());
 }
 
 function stopAtQueueEnd() {
@@ -302,8 +306,9 @@ function stopAtQueueEnd() {
 }
 
 export function playNext() {
+  const opts = queuePlayableOpts();
   const idx = shouldSkipUnplayableQueue()
-    ? pl.advanceToPlayable("next", (t) => !!t?.id && isLocallyPlayableDownload(t.id))
+    ? pl.advanceToPlayable("next", (t) => isPlayableNow(t, opts))
     : pl.nextIndex();
   if (idx < 0) {
     stopAtQueueEnd();
@@ -319,8 +324,9 @@ export function playPrev() {
     onListenRestart();
     return;
   }
+  const opts = queuePlayableOpts();
   const idx = shouldSkipUnplayableQueue()
-    ? pl.advanceToPlayable("prev", (t) => !!t?.id && isLocallyPlayableDownload(t.id))
+    ? pl.advanceToPlayable("prev", (t) => isPlayableNow(t, opts))
     : pl.prevIndex();
   if (idx < 0) {
     stopAtQueueEnd();
@@ -399,8 +405,15 @@ export function initAudioListeners() {
   watch(
     () => settings.streamCodec,
     () => {
+      prepareTracks(pl.tracks, { replace: true });
       if (activeSession() !== "queue") return;
       if (pl.index >= 0) playIndex(pl.index);
+    },
+  );
+  watch(
+    () => settings.playbackPolicy,
+    () => {
+      prepareTracks(pl.tracks, { replace: true });
     },
   );
   watch(
