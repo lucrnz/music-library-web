@@ -33,6 +33,7 @@ import { showToast } from "@/stores/ui";
 
 export type RadioChrome = "inactive" | "stopped" | "tuning" | "tuned";
 export type RadioFace = "catching_up" | "skip_pending" | "idle" | "current";
+export type RadioPlaySource = "none" | "streaming" | "downloaded";
 
 export interface RadioStore {
   chrome: RadioChrome;
@@ -45,6 +46,8 @@ export interface RadioStore {
   connected: boolean;
   tabOpen: boolean;
   tunerProfile: string | null;
+  playSource: RadioPlaySource;
+  playProfileId: string | null;
 }
 
 export const radio = reactive<RadioStore>({
@@ -58,6 +61,8 @@ export const radio = reactive<RadioStore>({
   connected: false,
   tabOpen: false,
   tunerProfile: null,
+  playSource: "none",
+  playProfileId: null,
 });
 
 export const radioAudio = createRadioAudio();
@@ -82,10 +87,13 @@ export function radioSubtitle(track: Track | null | undefined): string {
 export function radioPlayState(): PlayStatusState {
   return {
     session: "radio",
-    playSource: "streaming",
+    playSource:
+      radio.playSource === "streaming" || radio.playSource === "downloaded"
+        ? radio.playSource
+        : "streaming",
     playProfileId: radio.isLossy
       ? null
-      : radio.tunerProfile || getActiveStreamCodec(),
+      : radio.playProfileId || radio.tunerProfile || getActiveStreamCodec(),
     track: radio.track,
   };
 }
@@ -150,6 +158,12 @@ function bindVolumeWatch(): void {
     () => settings.streamCodec,
     () => {
       if (radioChromeActive()) void onStreamProfileChanged();
+    },
+  );
+  watch(
+    () => settings.playbackPolicy,
+    () => {
+      void onPlaybackPolicyChanged();
     },
   );
 }
@@ -265,6 +279,13 @@ export async function onStreamProfileChanged(): Promise<void> {
   }
 }
 
+export async function onPlaybackPolicyChanged(): Promise<void> {
+  if (radio.chrome !== "tuning" && radio.chrome !== "tuned") return;
+  bumpRadioGen();
+  clearLoadedKeys();
+  await onFaceOrTrack(null);
+}
+
 function bindConnectivity(): void {
   if (connectivityBound) return;
   connectivityBound = true;
@@ -300,6 +321,8 @@ export function resetRadioStore(): void {
   radio.officialDuration = 0;
   radio.tabOpen = false;
   radio.tunerProfile = null;
+  radio.playSource = "none";
+  radio.playProfileId = null;
   clearLoadedKeys();
   bumpRadioGen();
   failures.reset();

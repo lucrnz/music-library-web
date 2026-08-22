@@ -16,6 +16,7 @@ import {
   formatApproxMbPerHour,
   getActiveStreamCodec,
   loadCodecs,
+  PLAYBACK_POLICIES,
   setDownloadCodec,
   setPlaybackPolicy,
   setStreamCodec,
@@ -57,6 +58,14 @@ describe("settings persist and active stream", () => {
   it("returns streamCodec", () => {
     settings.streamCodec = "flac_16_44100";
     expect(getActiveStreamCodec()).toBe(settings.streamCodec);
+  });
+
+  it("playback policy hints mention radio", () => {
+    const ids = ["prefer_better", "prefer_offline", "prefer_stream"] as const;
+    for (const id of ids) {
+      const row = PLAYBACK_POLICIES.find((p) => p.id === id);
+      expect(row?.hint.toLowerCase()).toContain("radio");
+    }
   });
 });
 

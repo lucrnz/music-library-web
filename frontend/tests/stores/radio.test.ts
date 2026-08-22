@@ -15,6 +15,23 @@ vi.mock("@/playback/session", () => ({
   onLeaveRadio: vi.fn(),
 }));
 vi.mock("@/stores/ui", () => ({ showToast: vi.fn() }));
+vi.mock("@/downloads/resolve", () => ({
+  resolvePlaySource: vi.fn(
+    async (
+      track: { id?: string },
+      ctx: { activeStreamCodec: string },
+    ) => ({
+      source: "streaming" as const,
+      url: track?.id
+        ? `/api/stream?id=${track.id}&codec=${ctx.activeStreamCodec}`
+        : "",
+      profile: ctx.activeStreamCodec,
+    }),
+  ),
+}));
+vi.mock("@/downloads/catalog", () => ({
+  markTrackBroken: vi.fn(() => Promise.resolve()),
+}));
 
 import { fromApiTrack } from "@/models/track";
 import { SOURCE_TAG } from "@/lossyKind";
@@ -24,6 +41,7 @@ import {
   connect,
   heardPosition,
   interpolatedPosition,
+  onPlaybackPolicyChanged,
   radio,
   radioAudio,
   radioChromeActive,
@@ -140,6 +158,21 @@ describe("radio store", () => {
     expect(radioPlayState().playProfileId).toBeNull();
   });
 
+  it("radioPlayState reports a downloaded catalog profile", () => {
+    applySnapshot(currentPayload);
+    radio.tunerProfile = "opus_192_48000";
+    radio.playSource = "downloaded";
+    radio.playProfileId = "flac_16_44100";
+    const state = radioPlayState();
+    expect(state.playSource).toBe("downloaded");
+    expect(state.playProfileId).toBe("flac_16_44100");
+    applySnapshot({ ...currentPayload, is_lossy: true });
+    radio.playSource = "downloaded";
+    radio.playProfileId = "flac_16_44100";
+    expect(radioPlayState().playProfileId).toBeNull();
+    expect(radioPlayState().playSource).toBe("downloaded");
+  });
+
   it("tune_in codec is the streaming profile, never source", () => {
     expect(getActiveStreamCodec()).not.toBe(SOURCE_TAG);
   });
@@ -198,5 +231,34 @@ describe("radio store", () => {
     resetRadioStore();
     expect(radio.chrome).toBe("inactive");
     expect(radio.connected).toBe(false);
+    expect(radio.playSource).toBe("none");
+  });
+
+  it("resetRadioStore clears playSource", () => {
+    radio.playSource = "downloaded";
+    radio.playProfileId = "flac_16_44100";
+    resetRadioStore();
+    expect(radio.playSource).toBe("none");
+    expect(radio.playProfileId).toBeNull();
+  });
+
+  it("onPlaybackPolicyChanged reloads while tuned", async () => {
+    applySnapshot(currentPayload);
+    radio.chrome = "tuned";
+    radio.tunerProfile = "opus_192_48000";
+    vi.spyOn(radioAudio, "load").mockResolvedValue();
+    vi.spyOn(radioAudio, "seek").mockResolvedValue();
+    vi.spyOn(radioAudio, "play").mockResolvedValue();
+    await onPlaybackPolicyChanged();
+    expect(radioAudio.load).toHaveBeenCalled();
+  });
+
+  it("onPlaybackPolicyChanged does not load while stopped", async () => {
+    applySnapshot(currentPayload);
+    radio.chrome = "stopped";
+    const load = vi.spyOn(radioAudio, "load").mockResolvedValue();
+    load.mockClear();
+    await onPlaybackPolicyChanged();
+    expect(load).not.toHaveBeenCalled();
   });
 });

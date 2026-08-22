@@ -158,4 +158,34 @@ describe("formatPrimaryStatus", () => {
     expect(value(rows, "output")).toBeUndefined();
     expect(value(rows, "source")).toBe("Streaming");
   });
+
+  it("radio downloaded lossless uses the Downloaded source word", () => {
+    const catalog = [
+      {
+        id: "flac_16_44100",
+        label: "FLAC 16/44.1",
+        kind: "flac",
+        bitDepth: 16,
+        sampleRate: 44100,
+        bitrateKbps: 0,
+      },
+    ];
+    const state: PlayStatusState = {
+      session: "radio",
+      playSource: "downloaded",
+      playProfileId: "flac_16_44100",
+      track: {
+        isLossy: false,
+        sourceCodec: "flac",
+        bitrateKbps: null,
+        sampleRateHz: 44100,
+        bitrateMode: null,
+      },
+    };
+    const face = formatPrimaryStatus(state, catalog);
+    expect(face.text.startsWith("Downloaded ·")).toBe(true);
+    expect(value(buildPlaybackDetailsRows(state, catalog), "source")).toBe(
+      "Downloaded",
+    );
+  });
 });

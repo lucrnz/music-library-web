@@ -47,17 +47,17 @@ export const PLAYBACK_POLICIES = [
   {
     id: "prefer_better" as const,
     label: "Prefer higher quality",
-    hint: "Use a download when it’s at least as good as streaming quality; otherwise stream.",
+    hint: "Use a download when it’s at least as good as streaming quality; otherwise stream. Applies to queue play and radio.",
   },
   {
     id: "prefer_offline" as const,
     label: "Prefer downloaded file",
-    hint: "Always play the on-device file when present.",
+    hint: "Always play the on-device file when present, including on radio.",
   },
   {
     id: "prefer_stream" as const,
     label: "Prefer live stream when online",
-    hint: "Stream when online; use downloads only offline.",
+    hint: "Stream when online; use downloads only offline. Applies to queue play and radio.",
   },
 ];
 
