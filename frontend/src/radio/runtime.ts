@@ -1,34 +1,14 @@
 /**
- * Radio socket, load generation, face machine, and Media Session writes.
+ * Radio WebSocket only. Face/load live in radio/session.ts.
  * Chrome face stays in stores/radio.ts.
  */
-import { streamUrl } from "@/api";
-import { SOURCE_TAG } from "@/lossyKind";
-import { suspendMediaSession } from "@/playback/session";
-import type { RadioAudio } from "@/radio/audio";
-import { createFailureCap } from "@/radio/failures";
-import { needsReseek } from "@/radio/sync";
+import {
+  applySnapshot,
+  onRadioSocketReconnect,
+  radio,
+  radioChromeActive,
+} from "@/stores/radio";
 import { getActiveStreamCodec } from "@/stores/settings";
-import { showToast } from "@/stores/ui";
-
-export interface RadioRuntimeHost {
-  radio: {
-    chrome: string;
-    face: string;
-    track: { id?: string; title?: string; artist?: string; album?: string } | null;
-    isLossy: boolean;
-    tunerProfile: string | null;
-    connected: boolean;
-    tabOpen: boolean;
-    snapshotAt: number;
-  };
-  audio: RadioAudio;
-  failures: ReturnType<typeof createFailureCap>;
-  interpolatedPosition: () => number;
-  applySnapshot: (raw: unknown) => void;
-  tuneIn: () => Promise<void>;
-  tuneOut: () => void;
-}
 
 interface TuneAck {
   ok: boolean;
@@ -36,141 +16,12 @@ interface TuneAck {
   face?: string;
 }
 
-let host: RadioRuntimeHost | null = null;
 let socket: WebSocket | null = null;
 let pendingAck: ((value: TuneAck) => void) | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let lastLoadedTrackId: string | null = null;
-let lastLoadedLossy: boolean | null = null;
-let radioGen = 0;
-let audioBound = false;
-
-export function initRadioRuntime(next: RadioRuntimeHost): void {
-  host = next;
-  bindAudioHandlers();
-}
-
-export function bumpRadioGen(): void {
-  radioGen += 1;
-}
-
-export function clearLoadedKeys(): void {
-  lastLoadedTrackId = null;
-  lastLoadedLossy = null;
-}
-
-function requireHost(): RadioRuntimeHost {
-  if (!host) throw new Error("radio runtime not initialized");
-  return host;
-}
-
-function isChromeActive(chrome: string): boolean {
-  return chrome === "stopped" || chrome === "tuning" || chrome === "tuned";
-}
 
 export function socketRequired(): boolean {
-  const { radio } = requireHost();
-  return radio.tabOpen || isChromeActive(radio.chrome);
-}
-
-export function maybeReseek(): void {
-  const { radio, audio, interpolatedPosition } = requireHost();
-  if (radio.chrome !== "tuned") return;
-  if (needsReseek(audio.currentTime, interpolatedPosition())) {
-    void audio.seek(interpolatedPosition());
-  }
-}
-
-export async function onFaceOrTrack(
-  prevId: string | null,
-  countsAsFailure = false,
-): Promise<void> {
-  const { radio, audio, tuneOut } = requireHost();
-  if (!isChromeActive(radio.chrome)) return;
-  if (radio.face === "idle" && (radio.chrome === "tuning" || radio.chrome === "tuned")) {
-    tuneOut();
-    return;
-  }
-  if (radio.face === "catching_up" || radio.face === "skip_pending") {
-    if (radio.chrome === "tuned") radio.chrome = "tuning";
-    audio.stop();
-    clearLoadedKeys();
-    bumpRadioGen();
-    return;
-  }
-  if (radio.face !== "current" || !radio.track?.id) return;
-  if (radio.chrome === "stopped") {
-    writeRadioMediaSession();
-    return;
-  }
-  const changed =
-    lastLoadedTrackId == null ||
-    radio.track.id !== lastLoadedTrackId ||
-    (lastLoadedLossy != null && lastLoadedLossy !== radio.isLossy) ||
-    (prevId != null && radio.track.id !== prevId);
-  if ((radio.chrome === "tuning" || radio.chrome === "tuned") && changed) {
-    await loadCurrent(countsAsFailure);
-  } else if (radio.chrome === "tuned") {
-    maybeReseek();
-  }
-}
-
-function streamCodecForLoad(): string {
-  const { radio } = requireHost();
-  return radio.isLossy ? SOURCE_TAG : radio.tunerProfile || getActiveStreamCodec();
-}
-
-export async function loadCurrent(countsAsFailure: boolean): Promise<void> {
-  const { radio, audio, failures, interpolatedPosition, tuneOut } = requireHost();
-  const track = radio.track;
-  if (!track?.id) return;
-  const url = streamUrl(track, streamCodecForLoad());
-  if (!url) return;
-  const gen = ++radioGen;
-  try {
-    await audio.load(url);
-    if (gen !== radioGen) return;
-    await audio.seek(interpolatedPosition());
-    if (gen !== radioGen) return;
-    await audio.play();
-    if (gen !== radioGen) return;
-    lastLoadedTrackId = track.id;
-    lastLoadedLossy = radio.isLossy;
-    radio.chrome = "tuned";
-    writeRadioMediaSession();
-  } catch {
-    if (gen !== radioGen) return;
-    if (countsAsFailure && failures.record()) {
-      showToast("Radio could not start — tuned out");
-      tuneOut();
-    }
-  }
-}
-
-export function writeRadioMediaSession(): void {
-  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-  const { radio, audio, tuneIn, tuneOut } = requireHost();
-  suspendMediaSession();
-  const t = radio.track;
-  navigator.mediaSession.metadata = t
-    ? new MediaMetadata({
-        title: t.title || "",
-        artist: t.artist || "",
-        album: t.album || "",
-      })
-    : null;
-  navigator.mediaSession.setActionHandler("play", () => {
-    void tuneIn();
-  });
-  navigator.mediaSession.setActionHandler("pause", () => {
-    if (!audio.loadInFlight && !audio.seekInFlight) tuneOut();
-  });
-  navigator.mediaSession.setActionHandler("stop", () => {
-    tuneOut();
-  });
-  navigator.mediaSession.setActionHandler("previoustrack", null);
-  navigator.mediaSession.setActionHandler("nexttrack", null);
-  navigator.mediaSession.setActionHandler("seekto", null);
+  return radio.tabOpen || radioChromeActive();
 }
 
 function radioWsUrl(): string {
@@ -187,7 +38,6 @@ export function openSocket(): void {
   ) {
     return;
   }
-  const { radio, applySnapshot } = requireHost();
   const ws = new WebSocket(radioWsUrl());
   socket = ws;
   ws.addEventListener("open", () => {
@@ -228,15 +78,7 @@ function scheduleReconnect(): void {
 }
 
 async function onReconnect(): Promise<void> {
-  const { radio } = requireHost();
-  await waitForSnapshot();
-  if (radio.face === "current" && isChromeActive(radio.chrome)) {
-    radio.chrome = "tuning";
-    lastLoadedTrackId = null;
-    const ok = await sendTuneIn();
-    if (!ok) return;
-  }
-  await onFaceOrTrack(null);
+  await onRadioSocketReconnect();
 }
 
 export function sendJson(msg: object): void {
@@ -261,7 +103,6 @@ function sendAndWait(msg: object): Promise<TuneAck> {
 }
 
 export async function sendTuneIn(): Promise<boolean> {
-  const { radio } = requireHost();
   const codec = getActiveStreamCodec();
   radio.tunerProfile = codec;
   const ack = await sendAndWait({ type: "tune_in", codec });
@@ -269,7 +110,6 @@ export async function sendTuneIn(): Promise<boolean> {
 }
 
 export function waitForSnapshot(timeoutMs = 4000): Promise<void> {
-  const { radio } = requireHost();
   if (radio.face === "current" || radio.face === "idle" || radio.face === "skip_pending") {
     return Promise.resolve();
   }
@@ -289,7 +129,6 @@ export function waitForSnapshot(timeoutMs = 4000): Promise<void> {
 }
 
 export function disconnectSocket(): void {
-  const { radio } = requireHost();
   if (reconnectTimer != null) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -302,22 +141,4 @@ export function disconnectSocket(): void {
   socket = null;
   radio.connected = false;
   ws.close();
-}
-
-function bindAudioHandlers(): void {
-  if (audioBound || !host) return;
-  audioBound = true;
-  const { audio, failures, tuneOut, radio } = host;
-  audio.onPause(() => {
-    if (radio.chrome === "tuned" && !audio.ended) tuneOut();
-  });
-  audio.onEnded(() => {
-    /* station clock owns advance */
-  });
-  audio.onError(() => {
-    if (failures.record()) {
-      showToast("Radio could not start — tuned out");
-      tuneOut();
-    }
-  });
 }

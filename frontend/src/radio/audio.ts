@@ -7,6 +7,7 @@ import {
   stopHtmlAudio,
   waitAudioEvent,
 } from "@/playback/sinks/htmlElement";
+import type { PlaybackSink, SinkHandlers } from "@/playback/sinks/types";
 
 export function shouldIgnoreTransport(loadInFlight: boolean, seekInFlight: boolean): boolean {
   return loadInFlight || seekInFlight;
@@ -24,6 +25,7 @@ export interface RadioAudio {
   readonly el: HTMLAudioElement | null;
   readonly loadInFlight: boolean;
   readonly seekInFlight: boolean;
+  readonly sink: PlaybackSink;
   currentTime: number;
   paused: boolean;
   ended: boolean;
@@ -47,23 +49,35 @@ export function createRadioAudio(): RadioAudio {
   let onPauseFn: (() => void) | null = null;
   let onEndedFn: (() => void) | null = null;
   let onErrorFn: (() => void) | null = null;
+  let handlers: SinkHandlers = {};
 
   if (el) {
     el.addEventListener("pause", () => {
       if (shouldIgnorePause(loadInFlight, seekInFlight, el.ended)) return;
       onPauseFn?.();
+      handlers.onPauseState?.(true);
+    });
+    el.addEventListener("play", () => {
+      handlers.onPauseState?.(false);
     });
     el.addEventListener("ended", () => {
       if (shouldIgnoreTransport(loadInFlight, seekInFlight)) return;
       onEndedFn?.();
+      handlers.onEnded?.();
     });
     el.addEventListener("error", () => {
       if (shouldIgnoreTransport(loadInFlight, seekInFlight)) return;
       onErrorFn?.();
     });
+    el.addEventListener("timeupdate", () => {
+      handlers.onTime?.(el.currentTime || 0, el.duration);
+    });
+    el.addEventListener("loadedmetadata", () => {
+      handlers.onDuration?.(el.duration);
+    });
   }
 
-  return {
+  const radio: Omit<RadioAudio, "sink"> = {
     el,
     get loadInFlight() {
       return loadInFlight;
@@ -127,4 +141,44 @@ export function createRadioAudio(): RadioAudio {
       onErrorFn = fn;
     },
   };
+
+  const sink: PlaybackSink = {
+    kind: "htmlAudio",
+    setHandlers(h) {
+      handlers = h || {};
+    },
+    load(url) {
+      return radio.load(url);
+    },
+    pause() {
+      el?.pause();
+    },
+    resume() {
+      return el?.play();
+    },
+    stop() {
+      radio.stop();
+    },
+    seek(seconds) {
+      if (!el || !Number.isFinite(seconds)) return;
+      el.currentTime = seconds;
+    },
+    setVolume(v) {
+      radio.setVolume(v);
+    },
+    get paused() {
+      return radio.paused;
+    },
+    get currentTime() {
+      return radio.currentTime;
+    },
+    get duration() {
+      return el && Number.isFinite(el.duration) ? el.duration : 0;
+    },
+    get playbackRate() {
+      return el?.playbackRate || 1;
+    },
+  };
+
+  return { ...radio, sink };
 }

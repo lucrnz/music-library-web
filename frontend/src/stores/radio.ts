@@ -1,6 +1,6 @@
 /**
- * Radio chrome + façade. Socket / face machine live in radio/runtime.ts.
- * Does not import player.ts.
+ * Radio chrome + façade. Socket lives in radio/runtime.ts.
+ * Face/load live in radio/session.ts. Does not import player.ts.
  */
 import { reactive, watch } from "vue";
 import { fetchRadioNow } from "@/api";
@@ -13,16 +13,17 @@ import { createFailureCap } from "@/radio/failures";
 import {
   bumpRadioGen,
   clearLoadedKeys,
-  disconnectSocket,
-  initRadioRuntime,
   maybeReseek,
   onFaceOrTrack,
+  writeRadioMediaSession,
+} from "@/radio/session";
+import {
+  disconnectSocket,
   openSocket,
   sendJson,
   sendTuneIn,
   socketRequired,
   waitForSnapshot,
-  writeRadioMediaSession,
 } from "@/radio/runtime";
 import { connectivity } from "@/stores/connectivity";
 import type { PlayStatusState } from "@/playbackStatus";
@@ -59,8 +60,10 @@ export const radio = reactive<RadioStore>({
   tunerProfile: null,
 });
 
-const audio = createRadioAudio();
-const failures = createFailureCap();
+export const radioAudio = createRadioAudio();
+export const radioFailures = createFailureCap();
+const audio = radioAudio;
+const failures = radioFailures;
 let hydrateInFlight: Promise<void> | null = null;
 let connectivityBound = false;
 let visibilityBound = false;
@@ -239,6 +242,17 @@ export function tuneOut(): void {
   writeRadioMediaSession();
 }
 
+export async function onRadioSocketReconnect(): Promise<void> {
+  await waitForSnapshot();
+  if (radio.face === "current" && radioChromeActive()) {
+    radio.chrome = "tuning";
+    clearLoadedKeys();
+    const ok = await sendTuneIn();
+    if (!ok) return;
+  }
+  await onFaceOrTrack(null);
+}
+
 export async function onStreamProfileChanged(): Promise<void> {
   if (!radioChromeActive()) return;
   const profile = getActiveStreamCodec();
@@ -290,13 +304,3 @@ export function resetRadioStore(): void {
   bumpRadioGen();
   failures.reset();
 }
-
-initRadioRuntime({
-  radio,
-  audio,
-  failures,
-  interpolatedPosition,
-  applySnapshot,
-  tuneIn,
-  tuneOut,
-});
