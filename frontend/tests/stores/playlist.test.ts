@@ -16,7 +16,7 @@ vi.mock("@/playback/prepare", () => ({
 }));
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
 
-import { requestForget } from "@/playback/prepare";
+import { prepareTracks, requestForget } from "@/playback/prepare";
 import {
   clearPlaylist,
   computeNextIndex,
@@ -25,6 +25,7 @@ import {
   loadPlaylist,
   pl,
   removeIndices,
+  replaceQueue,
 } from "@/stores/playlist";
 import type { PlaylistCursor } from "@/stores/playlist";
 import type { Track } from "@/models/track";
@@ -115,6 +116,7 @@ describe("playlist store", () => {
     pl.repeat = "off";
     pl.shuffle = false;
     vi.mocked(requestForget).mockClear();
+    vi.mocked(prepareTracks).mockClear();
   });
 
   it("adds, removes, reorders, and persists", () => {
@@ -182,5 +184,35 @@ describe("playlist store", () => {
     removeIndices([1]);
     expect(requestForget).toHaveBeenLastCalledWith(["a"]);
     expect(pl.tracks.map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("replaceQueue no-ops on empty or all-missing input", async () => {
+    pl.add([track("a")]);
+    expect(await replaceQueue([])).toBe(false);
+    expect(await replaceQueue(null)).toBe(false);
+    expect(await replaceQueue([{ ...track("b"), isMissing: true }])).toBe(
+      false,
+    );
+    expect(pl.tracks.map((t) => t.id)).toEqual(["a"]);
+    expect(requestForget).not.toHaveBeenCalled();
+    expect(prepareTracks).not.toHaveBeenCalled();
+  });
+
+  it("replaceQueue forgets only ids that left and prepares the new set", async () => {
+    pl.add([track("a"), track("b")]);
+    expect(await replaceQueue([track("b"), track("c")])).toBe(true);
+    expect(pl.tracks.map((t) => t.id)).toEqual(["b", "c"]);
+    expect(requestForget).toHaveBeenCalledWith(["a"]);
+    expect(prepareTracks).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: "b" }), expect.objectContaining({ id: "c" })],
+      { replace: true },
+    );
+  });
+
+  it("replaceQueue keeps overlapping ids", async () => {
+    pl.add([track("a")]);
+    expect(await replaceQueue([track("a"), track("b")])).toBe(true);
+    expect(requestForget).toHaveBeenCalledWith([]);
+    expect(pl.tracks.map((t) => t.id)).toEqual(["a", "b"]);
   });
 });

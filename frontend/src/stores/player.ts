@@ -31,7 +31,12 @@ import {
   resumeSeconds,
   writePlaybackPosition,
 } from "@/stores/playbackPosition";
-import { pl, commit } from "@/stores/playlist";
+import {
+  pl,
+  commit,
+  replaceQueue,
+  type QueueEntry,
+} from "@/stores/playlist";
 import { readVolume, setOutputVolume } from "@/stores/playerPrefs";
 import {
   invalidateCoverCache,
@@ -247,6 +252,14 @@ function maybePrepareNext() {
 
   nearEndPrepareSent = true;
   prepareTracks([nextTrack], { urgent: true, limit: 1 });
+}
+
+/** Replace the queue with `entries` and start the first track at 0. */
+export async function playAllTracks(
+  entries: Array<QueueEntry | null | undefined> | null | undefined,
+) {
+  clearPlaybackPosition();
+  if (await replaceQueue(entries)) playIndex(0);
 }
 
 export async function playIndex(index: number) {

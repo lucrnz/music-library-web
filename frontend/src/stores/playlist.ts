@@ -325,14 +325,11 @@ export function commit() {
   savePlaylist();
 }
 
-/**
- * Add tracks to the playback queue.
- * Accepts full Track objects, or bare ids / { id } (meta-fetched).
- */
-export async function addToQueue(
+/** Resolve queue entries to playable Track rows (full objects, ids, `{ id }`). */
+async function resolveQueueEntries(
   entries: Array<QueueEntry | null | undefined> | null | undefined,
-) {
-  if (!entries?.length) return;
+): Promise<Track[]> {
+  if (!entries?.length) return [];
 
   const ids: string[] = [];
   const preloaded: Track[] = [];
@@ -365,11 +362,41 @@ export async function addToQueue(
     }
   }
 
-  const playable = items.filter((t) => t.id && !t.isMissing);
+  return items.filter((t) => t.id && !t.isMissing);
+}
+
+/**
+ * Add tracks to the playback queue.
+ * Accepts full Track objects, or bare ids / { id } (meta-fetched).
+ */
+export async function addToQueue(
+  entries: Array<QueueEntry | null | undefined> | null | undefined,
+) {
+  const playable = await resolveQueueEntries(entries);
   if (!playable.length) return;
   pl.add(playable);
   commit();
   prepareTracks(playable);
+}
+
+/**
+ * Replace the session queue with the resolved playable set.
+ * Empty / all-unplayable input is a no-op (returns false).
+ */
+export async function replaceQueue(
+  entries: Array<QueueEntry | null | undefined> | null | undefined,
+): Promise<boolean> {
+  const playable = await resolveQueueEntries(entries);
+  if (!playable.length) return false;
+  const oldIds = pl.tracks
+    .map((t) => t.id)
+    .filter((id): id is string => !!id);
+  requestForget(idsLeavingQueue(oldIds, playable));
+  pl.clear();
+  pl.add(playable);
+  commit();
+  prepareTracks(playable, { replace: true });
+  return true;
 }
 
 export function idsLeavingQueue(
