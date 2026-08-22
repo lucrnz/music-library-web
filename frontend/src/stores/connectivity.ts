@@ -49,10 +49,6 @@ export function bindConnectivityStore() {
   syncFromPlatform();
 }
 
-export function getState() {
-  return connectivity.state;
-}
-
 export function noteServerUnreachable(err?: unknown) {
   reportFailure(err);
   syncFromPlatform();

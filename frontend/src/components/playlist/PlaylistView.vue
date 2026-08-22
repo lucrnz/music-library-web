@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { coverUrl, fetchPlaylistTracks } from "@/api";
-import { isLocallyPlayableDownload } from "@/downloads/catalog";
+import { isOfflineUnplayable } from "@/playBlock";
 import { connectivity } from "@/stores/connectivity";
 import { useDesktopViewport } from "@/layout";
 import { formatTime } from "@/util";
@@ -15,6 +15,7 @@ import {
   loadSavedPlaylist,
   deleteSavedPlaylist,
   saveQueueAsPlaylist,
+  type SavedPlaylist,
 } from "@/stores/playlist";
 import {
   player,
@@ -39,12 +40,6 @@ import {
 import type { MenuAnchor } from "@/components/menu/actionItem";
 import type { Track } from "@/models/track";
 
-interface SavedPlaylist {
-  id: string;
-  name: string;
-  track_count: number;
-}
-
 const route = useRoute();
     const desktop = useDesktopViewport();
     const saved = ref<SavedPlaylist[]>([]);
@@ -57,7 +52,7 @@ const route = useRoute();
 
     async function refreshSaved() {
       try {
-        saved.value = (await fetchSavedPlaylists()) as SavedPlaylist[];
+        saved.value = await fetchSavedPlaylists();
       } catch (err: unknown) {
         console.error(err);
       }
@@ -253,11 +248,10 @@ const route = useRoute();
     }
 
     function rowUnavailable(track: Track | null | undefined) {
-      return (
-        downloads.enabled &&
-        !connectivity.canUseRemote &&
-        !isLocallyPlayableDownload(track?.id ?? "")
-      );
+      return isOfflineUnplayable(track?.id, {
+        downloadsEnabled: downloads.enabled,
+        canUseRemote: connectivity.canUseRemote,
+      });
     }
 
     function trackSub(track: Track) {
@@ -332,7 +326,7 @@ const route = useRoute();
         <div v-for="sp in saved" :key="sp.id" class="saved-pl-row">
           <button type="button" class="saved-pl-load" @click="onLoadSaved(sp)">
             <span class="saved-pl-name">{{ sp.name }}</span>
-            <span class="saved-pl-count">{{ sp.track_count }} tracks</span>
+            <span class="saved-pl-count">{{ sp.trackCount }} tracks</span>
           </button>
           <button
             v-if="downloads.enabled"

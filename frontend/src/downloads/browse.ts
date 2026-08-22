@@ -6,7 +6,11 @@
 import { kindForTracks } from "@/lossyKind";
 import { fromCatalogRecord } from "@/models/track";
 import { emptyPage, page, type LibraryPage } from "@/components/library/loaders";
-import { loadDownloadsCatalogView } from "@/downloads/snapshot";
+import {
+  albumFromDl,
+  artistFromDl,
+  loadDownloadsCatalogView,
+} from "@/downloads/snapshot";
 import type { DownloadsHierarchyAlbum } from "@/downloads/hierarchy";
 
 export interface DownloadsBrowseOpts {
@@ -63,12 +67,7 @@ export async function loadDownloadsView(
       },
       {
         artUrls,
-        headerAlbum: {
-          id: found.albumId,
-          title: found.title,
-          artist: parentArtistName,
-          trackCount: found.tracks.length,
-        },
+        headerAlbum: albumFromDl(found, parentArtistName),
       },
     );
   }
@@ -87,25 +86,13 @@ export async function loadDownloadsView(
       {
         kind: "albumGrid",
         albums: ar.albums.map((al) => ({
-          id: al.albumId,
-          title: al.title,
-          artist: ar.name,
-          trackCount: al.tracks.length,
+          ...albumFromDl(al, ar.name),
           lossyKind: kindForTracks(al.tracks),
         })),
       },
       {
         artUrls,
-        headerArtist: {
-          id: ar.artistId,
-          name: ar.name,
-          sortName: null,
-          albumCount: ar.albums.length,
-          trackCount: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
-          hasImage: false,
-          hasPreferredImage: false,
-          preferredRev: 0,
-        },
+        headerArtist: artistFromDl(ar),
       },
     );
   }
@@ -124,16 +111,7 @@ export async function loadDownloadsView(
     { title: "Downloads", showBack: false },
     {
       kind: "artists",
-      artists: tree.artists.map((ar) => ({
-        id: ar.artistId,
-        name: ar.name,
-        sortName: null,
-        albumCount: ar.albums.length,
-        trackCount: ar.albums.reduce((n, al) => n + al.tracks.length, 0),
-        hasImage: false,
-        hasPreferredImage: false,
-        preferredRev: 0,
-      })),
+      artists: tree.artists.map((ar) => artistFromDl(ar)),
     },
     { artUrls },
   );

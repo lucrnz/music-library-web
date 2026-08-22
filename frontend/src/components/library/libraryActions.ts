@@ -64,33 +64,6 @@ export async function downloadAlbumById(albumId: string): Promise<void> {
   }
 }
 
-export interface AddAllLocation {
-  mode: string;
-  routeName: string | symbol | null | undefined;
-  folderPath: string;
-  artistId?: string;
-  albumId?: string;
-}
-
-/** Add all playable tracks for the current library location. */
-export async function addAll(loc: AddAllLocation): Promise<void> {
-  try {
-    if (loc.mode === "folders") {
-      await addAllForFolder(loc.folderPath);
-      return;
-    }
-    if (loc.routeName === "album" && loc.albumId) {
-      await addAllForAlbum(loc.albumId);
-      return;
-    }
-    if (loc.routeName === "artist" && loc.artistId) {
-      await addAllForArtist(loc.artistId);
-    }
-  } catch (err: unknown) {
-    console.error(err);
-  }
-}
-
 /** Collect + queue tracks for currently multi-selected folder paths. */
 export async function addSelected(): Promise<void> {
   if (!ui.libSelected.size) return;
@@ -108,15 +81,4 @@ export async function addSelected(): Promise<void> {
   ).flat();
   clearLibSelection();
   await addToQueue(tracksOut);
-}
-
-/** Download album tracks currently shown (body kind tracks). */
-export async function downloadCurrentAlbum(tracks: Track[]): Promise<void> {
-  if (!downloads.enabled || !tracks?.length) return;
-  try {
-    await downloadTracks(tracks.filter((t) => t.id && !t.isMissing));
-  } catch (err: unknown) {
-    console.error(err);
-    showToast(err instanceof Error ? err.message : "Download failed");
-  }
 }

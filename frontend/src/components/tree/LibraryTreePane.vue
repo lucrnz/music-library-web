@@ -338,17 +338,10 @@ onMounted(loadRoots);
       </template>
       <template #leaf="{ node }">
         <TrackRow
-          v-if="node.kind === 'track' && showTrackDownload"
+          v-if="node.kind === 'track'"
           :track="node.data as Track"
-          :show-download="true"
-          :show-menu="true"
-          @menu-click="(t, e) => onLeafMenuClick({ kind: 'track', track: t }, e)"
-        />
-        <TrackRow
-          v-else-if="node.kind === 'track'"
-          :track="node.data as Track"
-          :show-download="false"
-          title-mode="title"
+          :show-download="showTrackDownload"
+          :title-mode="showTrackDownload ? undefined : 'title'"
           :show-menu="true"
           @menu-click="(t, e) => onLeafMenuClick({ kind: 'track', track: t }, e)"
         />

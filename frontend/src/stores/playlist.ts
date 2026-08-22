@@ -48,6 +48,7 @@ export interface PlaylistState extends PlaylistCursor {
 export interface SavedPlaylist {
   id: string;
   name?: string;
+  trackCount: number;
 }
 
 export type QueueEntry = string | Track | { id?: string };
@@ -419,8 +420,14 @@ export function reorderPlaylist(from: number, to: number) {
 }
 
 export async function fetchSavedPlaylists(): Promise<SavedPlaylist[]> {
-  const data = await apiGet<{ items?: SavedPlaylist[] }>("/api/playlists");
-  return data.items || [];
+  const data = await apiGet<{
+    items?: Array<{ id: string; name?: string; track_count?: number }>;
+  }>("/api/playlists");
+  return (data.items || []).map((item) => ({
+    id: item.id,
+    name: item.name,
+    trackCount: Number(item.track_count) || 0,
+  }));
 }
 
 export async function loadSavedPlaylist(

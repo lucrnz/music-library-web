@@ -8,7 +8,6 @@ import type { Artist } from "@/models/artist";
 import { runArtistDownloadAll } from "@/components/library/artistMenuItems";
 import type { BrowseSource } from "@/components/library/browseSource";
 import {
-  addAll as addAllAction,
   addAllForAlbum,
   addAllForArtist,
   addAllForFolder,
@@ -166,15 +165,25 @@ export const onlineBrowse: BrowseSource = {
   },
 
   async addAll({ loc, showTree }) {
-    if (showTree && loc.mode === "folders") {
-      try {
+    try {
+      if (showTree && loc.mode === "folders") {
         await addAllForFolder("");
-      } catch (err: unknown) {
-        console.error(err);
+        return;
       }
-      return;
+      if (loc.mode === "folders") {
+        await addAllForFolder(loc.folderPath);
+        return;
+      }
+      if (loc.routeName === "album" && loc.albumId) {
+        await addAllForAlbum(loc.albumId);
+        return;
+      }
+      if (loc.routeName === "artist" && loc.artistId) {
+        await addAllForArtist(loc.artistId);
+      }
+    } catch (err: unknown) {
+      console.error(err);
     }
-    await addAllAction(loc);
   },
 
   includeArtistPhoto(opts) {
