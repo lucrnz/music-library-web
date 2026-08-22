@@ -86,6 +86,7 @@ async def lifespan(app: FastAPI):
     )
 
     if control is not None:
+        control.bind_radio(station, tuners, asyncio.get_running_loop())
         control.start()
 
     # Non-blocking incremental index on startup

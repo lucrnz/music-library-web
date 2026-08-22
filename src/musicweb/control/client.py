@@ -50,6 +50,30 @@ class ControlClient:
     def start_regen_lyrics(self, force: bool = False) -> dict[str, Any]:
         return self._call("start_regen_lyrics", force=force).result
 
+    def radio_status(self, *, spoilers: bool = False) -> dict[str, Any]:
+        return self._call("radio_status", spoilers=spoilers).result
+
+    def radio_skip(self, *, spoilers: bool = False) -> dict[str, Any]:
+        return self._call("radio_skip", spoilers=spoilers).result
+
+    def radio_play(self, track_id: str, *, spoilers: bool = False) -> dict[str, Any]:
+        return self._call("radio_play", track_id=track_id, spoilers=spoilers).result
+
+    def radio_pick(self, *, spoilers: bool = False) -> dict[str, Any]:
+        return self._call("radio_pick", spoilers=spoilers).result
+
+    def radio_reset(self, *, spoilers: bool = False) -> dict[str, Any]:
+        return self._call("radio_reset", spoilers=spoilers).result
+
+    def radio_banlist(self, *, spoilers: bool = False) -> dict[str, Any]:
+        return self._call("radio_banlist", spoilers=spoilers).result
+
+    def radio_skip_ids(self) -> dict[str, Any]:
+        return self._call("radio_skip_ids").result
+
+    def radio_skip_ids_clear(self) -> dict[str, Any]:
+        return self._call("radio_skip_ids_clear").result
+
     def _call(self, method: str, **params: Any) -> ControlResponse:
         if not self._path.exists():
             raise ControlError(f"control socket missing: {self._path}")
