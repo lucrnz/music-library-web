@@ -3,7 +3,7 @@ import {
   become,
   onLeaveQueue,
   onLeaveRadio,
-} from "@/playback/onDemandControl";
+} from "@/playback/session";
 
 describe("session become", () => {
   beforeEach(() => {

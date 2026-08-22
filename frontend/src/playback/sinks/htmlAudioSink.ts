@@ -2,6 +2,12 @@
  * HTMLAudioElement sink — owns the element internally (not exported).
  */
 
+import {
+  attachHtmlAudio,
+  setHtmlAudioSrc,
+  setHtmlAudioVolume,
+  stopHtmlAudio,
+} from "@/playback/sinks/htmlElement";
 import type { PlaybackSink, SinkHandlers } from "@/playback/sinks/types";
 
 export function createHtmlAudioSink(): PlaybackSink {
@@ -15,10 +21,7 @@ export function createHtmlAudioSink(): PlaybackSink {
   function ensureAttached(): void {
     if (attached) return;
     attached = true;
-    if (typeof document !== "undefined" && !audio.isConnected) {
-      audio.hidden = true;
-      document.body.appendChild(audio);
-    }
+    attachHtmlAudio(audio);
     audio.addEventListener("play", () => handlers.onPauseState?.(false));
     audio.addEventListener("pause", () => handlers.onPauseState?.(true));
     audio.addEventListener("ended", () => handlers.onEnded?.());
@@ -47,7 +50,7 @@ export function createHtmlAudioSink(): PlaybackSink {
     },
     async load(url) {
       ensureAttached();
-      audio.src = url;
+      setHtmlAudioSrc(audio, url);
       await audio.play();
     },
     pause() {
@@ -57,16 +60,14 @@ export function createHtmlAudioSink(): PlaybackSink {
       return audio.play();
     },
     stop() {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
+      stopHtmlAudio(audio);
     },
     seek(seconds) {
       if (!Number.isFinite(seconds)) return;
       audio.currentTime = seconds;
     },
     setVolume(v0to1) {
-      audio.volume = Math.min(1, Math.max(0, Number(v0to1) || 0));
+      setHtmlAudioVolume(audio, v0to1);
     },
     get paused() {
       return audio.paused;

@@ -6,7 +6,6 @@ import { computed, nextTick, ref, watch } from "vue";
 import { canReachServer } from "@/connectivity";
 import { resolveLyrics } from "@/lyrics/cache";
 import { activeLineIndex, parseLrc } from "@/lyrics/parseLrc";
-import { seekToFraction } from "@/stores/player";
 import type { Lyrics } from "@/models/lyrics";
 
 interface LrcLine {
@@ -22,6 +21,10 @@ type LyricsView =
   | { kind: "empty" }
   | { kind: "plain"; text: string }
   | { kind: "synced"; lines: LrcLine[] };
+
+const emit = defineEmits<{
+  "seek-fraction": [fraction: number];
+}>();
 
 const props = withDefaults(
   defineProps<{
@@ -102,7 +105,7 @@ function onLineClick(line: LrcLine) {
   if (!props.seekable) return;
   const dur = props.duration;
   if (!dur || !Number.isFinite(line.t)) return;
-  seekToFraction(line.t / dur);
+  emit("seek-fraction", line.t / dur);
 }
 
 watch(

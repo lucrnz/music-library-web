@@ -61,7 +61,6 @@ describe("settings persist and active stream", () => {
       setStreamCodec("flac_16_44100", {
         tracks: [],
         index: 0,
-        playIndex: () => {},
       }),
     ).toBe(true);
     expect(localStorage.getItem("musicweb.streamCodec")).toBe("flac_16_44100");

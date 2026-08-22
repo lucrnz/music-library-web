@@ -176,10 +176,10 @@ describe("playlist store", () => {
   it("removeIndices forgets only when the last row of an id is gone", () => {
     pl.add([track("a"), track("b"), track("a")]);
     pl.index = 0;
-    removeIndices([0], vi.fn(), vi.fn());
+    removeIndices([0]);
     expect(requestForget).toHaveBeenCalledWith([]);
     expect(pl.tracks.map((t) => t.id)).toEqual(["b", "a"]);
-    removeIndices([1], vi.fn(), vi.fn());
+    removeIndices([1]);
     expect(requestForget).toHaveBeenLastCalledWith(["a"]);
     expect(pl.tracks.map((t) => t.id)).toEqual(["b"]);
   });

@@ -144,7 +144,11 @@ export function buildQueueMenuItems({
     danger: true,
     run: () => {
       if (!slotMatches(index, openedKey)) return;
-      removeIndices([index], playIndex, stopPlayback);
+      const { removedCurrent, nextIndex } = removeIndices([index]);
+      if (removedCurrent) {
+        if (pl.length && nextIndex >= 0) playIndex(nextIndex);
+        else stopPlayback();
+      }
     },
   });
   return items;

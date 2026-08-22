@@ -388,22 +388,18 @@ export function idsLeavingQueue(
   return out;
 }
 
-export function removeIndices(
-  indices: number[],
-  playIndex: (index: number) => void,
-  stopPlayback: () => void,
-) {
-  if (!indices.length) return;
+export function removeIndices(indices: number[]): {
+  removedCurrent: boolean;
+  nextIndex: number;
+} {
+  if (!indices.length) return { removedCurrent: false, nextIndex: pl.index };
   const removed = indices
     .map((i) => pl.tracks[i]?.id)
     .filter((id): id is string => !!id);
-  const removingCurrent = pl.removeIndices(indices);
+  const removedCurrent = pl.removeIndices(indices);
   commit();
-  if (removingCurrent) {
-    if (pl.length && pl.index >= 0) playIndex(pl.index);
-    else stopPlayback();
-  }
   requestForget(idsLeavingQueue(removed, pl.tracks));
+  return { removedCurrent, nextIndex: pl.index };
 }
 
 export function clearPlaylist(stopPlayback: () => void) {

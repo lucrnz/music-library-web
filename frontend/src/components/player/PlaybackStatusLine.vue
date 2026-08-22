@@ -9,7 +9,6 @@ import {
   formatPrimaryStatus,
   formatStatusAriaLabel,
   type PlayStatusState,
-  type ProfileMeta,
 } from "@/playbackStatus";
 import { exclusiveAudio } from "@/stores/exclusiveAudio";
 import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
@@ -51,7 +50,7 @@ let heldModalLock = false;
 const primaryStatus = computed(() =>
   formatPrimaryStatus(
     props.playState,
-    settings.options as ProfileMeta[],
+    settings.options,
     props.exclusiveSnap,
   ),
 );
@@ -59,16 +58,16 @@ const primaryStatus = computed(() =>
 const statusAriaLabel = computed(() =>
   formatStatusAriaLabel(
     props.playState,
-    settings.options as ProfileMeta[],
+    settings.options,
     props.exclusiveSnap,
   ),
 );
 
 const detailsRows = computed(
   () =>
-    buildPlaybackDetailsRows(props.playState, settings.options as ProfileMeta[], {
+    buildPlaybackDetailsRows(props.playState, settings.options, {
       exclusiveSnap: props.exclusiveSnap,
-      exclusiveFormats: exclusiveAudio.formats as ProfileMeta[],
+      exclusiveFormats: exclusiveAudio.formats,
     }) as PlaybackDetailRow[],
 );
 

@@ -57,10 +57,12 @@ import {
   startCycle as startListenCycle,
 } from "@/listens/bridge";
 import {
+  activeSession,
   become,
   installOnDemandMediaSession,
   onLeaveQueue,
-} from "@/playback/onDemandControl";
+} from "@/playback/session";
+import { watch } from "vue";
 
 export { player };
 
@@ -178,53 +180,56 @@ function applyIntent(intent: PlayIntent) {
   );
 }
 
-function failCurrentLoad(opts: {
+function failNotice(opts: {
   reason: PlayBlockReason;
-  profile?: string | null;
-  notice?: string | null;
+  message?: string | null;
   toast?: boolean | string;
-  openSettings?: boolean;
-  stopSink?: boolean;
-  setUnavailable?: boolean;
-  title?: string | null;
 }) {
-  if (opts.stopSink) {
+  const reason = opts.reason || "exclusive_failed";
+  const exclusive = reason.startsWith("exclusive");
+  const rawNotice =
+    opts.message ||
+    PLAY_BLOCK_MESSAGES[reason] ||
+    PLAY_BLOCK_MESSAGES.exclusive_failed;
+  if (exclusive) {
     try {
       activeSink.stop();
     } catch {
       /* ignore */
     }
   }
-  const reason = opts.reason || "exclusive_failed";
-  const rawNotice =
-    opts.notice ||
-    PLAY_BLOCK_MESSAGES[reason] ||
-    PLAY_BLOCK_MESSAGES.exclusive_failed;
-  const exclusive = reason.startsWith("exclusive");
-  const notice =
-    !exclusive && opts.title && rawNotice
-      ? `${opts.title}: ${rawNotice}`
-      : rawNotice;
-  if (opts.setUnavailable !== false) {
-    setPlaySourceState(
-      "unavailable",
-      opts.profile ?? player.playProfileId ?? null,
-      reason,
-    );
-    emit(
-      "player.load.fail",
-      failCtx({ reason, message: notice || null }),
-      "error",
-    );
-  }
-  setPlayNotice(notice);
+  setPlayNotice(rawNotice);
   if (opts.toast) {
     showToast(typeof opts.toast === "string" ? opts.toast : rawNotice);
   }
-  if (opts.openSettings || reason === "exclusive_needs_device") {
+  if (reason === "exclusive_needs_device") {
     openSettings();
   }
   syncTransportFlags();
+}
+
+function failCurrentLoad(opts: {
+  reason: PlayBlockReason;
+  message?: string | null;
+  toast?: boolean | string;
+}) {
+  const reason = opts.reason || "exclusive_failed";
+  const message =
+    opts.message ||
+    PLAY_BLOCK_MESSAGES[reason] ||
+    PLAY_BLOCK_MESSAGES.exclusive_failed;
+  applyIntent({
+    source: "unavailable",
+    profile: player.playProfileId ?? null,
+    block: reason,
+    message,
+  });
+  emit(
+    "player.load.fail",
+    failCtx({ reason, message: message || null }),
+    "error",
+  );
+  failNotice({ reason, message, toast: opts.toast });
 }
 
 const msSupported = "mediaSession" in navigator;
@@ -372,19 +377,16 @@ function wireSinkHandlers() {
       if (code === "exclusive_needs_device") {
         failCurrentLoad({
           reason: "exclusive_needs_device",
-          notice: message || PLAY_BLOCK_MESSAGES.exclusive_needs_device,
+          message: message || PLAY_BLOCK_MESSAGES.exclusive_needs_device,
           toast: true,
-          stopSink: true,
-          openSettings: true,
         });
         return;
       }
       if (activeSink.kind === "companion") {
         failCurrentLoad({
           reason: "exclusive_failed",
-          notice: message,
+          message,
           toast: true,
-          stopSink: true,
         });
         return;
       }
@@ -400,7 +402,7 @@ function wireSinkHandlers() {
       );
       failCurrentLoad({
         reason: "play_failed",
-        notice: message || PLAY_BLOCK_MESSAGES.play_failed,
+        message: message || PLAY_BLOCK_MESSAGES.play_failed,
       });
     },
     onPauseState: () => {
@@ -502,7 +504,6 @@ async function intentForTrack(
     catalog: settings.options,
     localBroken: extra.localBroken,
     sourceKindSupported: sourceOk,
-    absoluteStream: exclusive,
   });
 }
 
@@ -520,14 +521,13 @@ async function loadResolved(
   }
   if (intent.source === "unavailable") {
     const exclusive = intent.block.startsWith("exclusive");
-    failCurrentLoad({
+    const raw = intent.message || PLAY_BLOCK_MESSAGES[intent.block];
+    failNotice({
       reason: intent.block,
-      notice: intent.message,
+      message: exclusive ? raw : `${track?.title || "Track"}: ${raw}`,
       toast: exclusive
         ? intent.message || PLAY_BLOCK_MESSAGES.exclusive_failed
         : false,
-      setUnavailable: false,
-      title: exclusive ? null : track?.title || "Track",
     });
     return;
   }
@@ -573,20 +573,18 @@ async function loadResolved(
           : "exclusive_failed";
       failCurrentLoad({
         reason,
-        notice:
+        message:
           err instanceof Error
             ? err.message
             : PLAY_BLOCK_MESSAGES.exclusive_failed,
         toast: true,
-        stopSink: true,
       });
       return;
     }
     console.error("Playback failed", err);
     failCurrentLoad({
       reason: "play_failed",
-      profile: intent.profile,
-      notice: PLAY_BLOCK_MESSAGES.play_failed,
+      message: PLAY_BLOCK_MESSAGES.play_failed,
     });
     return;
   }
@@ -741,6 +739,13 @@ export function applyVolume() {
 }
 
 export function initAudioListeners() {
+  watch(
+    () => settings.streamCodec,
+    () => {
+      if (activeSession() !== "queue") return;
+      if (pl.index >= 0) playIndex(pl.index);
+    },
+  );
   wireSinkHandlers();
   // Ensure html sink element is in the document for first non-exclusive play.
   selectSink("htmlAudio");

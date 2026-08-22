@@ -1,6 +1,12 @@
 /**
  * Radio-owned HTMLAudioElement. Not the shared on-demand html sink.
  */
+import {
+  setHtmlAudioSrc,
+  setHtmlAudioVolume,
+  stopHtmlAudio,
+  waitAudioEvent,
+} from "@/playback/sinks/htmlElement";
 
 export function shouldIgnoreTransport(loadInFlight: boolean, seekInFlight: boolean): boolean {
   return loadInFlight || seekInFlight;
@@ -16,8 +22,8 @@ export function shouldIgnorePause(
 
 export interface RadioAudio {
   readonly el: HTMLAudioElement | null;
-  loadInFlight: boolean;
-  seekInFlight: boolean;
+  readonly loadInFlight: boolean;
+  readonly seekInFlight: boolean;
   currentTime: number;
   paused: boolean;
   ended: boolean;
@@ -62,14 +68,8 @@ export function createRadioAudio(): RadioAudio {
     get loadInFlight() {
       return loadInFlight;
     },
-    set loadInFlight(v: boolean) {
-      loadInFlight = v;
-    },
     get seekInFlight() {
       return seekInFlight;
-    },
-    set seekInFlight(v: boolean) {
-      seekInFlight = v;
     },
     get currentTime() {
       return el?.currentTime ?? 0;
@@ -85,9 +85,9 @@ export function createRadioAudio(): RadioAudio {
       loadInFlight = true;
       try {
         el.pause();
-        el.src = url;
+        setHtmlAudioSrc(el, url);
         el.load();
-        await waitEvent(el, "canplay");
+        await waitAudioEvent(el, "canplay");
       } finally {
         loadInFlight = false;
       }
@@ -98,7 +98,7 @@ export function createRadioAudio(): RadioAudio {
       try {
         const dur = Number.isFinite(el.duration) ? el.duration : seconds;
         el.currentTime = Math.max(0, Math.min(seconds, dur || seconds));
-        await waitEvent(el, "seeked");
+        await waitAudioEvent(el, "seeked");
       } finally {
         seekInFlight = false;
       }
@@ -111,13 +111,11 @@ export function createRadioAudio(): RadioAudio {
       if (!el) return;
       loadInFlight = false;
       seekInFlight = false;
-      el.pause();
-      el.removeAttribute("src");
-      el.load();
+      stopHtmlAudio(el);
     },
     setVolume(v: number) {
       if (!el) return;
-      el.volume = Math.min(1, Math.max(0, v));
+      setHtmlAudioVolume(el, v);
     },
     onPause(fn) {
       onPauseFn = fn;
@@ -129,23 +127,4 @@ export function createRadioAudio(): RadioAudio {
       onErrorFn = fn;
     },
   };
-}
-
-function waitEvent(el: HTMLAudioElement, name: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onOk = () => {
-      cleanup();
-      resolve();
-    };
-    const onErr = () => {
-      cleanup();
-      reject(new Error(`audio ${name} failed`));
-    };
-    const cleanup = () => {
-      el.removeEventListener(name, onOk);
-      el.removeEventListener("error", onErr);
-    };
-    el.addEventListener(name, onOk, { once: true });
-    el.addEventListener("error", onErr, { once: true });
-  });
 }

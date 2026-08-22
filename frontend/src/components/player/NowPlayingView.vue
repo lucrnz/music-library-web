@@ -461,6 +461,7 @@ defineExpose({ focusClose, closeBtn });
         :current-time="currentTime"
         :duration="duration"
         :seekable="lyricsSeekable"
+        @seek-fraction="(frac) => emit('seek-fraction', frac)"
       />
     </div>
 

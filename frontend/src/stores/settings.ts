@@ -26,9 +26,9 @@ export type PlaybackPolicy = "prefer_better" | "prefer_offline" | "prefer_stream
 
 export interface CodecOption extends ProbeCodecOption {
   label?: string;
-  bitrate_kbps?: number;
-  bit_depth?: number;
-  sample_rate?: number;
+  bitrateKbps?: number;
+  bitDepth?: number;
+  sampleRate?: number;
 }
 
 export interface CodecCatalog {
@@ -48,14 +48,10 @@ export interface SettingsState {
 export interface StreamChangeCtx {
   tracks: Track[];
   index: number;
-  playIndex?: (i: number) => void;
 }
 
 interface ApplyStreamOpts {
   force?: boolean;
-  restartPlayback?: boolean;
-  playIndex?: (i: number) => void;
-  index?: number;
 }
 
 export const PLAYBACK_POLICIES = [
@@ -90,9 +86,9 @@ export const settings = reactive<SettingsState>({
       id: DEFAULT_CODEC,
       label: "Opus 192k 48kHz",
       kind: "opus",
-      bitrate_kbps: 192,
-      bit_depth: 16,
-      sample_rate: 48000,
+      bitrateKbps: 192,
+      bitDepth: 16,
+      sampleRate: 48000,
     },
   ],
   default: DEFAULT_CODEC,
@@ -135,6 +131,24 @@ function isCodecOption(value: unknown): value is CodecOption {
   return typeof id === "string" && !!id;
 }
 
+function numField(raw: Record<string, unknown>, camel: string, snake: string): number | undefined {
+  const v = raw[camel] ?? raw[snake];
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function mapCodecOption(value: unknown): CodecOption | null {
+  if (!isCodecOption(value)) return null;
+  const raw = value as CodecOption & Record<string, unknown>;
+  return {
+    ...raw,
+    id: raw.id,
+    bitrateKbps: numField(raw, "bitrateKbps", "bitrate_kbps"),
+    bitDepth: numField(raw, "bitDepth", "bit_depth"),
+    sampleRate: numField(raw, "sampleRate", "sample_rate"),
+  };
+}
+
 function readCachedCatalog(): CodecCatalog | null {
   try {
     const raw = localStorage.getItem(KEY_CATALOG);
@@ -145,7 +159,7 @@ function readCachedCatalog(): CodecCatalog | null {
     if (!Array.isArray(rec.codecs) || !rec.codecs.length) return null;
     if (!rec.codecs.every(isCodecOption)) return null;
     return {
-      codecs: rec.codecs.filter(isCodecOption),
+      codecs: rec.codecs.map(mapCodecOption).filter((c): c is CodecOption => !!c),
       default: typeof rec.default === "string" ? rec.default : undefined,
     };
   } catch {
@@ -171,7 +185,9 @@ function writeCachedCatalog(data: CodecCatalog) {
  * Probe-filter a raw server catalog into settings.options.
  */
 async function applyServerCatalog(data: CodecCatalog) {
-  const catalog = data.codecs;
+  const catalog = data.codecs
+    .map(mapCodecOption)
+    .filter((c): c is CodecOption => !!c);
   settings.options = await filterCodecsByDecodeSupport(catalog);
   emit(
     "codec.probe.summary",
@@ -205,12 +221,6 @@ function loadPrefs({ catalogIsAuthoritative }: { catalogIsAuthoritative: boolean
   }
 
   try {
-    localStorage.removeItem("musicweb.streamCodecCellular");
-  } catch {
-    /* ignore */
-  }
-
-  try {
     const dlRaw = localStorage.getItem(KEY_DOWNLOAD);
     if (dlRaw != null && ids.has(dlRaw)) {
       settings.download = dlRaw;
@@ -232,12 +242,6 @@ function loadPrefs({ catalogIsAuthoritative }: { catalogIsAuthoritative: boolean
         : "prefer_better";
   } catch {
     settings.playbackPolicy = "prefer_better";
-  }
-
-  try {
-    localStorage.removeItem("musicweb.onlyDownloadOnWifi");
-  } catch {
-    /* ignore */
   }
 
   if (catalogIsAuthoritative) persistAll();
@@ -333,15 +337,6 @@ function applyActiveStreamSideEffects(
     preparedKeys.clear();
     prepareTracks(list, { replace: true });
   }
-  if (
-    opts.restartPlayback &&
-    changed &&
-    typeof opts.playIndex === "function" &&
-    typeof opts.index === "number" &&
-    opts.index >= 0
-  ) {
-    opts.playIndex(opts.index);
-  }
 }
 
 export function setStreamCodec(v: string, ctx: StreamChangeCtx) {
@@ -353,11 +348,7 @@ export function setStreamCodec(v: string, ctx: StreamChangeCtx) {
   settings.streamCodec = v;
   persistAll();
   settings.open = false;
-  applyActiveStreamSideEffects(ctx.tracks, {
-    restartPlayback: true,
-    playIndex: ctx.playIndex,
-    index: ctx.index,
-  });
+  applyActiveStreamSideEffects(ctx.tracks);
   return true;
 }
 
@@ -381,7 +372,7 @@ export function setPlaybackPolicy(v: PlaybackPolicy) {
   if (v === settings.playbackPolicy) return false;
   settings.playbackPolicy = v;
   persistAll();
-  applyActiveStreamSideEffects(undefined, { force: true, restartPlayback: false });
+  applyActiveStreamSideEffects(undefined, { force: true });
   return true;
 }
 

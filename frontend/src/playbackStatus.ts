@@ -71,9 +71,11 @@ function resolveAnyProfile(
       id: fromEx.tag || ("id" in fromEx ? fromEx.id : undefined) || profileId,
       label: fromEx.label,
       kind: "flac",
-      bit_depth: fromEx.bit_depth,
-      sample_rate: fromEx.sample_rate,
-      bitrate_kbps: 0,
+      bitDepth:
+        "bit_depth" in fromEx ? fromEx.bit_depth : fromEx.bitDepth,
+      sampleRate:
+        "sample_rate" in fromEx ? fromEx.sample_rate : fromEx.sampleRate,
+      bitrateKbps: 0,
     };
   }
   return resolveProfileMeta(profileId, catalog);
@@ -88,7 +90,7 @@ export function formatPrimaryCodecText(
   if (!meta) return null;
   const kind = (meta.kind || "").toLowerCase();
   if (kind === "opus") {
-    const br = Number(meta.bitrate_kbps) || 0;
+    const br = Number(meta.bitrateKbps) || 0;
     return br > 0 ? `Opus ${br}k` : "Opus";
   }
   if (kind === "flac") return "FLAC";
@@ -119,7 +121,7 @@ export function formatPrimaryStatus(
   catalog: ProfileMeta[] = [],
   exclusiveSnap: ExclusiveFaceSnapshot | null = null,
 ): PlaybackStatusFace {
-  if (state.session !== "radio" && exclusiveSnap?.enabled) {
+  if (state.session === "queue" && exclusiveSnap?.enabled) {
     const face = formatExclusiveFace(exclusiveSnap);
     if (face) {
       return {
@@ -174,6 +176,82 @@ function formatSampleRate(hz: number | null | undefined): string | null {
   return `${n} Hz`;
 }
 
+function exclusiveDetailRows(
+  state: PlayStatusState,
+  catalog: ProfileMeta[],
+  exclusiveSnap: ExclusiveFaceSnapshot,
+  exclusiveFormats: Array<ProfileMeta | ExclusiveFormat>,
+): PlaybackDetailRow[] {
+  const rows: PlaybackDetailRow[] = [];
+  rows.push({ key: "output", label: "Output", value: "Exclusive" });
+  const live = exclusiveSnap.liveId;
+  const pref = exclusiveSnap.preferenceId;
+  const devices = exclusiveSnap.devices || [];
+  const deviceId = live || pref;
+  if (deviceId) {
+    const hit = devices.find((d) => d.id === deviceId);
+    rows.push({
+      key: "device",
+      label: "Device",
+      value: (hit && hit.name) || deviceId,
+    });
+  } else {
+    rows.push({
+      key: "device",
+      label: "Device",
+      value: "Not selected",
+    });
+  }
+  if (exclusiveSnap.role === "readonly") {
+    rows.push({
+      key: "role",
+      label: "Control",
+      value: "Controlled elsewhere",
+    });
+  }
+  const playSource = state.playSource || "none";
+  if (playSource === "unavailable" || playSource === "none") {
+    const reasonKey = state.playBlockReason || "";
+    const reason =
+      playBlockMessage(reasonKey) || (reasonKey ? String(reasonKey) : null);
+    if (reason) {
+      rows.push({ key: "reason", label: "Reason", value: reason });
+    }
+  }
+  if (state.playProfileId) {
+    const meta = resolveAnyProfile(
+      state.playProfileId,
+      catalog,
+      exclusiveFormats,
+    );
+    const profileLabel = (meta && meta.label) || state.playProfileId;
+    rows.push({
+      key: "profile",
+      label: "Profile",
+      value: profileLabel,
+    });
+    if (meta) {
+      const depth = Number(meta.bitDepth) || 0;
+      if (depth > 0) {
+        rows.push({
+          key: "bit_depth",
+          label: "Bit depth",
+          value: `${depth}-bit`,
+        });
+      }
+      const rate = formatSampleRate(meta.sampleRate);
+      if (rate) {
+        rows.push({
+          key: "sample_rate",
+          label: "Sample rate",
+          value: rate,
+        });
+      }
+    }
+  }
+  return rows;
+}
+
 export function buildPlaybackDetailsRows(
   state: PlayStatusState,
   catalog: ProfileMeta[] = [],
@@ -181,83 +259,12 @@ export function buildPlaybackDetailsRows(
 ): PlaybackDetailRow[] {
   const exclusiveSnap = opts.exclusiveSnap || null;
   const exclusiveFormats = opts.exclusiveFormats || [];
-  const exclusiveOn = state.session !== "radio" && !!exclusiveSnap?.enabled;
+  const exclusiveOn = state.session === "queue" && !!exclusiveSnap?.enabled;
 
   const playSource = state?.playSource || "none";
 
   if (exclusiveOn && exclusiveSnap) {
-    const rows: PlaybackDetailRow[] = [];
-    rows.push({ key: "output", label: "Output", value: "Exclusive" });
-
-    const live = exclusiveSnap.liveId;
-    const pref = exclusiveSnap.preferenceId;
-    const devices = exclusiveSnap.devices || [];
-    const deviceId = live || pref;
-    if (deviceId) {
-      const hit = devices.find((d) => d.id === deviceId);
-      rows.push({
-        key: "device",
-        label: "Device",
-        value: (hit && hit.name) || deviceId,
-      });
-    } else {
-      rows.push({
-        key: "device",
-        label: "Device",
-        value: "Not selected",
-      });
-    }
-
-    if (exclusiveSnap.role === "readonly") {
-      rows.push({
-        key: "role",
-        label: "Control",
-        value: "Controlled elsewhere",
-      });
-    }
-
-    if (playSource === "unavailable" || playSource === "none") {
-      const reasonKey = state.playBlockReason || "";
-      const reason =
-        playBlockMessage(reasonKey) || (reasonKey ? String(reasonKey) : null);
-      if (reason) {
-        rows.push({ key: "reason", label: "Reason", value: reason });
-      }
-    }
-
-    if (state.playProfileId) {
-      const meta = resolveAnyProfile(
-        state.playProfileId,
-        catalog,
-        exclusiveFormats,
-      );
-      const profileLabel = (meta && meta.label) || state.playProfileId;
-      rows.push({
-        key: "profile",
-        label: "Profile",
-        value: profileLabel,
-      });
-      if (meta) {
-        const depth = Number(meta.bit_depth) || 0;
-        if (depth > 0) {
-          rows.push({
-            key: "bit_depth",
-            label: "Bit depth",
-            value: `${depth}-bit`,
-          });
-        }
-        const rate = formatSampleRate(meta.sample_rate);
-        if (rate) {
-          rows.push({
-            key: "sample_rate",
-            label: "Sample rate",
-            value: rate,
-          });
-        }
-      }
-    }
-
-    return rows;
+    return exclusiveDetailRows(state, catalog, exclusiveSnap, exclusiveFormats);
   }
 
   if (playSource === "none") return [];
@@ -333,7 +340,7 @@ export function buildPlaybackDetailsRows(
   const kind = (meta.kind || "").toLowerCase();
   if (kind === "opus") {
     rows.push({ key: "codec", label: "Codec", value: "Opus" });
-    const br = Number(meta.bitrate_kbps) || 0;
+    const br = Number(meta.bitrateKbps) || 0;
     if (br > 0) {
       rows.push({
         key: "bitrate",
@@ -343,7 +350,7 @@ export function buildPlaybackDetailsRows(
     }
   } else if (kind === "flac") {
     rows.push({ key: "codec", label: "Codec", value: "FLAC" });
-    const depth = Number(meta.bit_depth) || 0;
+    const depth = Number(meta.bitDepth) || 0;
     if (depth > 0) {
       rows.push({
         key: "bit_depth",
@@ -359,7 +366,7 @@ export function buildPlaybackDetailsRows(
     });
   }
 
-  const rate = formatSampleRate(meta.sample_rate);
+  const rate = formatSampleRate(meta.sampleRate);
   if (rate) {
     rows.push({ key: "sample_rate", label: "Sample rate", value: rate });
   }

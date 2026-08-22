@@ -8,7 +8,7 @@ vi.mock("@/api", () => ({
   ),
 }));
 vi.mock("@/listens/bridge", () => ({ discard: vi.fn() }));
-vi.mock("@/playback/onDemandControl", () => ({
+vi.mock("@/playback/session", () => ({
   restoreMediaSession: vi.fn(),
   suspendMediaSession: vi.fn(),
   become: vi.fn(),
@@ -22,7 +22,6 @@ import { streamUrl } from "@/api";
 import {
   applySnapshot,
   connect,
-  exitToQueue,
   heardPosition,
   interpolatedPosition,
   radio,
@@ -184,7 +183,7 @@ describe("radio store", () => {
     expect(radio.chrome).toBe("stopped");
     setTabOpen(false);
     expect(radioChromeActive()).toBe(true);
-    exitToQueue();
+    resetRadioStore();
     expect(radio.chrome).toBe("inactive");
     expect(radio.connected).toBe(false);
   });

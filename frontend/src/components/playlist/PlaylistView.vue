@@ -143,7 +143,11 @@ const route = useRoute();
     }
 
     function onDelete(index: number) {
-      removeIndices([index], playIndex, stopPlayback);
+      const { removedCurrent, nextIndex } = removeIndices([index]);
+      if (removedCurrent) {
+        if (pl.length && nextIndex >= 0) playIndex(nextIndex);
+        else stopPlayback();
+      }
     }
 
     function onDragStart(e: PointerEvent, index: number) {

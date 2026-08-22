@@ -16,7 +16,6 @@ import {
   seekToFraction,
   setVolume,
 } from "@/stores/player";
-import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
 import type { PlayStatusState } from "@/playbackStatus";
 import Icon from "@/components/icons/Icon.vue";
 import NowPlayingView from "@/components/player/NowPlayingView.vue";
@@ -60,21 +59,19 @@ export type NowPlayingFullExpose = {
 const viewRef = ref<NowPlayingViewExpose | null>(null);
 const sheetDragY = ref<number | null>(null);
 
-const playState = computed((): PlayStatusState => {
-  void pl.index;
-  void pl.tracks;
+function queuePlayState(): PlayStatusState {
   return {
     session: "queue",
-    playSource: player.playSource as PlayStatusState["playSource"],
+    playSource: player.playSource,
     playProfileId: player.playProfileId,
     playBlockReason: player.playBlockReason,
     track: pl.current,
   };
-});
+}
 
-const exclusiveSnap = computed(
-  () => exclusiveStatusSnapshot() as ExclusiveFaceSnapshot,
-);
+const playState = computed((): PlayStatusState => queuePlayState());
+
+const exclusiveSnap = computed(() => exclusiveStatusSnapshot());
 
 function collapse() {
   emit("collapse");

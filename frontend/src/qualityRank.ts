@@ -7,9 +7,9 @@ export interface ProfileMeta {
   id: string;
   label?: string;
   kind?: string;
-  bitrate_kbps?: number;
-  bit_depth?: number;
-  sample_rate?: number;
+  bitrateKbps?: number;
+  bitDepth?: number;
+  sampleRate?: number;
   tag?: string;
 }
 
@@ -55,7 +55,15 @@ export function resolveProfileMeta(
   const fromCat = catalog.find((o) => o.id === id);
   if (fromCat) return fromCat;
   const parsed = parseTagHeuristic(id);
-  return parsed ? { id, ...parsed } : { id };
+  return parsed
+    ? {
+        id,
+        kind: parsed.kind,
+        bitrateKbps: parsed.bitrate_kbps,
+        bitDepth: parsed.bit_depth,
+        sampleRate: parsed.sample_rate,
+      }
+    : { id };
 }
 
 /**
@@ -80,9 +88,9 @@ export function rankForProfile(
   else if (kind === "opus") kindBase = 1e9;
   else kindBase = 0;
 
-  const bitDepth = Number(meta.bit_depth) || 0;
-  const bitrate = Number(meta.bitrate_kbps) || 0;
-  const rate = Number(meta.sample_rate) || 0;
+  const bitDepth = Number(meta.bitDepth) || 0;
+  const bitrate = Number(meta.bitrateKbps) || 0;
+  const rate = Number(meta.sampleRate) || 0;
 
   return kindBase + bitDepth * 1e6 + bitrate * 1e3 + rate;
 }

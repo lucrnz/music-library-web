@@ -100,9 +100,9 @@ describe("buildPlaybackDetailsRows lossy", () => {
         id: "flac_16_44100",
         label: "FLAC 16/44.1",
         kind: "flac",
-        bit_depth: 16,
-        sample_rate: 44100,
-        bitrate_kbps: 0,
+        bitDepth: 16,
+        sampleRate: 44100,
+        bitrateKbps: 0,
       },
     ]);
     expect(keys(rows)).not.toContain("encoding");
