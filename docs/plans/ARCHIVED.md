@@ -553,3 +553,15 @@ The Radio room codec-line badge mounts only while `chrome === "tuned"` and leave
 ```bash
 git show e30239e8fe3dc82dd4075a9323001ac55d241380
 ```
+
+## 2026-08-21-hb849r52-critical-structure-done
+
+**Title:** Collapse play, stream, and catalog decision copies
+
+**Commit:** `954766bbde4c5f7b6d3b95d16f694d7b3d683eb9`
+
+Unified exclusive vs HTML play into `resolvePlayIntent`, made server lossy/source a `stream_intent` result, and serialized catalog commit/delete under one IDB mutex. Open the delete commit for `downloads/media.ts`, `passthrough.stream_intent`, and the `claimOnDemand` / `claimRadio` session handoff.
+
+```bash
+git show 954766bbde4c5f7b6d3b95d16f694d7b3d683eb9
+```
