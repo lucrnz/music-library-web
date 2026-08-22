@@ -625,3 +625,15 @@ Hosts consume a real `BrowseSource` object (downloads project to client types; `
 ```bash
 git show f8b48bf38c277dd9fc61507299cd29cc3b892ea2
 ```
+
+## 2026-08-21-vfiq3y8a-finish-nuclear-judo-done
+
+**Title:** Finish the nuclear-review judo
+
+**Commit:** `87a2a1520ca569addc5069dbc3a22ba0b3ced9ae`
+
+Finished parked host forks: `resolvePlaySource` is delivery-only, radio chrome sits on `radio/runtime.ts`, downloads queue runtime owns the pump, jobs use a PHASES table, and exclusive prefs no longer import the socket. Open the delete commit for `playback/session.ts`, `queueRuntime.ts`, and the one-way exclusive import graph.
+
+```bash
+git show 87a2a1520ca569addc5069dbc3a22ba0b3ced9ae
+```
