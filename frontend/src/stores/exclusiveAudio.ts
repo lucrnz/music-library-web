@@ -41,8 +41,6 @@ export interface ExclusiveAudioState {
   sessionId: string;
   devices: ExclusiveDevice[];
   lastError: string | null;
-  companionPlaying: boolean;
-  companionPaused: boolean;
 }
 
 const KEY_ENABLED = "musicweb.exclusive.enabled";
@@ -73,9 +71,6 @@ export const exclusiveAudio = reactive<ExclusiveAudioState>({
   sessionId: "",
   devices: [],
   lastError: null,
-  /** Companion status snapshot fields */
-  companionPlaying: false,
-  companionPaused: true,
 });
 
 /** Track ids toasted for missing tech this session */
@@ -229,8 +224,6 @@ export function setExclusiveLive(partial: {
   devices?: ExclusiveDevice[];
   companionDeviceId?: string | null;
   lastError?: string | null;
-  companionPlaying?: boolean;
-  companionPaused?: boolean;
 }) {
   if (partial.connection != null) exclusiveAudio.connection = partial.connection;
   if ("role" in partial) exclusiveAudio.role = partial.role ?? null;
@@ -239,12 +232,6 @@ export function setExclusiveLive(partial: {
     exclusiveAudio.companionDeviceId = partial.companionDeviceId ?? null;
   }
   if ("lastError" in partial) exclusiveAudio.lastError = partial.lastError ?? null;
-  if (partial.companionPlaying != null) {
-    exclusiveAudio.companionPlaying = partial.companionPlaying;
-  }
-  if (partial.companionPaused != null) {
-    exclusiveAudio.companionPaused = partial.companionPaused;
-  }
 }
 
 export function setExclusiveEnabled(on: boolean) {
@@ -254,10 +241,6 @@ export function setExclusiveEnabled(on: boolean) {
 
 export function setHogToken(token: string | number | null | undefined) {
   exclusiveAudio.hogToken = String(token || "");
-  persist();
-}
-
-export function commitHogToken() {
   persist();
 }
 

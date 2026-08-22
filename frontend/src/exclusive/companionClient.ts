@@ -292,7 +292,6 @@ function handleMessage(raw: unknown): void {
   }
 
   if (type === MSG_PAUSE_EVENT) {
-    setExclusiveLive({ companionPaused: !!msg.paused });
     emit({ type: "pause", paused: !!msg.paused });
     return;
   }
@@ -323,12 +322,6 @@ function applyStatus(msg: CompanionWireMessage): void {
     }
   }
 
-  if (typeof msg.playing === "boolean") {
-    setExclusiveLive({ companionPlaying: msg.playing });
-  }
-  if (typeof msg.paused === "boolean") {
-    setExclusiveLive({ companionPaused: msg.paused });
-  }
   // TTL demotion: socket stays open so disconnect does not fire — hard-stop via error.
   if (msg.role === ROLE_READONLY && msg.reason === "controller_ttl") {
     setExclusiveLive({ lastError: "controller_ttl" });
@@ -394,7 +387,6 @@ function connectNow(): void {
     setExclusiveLive({
       connection: "disconnected",
       role: null,
-      companionPlaying: false,
     });
     clearLiveDevice();
     if (!intentionalClose && wantConnected) {

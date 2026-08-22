@@ -10,7 +10,6 @@ import {
   setExclusiveEnabled,
   setExclusivePort,
   setFormatMode,
-  commitHogToken,
   setHogToken,
   setSelectedDeviceId,
 } from "@/stores/exclusiveAudio";
@@ -88,7 +87,6 @@ function onToken(e: Event) {
 }
 
 function onTokenCommit() {
-  commitHogToken();
   if (!(exclusiveAudio.hogToken || "").trim()) disconnectCompanion();
   else syncCompanionConnection();
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -289,7 +290,7 @@ class ExclusiveHub:
                 p.envelope(p.MSG_ERROR, message=str(exc)),
             )
 
-    async def _still_live(self, sess: ClientSession) -> bool:
+    async def _with_live(self, sess: ClientSession) -> bool:
         async with self._lock:
             return self._is_live_controller(sess)
 
@@ -305,7 +306,7 @@ class ExclusiveHub:
                 mpv_dev = d.mpv_device or d.id
                 break
         await asyncio.to_thread(self._player.set_device, mpv_dev)
-        if not await self._still_live(sess):
+        if not await self._with_live(sess):
             return
         async with self._lock:
             self._device_id = device_id
@@ -344,25 +345,12 @@ class ExclusiveHub:
             raise ValueError("volume required")
         await asyncio.to_thread(self._player.set_volume, float(vol))
 
-    _COMMANDS: dict[str, tuple[object, bool]] = {}
-
     async def _handle_controller(
         self, sess: ClientSession, mtype: str, msg: dict[str, Any]
     ) -> None:
-        if not ExclusiveHub._COMMANDS:
-            ExclusiveHub._COMMANDS = {
-                p.MSG_SET_DEVICE: (ExclusiveHub._cmd_set_device, True),
-                p.MSG_LOAD: (ExclusiveHub._cmd_load, True),
-                p.MSG_PLAY: (ExclusiveHub._cmd_load, True),
-                p.MSG_PAUSE: (ExclusiveHub._cmd_pause, False),
-                p.MSG_RESUME: (ExclusiveHub._cmd_resume, False),
-                p.MSG_STOP: (ExclusiveHub._cmd_stop, True),
-                p.MSG_SEEK: (ExclusiveHub._cmd_seek, False),
-                p.MSG_SET_VOLUME: (ExclusiveHub._cmd_set_volume, True),
-            }
-        spec = ExclusiveHub._COMMANDS.get(mtype)
+        spec = COMMANDS.get(mtype)
         if spec is None:
-            if not await self._still_live(sess):
+            if not await self._with_live(sess):
                 return
             await self._send(
                 sess,
@@ -370,8 +358,22 @@ class ExclusiveHub:
             )
             return
         handler, broadcast = spec
-        if not await self._still_live(sess):
+        if not await self._with_live(sess):
             return
         await handler(self, sess, msg)
-        if broadcast and await self._still_live(sess):
+        if broadcast and await self._with_live(sess):
             await self.broadcast(p.envelope(p.MSG_STATUS, **self._status_fields()))
+
+
+_Command = Callable[
+    [ExclusiveHub, ClientSession, dict[str, Any]], Awaitable[None]
+]
+COMMANDS: dict[str, tuple[_Command, bool]] = {
+    p.MSG_SET_DEVICE: (ExclusiveHub._cmd_set_device, True),
+    p.MSG_LOAD: (ExclusiveHub._cmd_load, True),
+    p.MSG_PAUSE: (ExclusiveHub._cmd_pause, False),
+    p.MSG_RESUME: (ExclusiveHub._cmd_resume, False),
+    p.MSG_STOP: (ExclusiveHub._cmd_stop, True),
+    p.MSG_SEEK: (ExclusiveHub._cmd_seek, False),
+    p.MSG_SET_VOLUME: (ExclusiveHub._cmd_set_volume, True),
+}
