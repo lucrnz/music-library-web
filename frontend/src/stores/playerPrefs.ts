@@ -31,7 +31,7 @@ export function writeVolume(v: number) {
   }
 }
 
-/** Face + storage. Sinks apply separately (on-demand via player.setVolume). */
+/** Face + storage. Sinks subscribe to player.volume (player.ts watch; radio already watches). */
 export function setOutputVolume(v: number) {
   const n = Math.min(1, Math.max(0, Number(v)));
   player.volume = n;

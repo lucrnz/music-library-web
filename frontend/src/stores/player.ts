@@ -9,7 +9,7 @@ import {
 } from "@/connectivity";
 import { beginPlay, emit } from "@/diag/log";
 import { isLocallyPlayableDownload } from "@/downloads/catalog";
-import { markDownloadBroken } from "@/downloads/index";
+import { markTrackBroken } from "@/downloads/catalog";
 import { downloads } from "@/downloads/state";
 import { createCompanionSink } from "@/playback/sinks/companionSink";
 import { createHtmlAudioSink } from "@/playback/sinks/htmlAudioSink";
@@ -17,7 +17,11 @@ import type { PlaybackSink, SinkErrorDetails } from "@/playback/sinks/types";
 import { supportsCodecKind } from "@/codecSupport";
 import { SOURCE_TAG, deliveryCodec } from "@/lossyKind";
 import type { Track } from "@/models/track";
-import { PLAY_BLOCK_MESSAGES, type PlayBlockReason } from "@/playBlock";
+import {
+  PLAY_BLOCK_MESSAGES,
+  isOfflineUnplayable,
+  type PlayBlockReason,
+} from "@/playBlock";
 import {
   needsCompanionStop,
   resolvePlayIntent,
@@ -180,17 +184,29 @@ function applyIntent(intent: PlayIntent) {
   );
 }
 
-function failNotice(opts: {
+function failCurrentLoad(opts: {
   reason: PlayBlockReason;
   message?: string | null;
   toast?: boolean | string;
 }) {
   const reason = opts.reason || "exclusive_failed";
   const exclusive = reason.startsWith("exclusive");
-  const rawNotice =
+  const raw =
     opts.message ||
     PLAY_BLOCK_MESSAGES[reason] ||
     PLAY_BLOCK_MESSAGES.exclusive_failed;
+  const notice = exclusive ? raw : `${pl.current?.title || "Track"}: ${raw}`;
+  applyIntent({
+    source: "unavailable",
+    profile: player.playProfileId ?? null,
+    block: reason,
+    message: notice,
+  });
+  emit(
+    "player.load.fail",
+    failCtx({ reason, message: notice || null }),
+    "error",
+  );
   if (exclusive) {
     try {
       activeSink.stop();
@@ -198,38 +214,15 @@ function failNotice(opts: {
       /* ignore */
     }
   }
-  setPlayNotice(rawNotice);
-  if (opts.toast) {
-    showToast(typeof opts.toast === "string" ? opts.toast : rawNotice);
+  setPlayNotice(notice);
+  const shouldToast = exclusive ? opts.toast !== false : !!opts.toast;
+  if (shouldToast) {
+    showToast(typeof opts.toast === "string" ? opts.toast : exclusive ? raw : notice);
   }
   if (reason === "exclusive_needs_device") {
     openSettings();
   }
   syncTransportFlags();
-}
-
-function failCurrentLoad(opts: {
-  reason: PlayBlockReason;
-  message?: string | null;
-  toast?: boolean | string;
-}) {
-  const reason = opts.reason || "exclusive_failed";
-  const message =
-    opts.message ||
-    PLAY_BLOCK_MESSAGES[reason] ||
-    PLAY_BLOCK_MESSAGES.exclusive_failed;
-  applyIntent({
-    source: "unavailable",
-    profile: player.playProfileId ?? null,
-    block: reason,
-    message,
-  });
-  emit(
-    "player.load.fail",
-    failCtx({ reason, message: message || null }),
-    "error",
-  );
-  failNotice({ reason, message, toast: opts.toast });
 }
 
 const msSupported = "mediaSession" in navigator;
@@ -520,14 +513,9 @@ async function loadResolved(
     revokeLocalPlayUrl();
   }
   if (intent.source === "unavailable") {
-    const exclusive = intent.block.startsWith("exclusive");
-    const raw = intent.message || PLAY_BLOCK_MESSAGES[intent.block];
-    failNotice({
+    failCurrentLoad({
       reason: intent.block,
-      message: exclusive ? raw : `${track?.title || "Track"}: ${raw}`,
-      toast: exclusive
-        ? intent.message || PLAY_BLOCK_MESSAGES.exclusive_failed
-        : false,
+      message: intent.message || PLAY_BLOCK_MESSAGES[intent.block],
     });
     return;
   }
@@ -544,7 +532,7 @@ async function loadResolved(
   }
 
   selectSink(intent.sink);
-  player.playNotice = null;
+  setPlayNotice(null);
   if (intent.source === "downloaded") {
     localPlayUrl = intent.url;
   }
@@ -553,7 +541,7 @@ async function loadResolved(
   if (!still(gen)) return;
   if (!result.ok && intent.source === "downloaded" && !extra.localBroken) {
     console.warn("Local playback failed, falling back to stream", result.err);
-    if (track?.id) markDownloadBroken(track.id).catch(() => {});
+    if (track?.id) markTrackBroken(track.id).catch(() => {});
     revokeLocalPlayUrl();
     return loadResolved(gen, track, { localBroken: true });
   }
@@ -634,7 +622,10 @@ export async function playIndex(index: number) {
 }
 
 function shouldSkipUnplayableQueue() {
-  return downloads.enabled && !canUseRemoteMedia();
+  return isOfflineUnplayable(undefined, {
+    downloadsEnabled: downloads.enabled,
+    canUseRemote: canUseRemoteMedia(),
+  });
 }
 
 function stopAtQueueEnd() {
@@ -729,7 +720,6 @@ export function seekToFraction(frac: number) {
 
 export function setVolume(v: number) {
   setOutputVolume(v);
-  activeSink.setVolume(player.volume);
 }
 
 export function applyVolume() {
@@ -744,6 +734,12 @@ export function initAudioListeners() {
     () => {
       if (activeSession() !== "queue") return;
       if (pl.index >= 0) playIndex(pl.index);
+    },
+  );
+  watch(
+    () => player.volume,
+    (v) => {
+      activeSink.setVolume(v);
     },
   );
   wireSinkHandlers();

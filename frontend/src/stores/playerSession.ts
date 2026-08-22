@@ -75,8 +75,3 @@ export async function updateMediaSession() {
     ],
   });
 }
-
-/** Resolve covers for the current playlist track (e.g. after session restore). */
-export function refreshPlayerCovers() {
-  return updateMediaSession();
-}

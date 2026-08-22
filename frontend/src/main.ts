@@ -6,7 +6,7 @@ import { router } from "@/router";
 import App from "@/components/App.vue";
 import { loadPlaylist } from "@/stores/playlist";
 import { applyExpanded, applyPlaybackPosition } from "@/stores/playerPrefs";
-import { refreshPlayerCovers } from "@/stores/playerSession";
+import { updateMediaSession } from "@/stores/playerSession";
 import { applyVolume, initAudioListeners } from "@/stores/player";
 import {
   bindSettingsPrepareTracks,
@@ -37,7 +37,7 @@ void initExclusiveAudio().then(() => syncCompanionConnection());
 bindSettingsPrepareTracks(() => pl.tracks);
 bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.
-initDownloads().then(() => refreshPlayerCovers());
+initDownloads().then(() => updateMediaSession());
 initArtistArtPending();
 registerServiceWorker();
 

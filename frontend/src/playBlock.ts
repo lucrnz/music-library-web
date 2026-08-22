@@ -3,6 +3,8 @@
  * Used by resolve, player store, and playback status formatters.
  */
 
+import { isLocallyPlayableDownload } from "@/downloads/catalog";
+
 /**
  * Delivery source for the current player load and resolvePlaySource results
  * (not library path). `none` is player-idle only; resolve never returns it.
@@ -51,4 +53,16 @@ export function playBlockMessage(
 ): string | null {
   if (!reason) return null;
   return (PLAY_BLOCK_MESSAGES as Record<string, string | undefined>)[reason] || null;
+}
+
+/** Queue row / skip gate: downloads on, remote unusable, no local playable file. */
+export function isOfflineUnplayable(
+  trackId: string | null | undefined,
+  opts: { downloadsEnabled: boolean; canUseRemote: boolean },
+): boolean {
+  return (
+    opts.downloadsEnabled &&
+    !opts.canUseRemote &&
+    !isLocallyPlayableDownload(trackId ?? "")
+  );
 }
