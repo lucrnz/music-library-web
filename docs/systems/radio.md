@@ -24,7 +24,7 @@ The clock starts when the server process is up, including zero listeners. Restar
 
 Faces are derived, not a column: `catching_up` (process-lifetime until first catch-up), then `skip_pending` (missing/unresolvable current), `idle` (no current), or `current`. Persist clock + queue + banlist only, and only on advance / skip / pick / shutdown. Catch-up and tick share `_step` (catch-up loops until the clock is current; tick takes one step). Rebuild the in-memory catalog when `radio_repo.scan_finished_at` (`ScanState.last_scan_finished_at`) changes — not when a regen job finishes.
 
-Upcoming rows in `library.db` are an accepted spoiler. UI, HTTP, WebSocket, and logs must never show or print next songs.
+Upcoming rows in `library.db` are an accepted spoiler. UI, HTTP, WebSocket, and logs must never show or print next songs. The local debug CLI `musicweb radio` may print upcoming and banlist ids only with `--spoilers`.
 
 ## Picking
 
@@ -54,9 +54,13 @@ Off `/radio`, mobile shows `RadioMini` only; desktop shows a compact `NowPlaying
 
 Media Session: radio-owned metadata; play/pause/stop only. `playback/session.ts` owns install/restore/suspend.
 
+## Debug CLI
+
+`musicweb radio` is a local, live-server debug tool on the control socket (not HTTP, not the radio WebSocket). It can skip, inject-play, re-pick upcoming, reset, and clear process `skip_ids`. `--spoilers` is required to print upcoming or banlist ids. Skip, play (when current changes), and reset push the same now-playing snapshot a tick already sends so tuned-in clients follow; there are no new WebSocket action types.
+
 ## Out of scope
 
-- Remote DJ (skip, request, seek, operator queue view)
+- Remote DJ over HTTP/WebSocket/UI (skip, request, seek, operator queue view). Local `musicweb radio` on the control socket is the debug exception — see Debug CLI.
 - Live stdout / Icecast / HLS / concat radio pipe
 - Radio re-encode of lossy into a stream profile
 - **Exclusive-mode radio** (companion hog / mpv) — **TODO**. Tune-in stops the hog; radio stays HTML-only until a future design
@@ -66,7 +70,7 @@ Media Session: radio-owned metadata; play/pause/stop only. `playback/session.ts`
 
 ## Guardrails
 
-- Do not log or serialize upcoming ids.
+- Do not log or serialize upcoming ids (HTTP, WebSocket, UI, diagnostic logs). The only allowed printer is `musicweb radio` with `--spoilers`.
 - Do not evict radio current + remaining via forget (simulation included). Do not `clear_cache` on 1→0 tuners.
 - Do not add a radio FK from station/queue/banlist ids to `tracks.id`.
 - Do not treat radio SQLite rows as a secret.

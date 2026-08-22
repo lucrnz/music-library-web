@@ -28,12 +28,12 @@ This page describes **ownership boundaries** — where code lives and what each 
 | Area | Responsibility |
 |------|----------------|
 | `main.py` | FastAPI app factory, lifespan, dist mounts, SPA shell wiring |
-| `cli/` | Typer entry (`serve`, `scan`, regen, `stats`, `doctor`, `exclusive-audio`, `logs`); argv only |
+| `cli/` | Typer entry (`serve`, `scan`, regen, `stats`, `doctor`, `exclusive-audio`, `logs`, `radio`); argv only |
 | `diag/` | Diagnostic JSONL store, emit, join-key reader |
 | `exclusive/` | macOS exclusive-audio companion (loopback WS + mpv); no DB/lock |
 | `runtime/` | Data-dir flock, bootstrap, exclusive maintenance, `run_library_job` |
 | `jobs/` | Single-flight library job runner (`ScanState`, `_begin`, `_begin_phase`; scan finish stamps radio watermark). Kind dispatch calls `scan/jobs.py` (`run_scan` / `regen_*`) |
-| `control/` | Private UDS JSON control plane (health + job RPC) for live CLI |
+| `control/` | Private UDS JSON control plane (health, job RPC, live radio debug RPC) for live CLI |
 | `config.py` | Settings from env + source-level tuning constants |
 | `library.py` | Path jail (`resolve`) and present indexable audio (`present_audio`) under `MUSIC_LIBRARY_PATH` |
 | `metadata.py` | Tag / audio tech reading (mutagen) |

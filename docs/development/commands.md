@@ -100,6 +100,14 @@ Write jobs use the same multi-kind job runner as HTTP (`musicweb.jobs`). If the 
 | `musicweb logs show` | Print matching JSONL (`--session`, `--level`, `--client`, …) |
 | `musicweb logs tail` | Last N matching lines; `--follow` |
 | `musicweb logs purge` | Delete old or all event files (`--older-than` / `--all`) |
+| `musicweb radio status` | Live station face, current track, tuners, counts (debug) |
+| `musicweb radio skip` | Advance now; does not add current to skip-ids |
+| `musicweb radio play TRACK_ID` | Inject an eligible track as current |
+| `musicweb radio pick` | Keep current; replace unplayed remainder |
+| `musicweb radio reset` | Wipe queue, banlist, and skip-ids; pick a fresh batch |
+| `musicweb radio banlist` | Banlist batch sizes (ids only with `--spoilers`) |
+| `musicweb radio skip-ids` | List process-lifetime unplayable ids |
+| `musicweb radio skip-ids clear` | Empty that unplayable set |
 
 `--force` redoes work that would otherwise skip (covers already present, artist cooldown/images, lyrics cooldown). Full scan (`--mode full`) also forces covers, artist images, and lyrics enrichment.
 
@@ -117,6 +125,18 @@ uv run musicweb logs purge --older-than 7 --yes
 ```
 
 Exact flags: `uv run musicweb logs --help`.
+
+## Radio (debug)
+
+Debug DJ tools against a **live** `musicweb` process via the Unix control socket. There is no offline persist dump. Upcoming and banlist ids stay hidden unless you pass `--spoilers`. This is not an HTTP/WebSocket DJ.
+
+```sh
+uv run musicweb radio status
+uv run musicweb radio skip
+uv run musicweb radio play <track-id>
+```
+
+Exact flags: `uv run musicweb radio --help`.
 
 ## Exclusive audio companion (macOS)
 
