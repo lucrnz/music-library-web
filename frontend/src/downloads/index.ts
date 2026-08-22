@@ -14,6 +14,10 @@ import { fetchTracksMeta } from "@/api";
 import type { Track } from "@/models/track";
 import type { QueueRecord } from "@/downloads/queue";
 import {
+  forgetDownloadPrewarm,
+  syncDownloadPrewarm,
+} from "@/downloads/prewarm";
+import {
   getConnectivityState,
   isHardOffline,
   onConnectivityChange,
@@ -42,6 +46,7 @@ import {
   listQueue,
   onProgressChange,
   onQueueChange,
+  QueueState,
   retryQueueItem as queueRetryQueueItem,
 } from "@/downloads/queue";
 import {
@@ -138,7 +143,11 @@ function bindQueueListener() {
   if (queueListenerBound) return;
   queueListenerBound = true;
   onQueueChange(() => {
-    refreshQueue({ includeStorage: true }).catch(() => {});
+    refreshQueue({ includeStorage: true })
+      .then(() => {
+        syncDownloadPrewarm(downloads.queue);
+      })
+      .catch(() => {});
   });
   onProgressChange((id, loaded, total) => {
     const idx = downloads.queue.findIndex((q) => q.id === id);
@@ -232,6 +241,7 @@ async function bootDownloadsRuntime() {
   bindQueueListener();
   await hydrateCatalogProjection();
   await refreshQueue({ includeStorage: true });
+  syncDownloadPrewarm(downloads.queue);
 }
 
 export async function initDownloads() {
@@ -308,6 +318,17 @@ async function wipeCatalogStorage() {
  * @param {{ wipe: boolean }} opts
  */
 export async function disableDownloads({ wipe }: { wipe: boolean }) {
+  const items = await listQueue();
+  forgetDownloadPrewarm(
+    items
+      .filter(
+        (row) =>
+          row.state === QueueState.PENDING ||
+          row.state === QueueState.ACTIVE ||
+          row.state === QueueState.PAUSED,
+      )
+      .map((row) => row.trackId),
+  );
   await clearAllQueue(() => stopAll());
   await setDownloadsEnabled(false);
   if (wipe) {
@@ -379,7 +400,17 @@ export async function enqueueTracks(tracks: Track[]) {
 
 /** Thin queue manager wrappers — UI imports from index, not queue guts. */
 export async function cancelQueueItem(id: number) {
+  const items = await listQueue();
+  const row = items.find((item) => item.id === id);
   await cancelItem(id);
+  if (
+    row &&
+    (row.state === QueueState.PENDING ||
+      row.state === QueueState.ACTIVE ||
+      row.state === QueueState.PAUSED)
+  ) {
+    forgetDownloadPrewarm([row.trackId]);
+  }
 }
 
 export async function retryQueueItem(id: number) {

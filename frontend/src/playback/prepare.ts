@@ -42,15 +42,20 @@ export function requestForget(ids: string[]): void {
 export function requestPrepare(
   tracksOrIds: Array<string | { id?: string }> | null | undefined,
   codec: string,
-  { replace = false, urgent = false }: { replace?: boolean; urgent?: boolean } = {},
+  {
+    replace = false,
+    urgent = false,
+    tier,
+  }: { replace?: boolean; urgent?: boolean; tier?: "download" } = {},
 ): void {
   const ids: string[] = [];
   for (const item of tracksOrIds || []) {
     if (typeof item === "string") ids.push(item);
     else if (item?.id) ids.push(item.id);
   }
+  const downloadTier = tier === "download";
   let use: string[];
-  if (urgent) {
+  if (downloadTier || urgent) {
     use = ids;
   } else {
     const fresh = ids.filter((id) => !preparedKeys.has(`${id}|${codec}`));
@@ -58,11 +63,21 @@ export function requestPrepare(
     use = replace ? ids : fresh;
   }
   if (!use.length) return;
-  use.forEach((id) => preparedKeys.add(`${id}|${codec}`));
+  if (!downloadTier) {
+    use.forEach((id) => preparedKeys.add(`${id}|${codec}`));
+  }
+  const body: {
+    ids: string[];
+    codec: string;
+    replace: boolean;
+    urgent: boolean;
+    tier?: "download";
+  } = { ids: use, codec, replace, urgent: !!urgent };
+  if (downloadTier) body.tier = "download";
   void apiFetch("/api/transcode/prepare", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids: use, codec, replace, urgent: !!urgent }),
+    body: JSON.stringify(body),
   }).catch(() => {});
 }
 

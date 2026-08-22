@@ -9,6 +9,7 @@ import { activeDelivery } from "@/playback/deliveryPolicy";
 import {
   preparedKeys,
   prepareTracks,
+  requestPrepare,
   tracksToPrepare,
 } from "@/playback/prepare";
 import { settings } from "@/stores/settings";
@@ -48,6 +49,7 @@ function prepareBodies() {
       codec: string;
       replace: boolean;
       urgent: boolean;
+      tier?: string;
     },
   );
 }
@@ -107,5 +109,14 @@ describe("prepareTracks", () => {
     expect(bodies).toHaveLength(1);
     expect(bodies[0].ids).toEqual(["b"]);
     expect(bodies[0].codec).toBe("opus_192_48000");
+  });
+
+  it("download tier posts without touching preparedKeys", () => {
+    requestPrepare(["a"], "opus_192_48000", { tier: "download" });
+    const bodies = prepareBodies();
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].ids).toEqual(["a"]);
+    expect(bodies[0].tier).toBe("download");
+    expect(preparedKeys.has("a|opus_192_48000")).toBe(false);
   });
 });
