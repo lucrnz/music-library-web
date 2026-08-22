@@ -16,7 +16,7 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 - Prepare-on-change: `frontend/src/stores/player.ts` watches `settings.streamCodec` and `settings.playbackPolicy`
 - Session queue: `frontend/src/stores/playlist.ts`
 - Delivery tag / lossy kind: `frontend/src/lossyKind.ts`
-- HTML play-source resolution: `frontend/src/downloads/resolve.ts` (`resolvePlaySource` → delivery only)
+- HTML play-source resolution: `frontend/src/downloads/resolve.ts` (`resolvePlaySource` → delivery only; queue via `playIntent.ts`, radio via `radio/session.ts`)
 - Exclusive profile pick: `frontend/src/stores/exclusiveAudio.ts`
 - Block reasons / copy: `frontend/src/playBlock.ts`
 - Quality ranking: `frontend/src/qualityRank.ts`
@@ -49,7 +49,7 @@ The reactive `player` record lives in `playerState.ts`. Cover / Media Session me
 
 On-demand teardown: `beginLoad` always stops the HTML sink, bumps generation, and clears play-source state. Companion stops only when the new intent is unavailable or the sink changes (`needsCompanionStop`). Exclusive track-to-track stays `selectSink` no-op + `load` (does not release the hog). Leaving on-demand (`become("none")` / `become("radio")`) stops both sinks and revokes the local blob. A sink error while `playSource` is `none` is ignored.
 
-Household radio is **not** stream-vs-download resolve. The radio element loads `/api/stream` for the current official id and instructed-seeks to the station clock. Display clocks: not tuned / tuning follow the official snapshot; tuned follows `audio.currentTime` (re-seek if drift > 2s). Radio now-playing reuses `NowPlayingView` (`setRangeFill`, injected `PlaybackStatusLine`) — not a second badge. On `/radio` the codec line mounts only while tuned; the status wrap stays reserved. After Tune out the stopped radio face stays on the off-radio mini or compact bar. Radio chrome is `inactive | stopped | tuning | tuned`. Opening the tab without Tune-in stays `inactive` with `tabOpen`. `radioGen` guards `loadCurrent`; the face handler is the only load driver. A library/queue play calls `become("queue")`. Radio watches `player.volume`. See `docs/systems/radio.md`.
+Household radio **does** use `resolvePlaySource` with the same `playbackPolicy` as queue play. While the tuner socket is up, radio passes `offline: false` (do not use queue’s `canUseRemoteMedia()` here). After load it instructed-seeks to the station clock. A broken local blob remints to `/api/stream` (`markTrackBroken`, same generation). Household `tune_in` prepare is unchanged. Display clocks: not tuned / tuning follow the official snapshot; tuned follows `audio.currentTime` (re-seek if drift > 2s; skip reseek when official position is past `el.duration`). Radio now-playing reuses `NowPlayingView` (`setRangeFill`, injected `PlaybackStatusLine`) — not a second badge. On `/radio` the codec line mounts only while tuned and reports the real play source; the status wrap stays reserved. After Tune out the stopped radio face stays on the off-radio mini or compact bar. Radio chrome is `inactive | stopped | tuning | tuned`. Opening the tab without Tune-in stays `inactive` with `tabOpen`. `radioGen` guards `loadCurrent`; the face handler is the only load driver. A library/queue play calls `become("queue")`. Radio watches `player.volume` and `settings.playbackPolicy`. Radio does not write listen-stat events. See `docs/systems/radio.md`.
 
 The **expanded** now-playing cover (mobile sheet, desktop panel) can 3D-flip to the album-artist photo. Eligible when `GET /api/artists/{id}` (mapped through `fromApiArtist`) reports `hasImage` or `hasPreferredImage` and `canReachServer()` is true; otherwise the cover is not a toggle. The peek resets on track change, collapse, or unmount. The lyrics overlay blocks the flip and does not change the face. An unreachable server disables the feature until the server is reachable again. Mini and compact-bar covers stay open-targets (expand now-playing); they do not flip. Helper: `frontend/src/components/player/coverFlip.ts`.
 
@@ -69,10 +69,10 @@ Independent client preferences (exact storage keys and defaults live in `setting
 
 - **Streaming** profile
 - **Download** profile used when enqueueing offline copies
-- **Playback policy** when a download exists while online:
+- **Playback policy** when a download exists while online (queue play **and** radio):
   - Prefer higher quality (use local when it is at least as good as the stream profile)
   - Prefer downloaded file
-  - Prefer live stream when the server is reachable (`canUseRemoteMedia()`) (local only when unreachable / stream unavailable)
+  - Prefer live stream when the server is reachable (queue: `canUseRemoteMedia()`; radio: tuner socket up) (local only when that online check fails)
 
 The browser catalog is fetched at boot when the server answers and mapped to camelCase once in settings (`musicweb.codecCatalog.v1`). That boot GET is a live probe (`cache: "no-store"`) so HTTP cache cannot confirm reachability. Offline or failed fetch reuses that cache; stored quality tags are not rewritten against the hardcoded one-row stub. Decode probes still run locally after hydrate and after a successful fetch.
 
