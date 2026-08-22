@@ -637,3 +637,15 @@ Finished parked host forks: `resolvePlaySource` is delivery-only, radio chrome s
 ```bash
 git show 87a2a1520ca569addc5069dbc3a22ba0b3ced9ae
 ```
+
+## 2026-08-22-jfgikxjm-delete-host-forks-done
+
+**Title:** Delete leftover host forks
+
+**Commit:** `93f6ffa5ab98b22cecb29d66c46e6d1b440ea786`
+
+Collapsed leftover hosts so fail, volume, radio face, queue abort, job phase begin, and exclusive commands each have one owner. Open the delete commit for `failCurrentLoad` as the only fail path, `setOutputVolume` plus sink subscribers, `PhaseCtx`, and module-level `COMMANDS`.
+
+```bash
+git show 93f6ffa5ab98b22cecb29d66c46e6d1b440ea786
+```
