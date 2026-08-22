@@ -12,6 +12,7 @@ Optional client-side offline music: users can download stream-profile audio to t
   - Catalog barrel: `catalog.ts` re-exports `projection.ts` (status join), `art.ts` (OPFS art + blob URLs), `writer.ts` (IDB lock, pin/refcount, commit/delete)
   - Catalog view (hierarchy + art + primed roots): `snapshot.ts` (`loadDownloadsCatalogView`, cached; `invalidateDownloadsCatalogView` from `writer.ts` mutations)
   - Queue IDB CRUD / live progress: `queue.ts`
+  - Concurrent-job cap (allowed values, persist, rank-to-keep): `concurrency.ts`
   - Queue pump + abort maps: `queueRuntime.ts`
   - Network policy: `queuePolicy.ts`
   - Job I/O (`executeDownloadJob`, `streamUrl`): `worker.ts`
@@ -21,7 +22,7 @@ Optional client-side offline music: users can download stream-profile audio to t
   - Hierarchy / storage formatters: `hierarchy.ts`, `storageInfo.ts`
   - Offline browse loader: `browse.ts` (`loadDownloadsView` → `LibraryPage`)
 - Offline browse UI is `LibraryView` (`mode === "downloads"`), not a second library SFC. Source pieces: `frontend/src/components/library/sources/downloadsBrowse.ts`. Row covers: omitted/`null` `coverSrc` = remote fallback; `""` = placeholder (do not hit `/api/cover` when local art is missing).
-- Settings that affect downloads: `frontend/src/stores/settings.ts` (download profile)
+- Settings that affect downloads: `frontend/src/stores/settings.ts` (download quality profile). Concurrent-job count is a separate client pref (`musicweb.downloadConcurrency`, default 2, allowed 1/2/4/6/8/10/12) owned next to the enable flag in the downloads package — not `settings.ts`. The picker is Settings → Downloads only (hidden while the feature is off); the download manager has no cap control.
 - Connectivity signals consumed by queue policy: `frontend/src/connectivity.ts`
 - PWA shell boundary: `docs/systems/pwa.md`
 - Playback resolution: `docs/systems/playback.md`
@@ -36,7 +37,7 @@ Keep a **device-local catalog** of tracks the user chose to download, so playbac
 |---------|--------|
 | Audio binaries (and cover art files used offline) | Origin Private File System (OPFS) — required |
 | Track/album/artist records, download queue, lyrics cache for offline | IndexedDB under the downloads package |
-| Feature enable flag | Client preference storage (local) |
+| Feature enable flag and concurrent-job cap | Client preference storage (local) |
 
 OPFS is mandatory for resumable Range downloads and partials. Exact object-store and path layouts live in `db.ts` / `opfs.ts`. Catalog commit/delete run under a module mutex. A finished job finalizes as one IDB transaction (catalog row + refcounts + queue delete); art network I/O runs after. Delete drops IDB first, then unlinks OPFS.
 
@@ -44,7 +45,7 @@ OPFS is mandatory for resumable Range downloads and partials. Exact object-store
 
 1. **Optional.** Downloads start disabled until the user enables them; enabling needs OPFS support. A failed cold-start boot (`initDownloads`) must not persist the enable flag off — only explicit disable, or a failed explicit enable, writes it false.
 2. **Enqueue.** Pure enqueue / lifecycle lives in `index.ts`. User-facing `downloadTrack(s)` in `ui.ts` may confirm near-quota, then call enqueue.
-3. **Queue.** Background workers fetch the chosen **download** stream profile from the server and write OPFS; catalog records track status (including broken/orphan cases). Lossy-indexed tracks always download the original file (`source`); the download quality picker applies to lossless only. Original-file extension and MIME are defined for MP3 and AAC only.
+3. **Queue.** Background workers fetch the chosen **download** stream profile from the server and write OPFS; catalog records track status (including broken/orphan cases). The pump admits up to the persisted concurrent-job cap (default 2). Raising the cap fills empty slots immediately unless the queue is user-paused or auto-paused. Lowering it keeps the in-flight jobs with the most bytes written and returns the extras to `pending` with OPFS partials kept so they resume when a slot opens. Lossy-indexed tracks always download the original file (`source`); the download quality picker applies to lossless only. Original-file extension and MIME are defined for MP3 and AAC only.
 4. **Network policy.** Auto-pause when hard offline or server unreachable. User pause is separate from auto-pause.
 5. **Catalog projection.** In-memory projection of downloaded tracks feeds UI icons, prepare skip, and tree/list browse of local content. `trackDownloadState` `ready` / `other` means a playable local file — playback uses that join to gray and skip undownloaded queue rows when `connectivity.canUseRemote` is false (see `docs/systems/playback.md`).
 6. **Play path.** Delivery choice (local blob vs stream) is owned by playback resolution (`resolve.ts`), used by the on-demand player and by `radio/session.ts`, not by re-encoding on the client.
@@ -56,7 +57,8 @@ Durable split so `index.ts` does not become a barrel:
 
 | Concern | Module |
 |---------|--------|
-| Init, enable/disable, enqueue, pause/resume, cancel/retry/clear, manager/orphan/near-quota probes | `index.ts` |
+| Init, enable/disable, enqueue, pause/resume, cancel/retry/clear, manager/orphan/near-quota probes, concurrency setter | `index.ts` |
+| Allowed concurrency values, persist, rank-to-keep | `concurrency.ts` |
 | User download + near-quota confirm | `ui.ts` only |
 | Reactive `downloads` fields | `state.ts` |
 | Filename / MIME | `media.ts` |
@@ -67,7 +69,7 @@ Durable split so `index.ts` does not become a barrel:
 | One catalog view for browse / add-all / tree | `snapshot.ts` |
 | Play/cover URL resolution | `resolve.ts` (queue via `playIntent.ts`; radio via `radio/session.ts`) |
 | Queue row CRUD / live progress `Map` | `queue.ts` (does not import runtime) |
-| Pump + in-flight abort (`freezeActive` / `cancelItem` / `stopAll`) | `queueRuntime.ts` |
+| Pump + in-flight abort (`freezeActive` / `cancelItem` / `stopAll` / `applyConcurrency`) | `queueRuntime.ts` |
 | Auto-pause / health-work (injected `freeze`) | `queuePolicy.ts` |
 | Stream I/O | `worker.ts` (`streamUrl`) |
 
