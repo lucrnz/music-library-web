@@ -18,6 +18,7 @@ import {
   wipeDownloadsDb,
   withStores,
 } from "@/downloads/db";
+import { invalidateDownloadsCatalogView } from "@/downloads/snapshot";
 import { deleteLyricsRecord } from "@/downloads/lyricsStore";
 import { codecExt, codecMediaType } from "@/downloads/media";
 import {
@@ -122,6 +123,7 @@ export async function markTrackBroken(trackId: string) {
   rec.status = "broken";
   await putOne("tracks", rec);
   syncCatalogProjection(trackId, rec);
+  invalidateDownloadsCatalogView();
 }
 
 export async function markTrackOrphan(trackId: string) {
@@ -130,6 +132,7 @@ export async function markTrackOrphan(trackId: string) {
   if (rec.status !== "broken") rec.status = "orphan";
   await putOne("tracks", rec);
   syncCatalogProjection(trackId, rec);
+  invalidateDownloadsCatalogView();
 }
 
 function buildCatalogRecord(
@@ -308,6 +311,7 @@ export async function finalizeTrackDownload(
   );
   syncCatalogProjection(n.id, rec);
   await refreshCatalogArt(n);
+  invalidateDownloadsCatalogView();
   return rec;
 }
 
@@ -424,6 +428,7 @@ export async function deleteTrackDownload(trackId: string) {
       );
     }
   }
+  invalidateDownloadsCatalogView();
 }
 
 export async function deleteAlbumDownloads(albumId: string) {
@@ -431,6 +436,7 @@ export async function deleteAlbumDownloads(albumId: string) {
   for (const t of tracks) {
     if (t.albumId === albumId) await deleteTrackDownload(t.trackId);
   }
+  invalidateDownloadsCatalogView();
 }
 
 export async function deleteArtistDownloads(artistId: string) {
@@ -441,6 +447,7 @@ export async function deleteArtistDownloads(artistId: string) {
       (t.artistIds && t.artistIds.includes(artistId));
     if (match) await deleteTrackDownload(t.trackId);
   }
+  invalidateDownloadsCatalogView();
 }
 
 export async function wipeAllDownloads() {
@@ -448,6 +455,7 @@ export async function wipeAllDownloads() {
   await wipeOpfsDownloads();
   await wipeDownloadsDb();
   clearCatalogProjection();
+  invalidateDownloadsCatalogView();
 }
 
 export async function sumDownloadedBytes() {

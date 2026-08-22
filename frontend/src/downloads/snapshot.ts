@@ -3,11 +3,11 @@
  */
 import type { Artist } from "@/models/artist";
 import type { LibraryAlbum } from "@/components/library/loaders";
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 import {
   getLocalArtistImageUrl,
   getLocalCoverUrl,
-} from "@/downloads/catalog";
+} from "@/downloads/art";
 import {
   buildDownloadsHierarchy,
   type DownloadsHierarchy,
@@ -52,7 +52,17 @@ export function trackFromDl(rec: CatalogTrackRecord): Track {
   return fromCatalogRecord(rec);
 }
 
-export async function loadDownloadsCatalogView(): Promise<DownloadsCatalogView> {
+let cached: DownloadsCatalogView | null = null;
+let inflight: Promise<DownloadsCatalogView> | null = null;
+let cacheGen = 0;
+
+export function invalidateDownloadsCatalogView(): void {
+  cacheGen += 1;
+  cached = null;
+  inflight = null;
+}
+
+async function buildDownloadsCatalogView(): Promise<DownloadsCatalogView> {
   const hierarchy = await buildDownloadsHierarchy();
   const artUrls: Record<string, string> = {};
 
@@ -112,4 +122,19 @@ export async function loadDownloadsCatalogView(): Promise<DownloadsCatalogView> 
   });
 
   return { hierarchy, artUrls, roots };
+}
+
+export async function loadDownloadsCatalogView(): Promise<DownloadsCatalogView> {
+  if (cached) return cached;
+  if (inflight) return inflight;
+  const gen = cacheGen;
+  inflight = buildDownloadsCatalogView()
+    .then((view) => {
+      if (gen === cacheGen) cached = view;
+      return view;
+    })
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
 }
