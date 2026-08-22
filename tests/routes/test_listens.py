@@ -9,7 +9,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from musicweb.db.models import Album, Artist, Track
+from musicweb.db.models import Album, Artist, ListenEvent, Track
 from musicweb.routes.listens import (
     ListenIn,
     counted_at_not_in_future,
@@ -165,6 +165,44 @@ def test_rankings_echo_range_and_unfiltered_months(db):
 def test_pydantic_rejects_bad_play_source():
     with pytest.raises(ValidationError):
         _body(play_source="exclusive")
+
+
+def test_pydantic_rejects_bad_origin():
+    with pytest.raises(ValidationError):
+        _body(origin="exclusive")
+
+
+def test_omitted_origin_stores_queue(db):
+    with db.session() as session:
+        _seed(session)
+        assert _body().origin == "queue"
+        post_listen(_body(), db=session)
+        session.commit()
+        row = session.get(ListenEvent, "e1")
+        assert row is not None
+        assert row.origin == "queue"
+
+
+def test_radio_origin_stores_radio(db):
+    with db.session() as session:
+        _seed(session)
+        post_listen(_body(origin="radio"), db=session)
+        session.commit()
+        row = session.get(ListenEvent, "e1")
+        assert row is not None
+        assert row.origin == "radio"
+
+
+def test_rankings_mix_queue_and_radio_origins(db):
+    with db.session() as session:
+        _seed(session)
+        post_listen(_body(id="q", origin="queue"), db=session)
+        post_listen(_body(id="r", origin="radio"), db=session)
+        session.commit()
+        all_time = get_listen_rankings(range="all", db=session)
+        assert all_time["tracks"][0]["play_count"] == 2
+        assert "origin" not in all_time
+        assert "origin" not in all_time["tracks"][0]
 
 
 def test_counted_at_not_in_future_allows_past():

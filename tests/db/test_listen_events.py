@@ -103,9 +103,36 @@ def test_head_includes_listen_events(db):
         "track_id",
         "profile_tag",
         "play_source",
+        "origin",
         "counted_at",
         "month_key",
     }
+
+
+def test_origin_defaults_to_queue_and_persists_radio(db):
+    with db.session() as session:
+        _seed_library(session)
+        listens_repo.insert_listen(
+            session,
+            id="q1",
+            track_id="t1",
+            profile_tag="source",
+            play_source="streaming",
+            counted_at="2026-08-20T12:00:00+00:00",
+        )
+        listens_repo.insert_listen(
+            session,
+            id="r1",
+            track_id="t1",
+            profile_tag="source",
+            play_source="downloaded",
+            origin="radio",
+            counted_at="2026-08-20T13:00:00+00:00",
+        )
+        session.commit()
+        by_id = {row.id: row.origin for row in session.scalars(select(ListenEvent))}
+        assert by_id["q1"] == "queue"
+        assert by_id["r1"] == "radio"
 
 
 def test_insert_then_duplicate_is_lookup(db):

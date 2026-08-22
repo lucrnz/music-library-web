@@ -34,6 +34,7 @@ class ListenIn(BaseModel):
     track_id: str = Field(..., min_length=1)
     profile: str = Field(..., min_length=1)
     play_source: Literal["streaming", "downloaded"]
+    origin: Literal["queue", "radio"] = "queue"
     counted_at: str = Field(..., min_length=1)
 
 
@@ -89,6 +90,7 @@ def post_listen(payload: ListenIn, db: Session = Depends(get_db)) -> Response:
             track_id=payload.track_id,
             profile_tag=payload.profile,
             play_source=payload.play_source,
+            origin=payload.origin,
             counted_at=payload.counted_at,
         )
     except (

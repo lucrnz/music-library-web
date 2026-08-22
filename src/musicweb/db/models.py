@@ -172,7 +172,7 @@ class PlaylistTrack(Base):
 
 
 class ListenEvent(Base):
-    """One counted household listen (track × profile × play source)."""
+    """One counted household listen (track × profile × play source × origin)."""
 
     __tablename__ = "listen_events"
     __table_args__ = (
@@ -188,6 +188,9 @@ class ListenEvent(Base):
     )
     profile_tag: Mapped[str] = mapped_column(String, nullable=False)
     play_source: Mapped[str] = mapped_column(String, nullable=False)
+    origin: Mapped[str] = mapped_column(
+        String, nullable=False, default="queue", server_default="queue"
+    )
     counted_at: Mapped[str] = mapped_column(String, nullable=False, index=True)
     month_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
 

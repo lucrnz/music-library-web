@@ -53,6 +53,7 @@ def insert_listen(
     profile_tag: str,
     play_source: str,
     counted_at: str,
+    origin: str = "queue",
 ) -> Literal["inserted", "duplicate"]:
     if session.get(ListenEvent, id) is not None:
         return "duplicate"
@@ -65,6 +66,7 @@ def insert_listen(
             track_id=track_id,
             profile_tag=profile_tag,
             play_source=play_source,
+            origin=origin,
             counted_at=stored,
             month_key=month_key_for(stored, _host_tz()),
         )
