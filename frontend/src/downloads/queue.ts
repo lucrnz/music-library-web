@@ -1,6 +1,6 @@
 /**
- * Download queue: state, IDB store, progress, events, runtime.
- * Policy (pause/network/health) lives in queuePolicy.js; pump in worker.js.
+ * Download queue: state, IDB store, progress, events.
+ * Policy lives in queuePolicy.ts; pump + abort in queueRuntime.ts.
  */
 
 import { canReachServer, isHardOffline } from "@/connectivity";
@@ -22,6 +22,7 @@ import {
   removePartial,
 } from "@/downloads/opfs";
 import { getTrackRecord } from "@/downloads/catalog";
+import { abortJob, activeIds } from "@/downloads/queueRuntime";
 
 // ---------------------------------------------------------------------------
 // Transitions
@@ -100,31 +101,6 @@ export function resolveAbortKind(
   return item?.state === QueueState.CANCELED
     ? QueueState.CANCELED
     : QueueState.PAUSED;
-}
-
-// ---------------------------------------------------------------------------
-// Runtime (in-flight jobs)
-// ---------------------------------------------------------------------------
-
-export const activeIds = new Set<number>();
-
-export const controllers = new Map<number, AbortController>();
-
-export function abortJob(id: number, reason = "pause") {
-  const c = controllers.get(id);
-  if (c) {
-    try {
-      c.abort(reason);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-export function abortAllJobs(reason = "pause") {
-  for (const id of [...controllers.keys()]) {
-    abortJob(id, reason);
-  }
 }
 
 // ---------------------------------------------------------------------------

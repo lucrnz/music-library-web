@@ -37,7 +37,6 @@ export {
   getLocalAudioUrlForRecord,
   markTrackBroken,
   markTrackOrphan,
-  commitTrackDownload,
   finalizeTrackDownload,
   deleteTrackDownload,
   deleteAlbumDownloads,

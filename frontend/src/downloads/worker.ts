@@ -1,5 +1,5 @@
 /**
- * Download pump + job runner: classify once, apply once.
+ * Download job runner: classify once, apply once.
  */
 
 import { fetchTrack, streamUrl } from "@/api";
@@ -22,9 +22,7 @@ import {
 } from "@/downloads/opfs";
 import { finalizeTrackDownload } from "@/downloads/catalog";
 import {
-  activeIds,
   clearLiveProgress,
-  controllers,
   discardPartialForItem,
   emitQueueChange,
   flushProgressToIdb,
@@ -402,19 +400,4 @@ export async function executeDownloadJob(
       },
     };
   }
-}
-
-export function stopAllWorkers() {
-  for (const id of [...controllers.keys()]) {
-    const c = controllers.get(id);
-    if (c) {
-      try {
-        c.abort("clear");
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  controllers.clear();
-  activeIds.clear();
 }

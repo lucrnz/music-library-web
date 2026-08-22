@@ -1,5 +1,5 @@
 /**
- * Download pump + in-flight abort. Queue.ts is IDB CRUD.
+ * Download pump + in-flight abort. queue.ts is IDB CRUD.
  */
 import { deleteOne, putOne } from "@/downloads/db";
 import {
@@ -7,8 +7,6 @@ import {
   initPolicy,
 } from "@/downloads/queuePolicy";
 import {
-  activeIds,
-  controllers,
   emitQueueChange,
   listQueue,
   markActive,
@@ -18,6 +16,29 @@ import {
 import { applyJobOutcome, executeDownloadJob } from "@/downloads/worker";
 
 const MAX_CONCURRENT = 2;
+
+export const activeIds = new Set<number>();
+
+export const controllers = new Map<number, AbortController>();
+
+export function abortJob(id: number, reason = "pause") {
+  const c = controllers.get(id);
+  if (c) {
+    try {
+      c.abort(reason);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+export function stopAll() {
+  for (const id of [...controllers.keys()]) {
+    abortJob(id, "clear");
+  }
+  controllers.clear();
+  activeIds.clear();
+}
 
 let pumpScheduled = false;
 

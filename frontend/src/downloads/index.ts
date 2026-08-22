@@ -3,11 +3,11 @@
  *
  * Import map (see docs/frontend/conventions.md):
  *   - Actions / lifecycle: this module
- *   - User download confirm: `downloads/ui.js`
- *   - Reactive fields: `downloads/state.js`
- *   - Catalog / status: `downloads/catalog.js`
- *   - Play/cover resolve: `downloads/resolve.js`
- *   - Hierarchy / formatters: `hierarchy.js` / `storageInfo.js`
+ *   - User download confirm: `downloads/ui.ts`
+ *   - Reactive fields: `downloads/state.ts`
+ *   - Catalog / status: `downloads/catalog.ts`
+ *   - Play/cover resolve: `downloads/resolve.ts`
+ *   - Hierarchy / formatters: `hierarchy.ts` / `storageInfo.ts`
  */
 
 import { fetchTracksMeta } from "@/api";
@@ -26,7 +26,6 @@ import {
   deleteArtistDownloads,
   deleteTrackDownload,
   listTrackRecords,
-  markTrackBroken,
   markTrackOrphan,
   setCatalogProjectionMap,
   sumDownloadedBytes,
@@ -56,7 +55,7 @@ import {
   setDownloadsEnabled,
 } from "@/downloads/queuePolicy";
 import { downloads, syncQueueSummary } from "@/downloads/state";
-import { initQueueRuntime } from "@/downloads/queueRuntime";
+import { initQueueRuntime, stopAll } from "@/downloads/queueRuntime";
 import {
   formatBytes,
   formatDownloadsStorageLine,
@@ -65,8 +64,6 @@ import {
   isNearQuota,
   requestPersistentStorage,
 } from "@/downloads/storageInfo";
-import { stopAllWorkers } from "@/downloads/worker";
-
 const DOWNLOADS_STORAGE_KEY = "musicweb.downloadsEnabled";
 
 let queueListenerBound = false;
@@ -165,10 +162,6 @@ export function bindConnectivityListeners() {
     }
   });
   syncControlFlags();
-}
-
-export async function markDownloadBroken(trackId: string) {
-  await markTrackBroken(trackId);
 }
 
 /**
@@ -301,7 +294,7 @@ async function wipeCatalogStorage() {
  * @param {{ wipe: boolean }} opts
  */
 export async function disableDownloads({ wipe }: { wipe: boolean }) {
-  await clearAllQueue(() => stopAllWorkers());
+  await clearAllQueue(() => stopAll());
   await setDownloadsEnabled(false);
   if (wipe) {
     await wipeCatalogStorage();

@@ -296,20 +296,6 @@ async function refreshCatalogArt(n: Track) {
   });
 }
 
-export async function commitTrackDownload(
-  track: Track,
-  codec: string,
-  audioMeta: CatalogTrackAudioMeta,
-) {
-  const n = fromApiTrack(track);
-  const rec = await withCatalogLock(() =>
-    persistCatalogTrack(n, codec, audioMeta),
-  );
-  syncCatalogProjection(n.id, rec);
-  await refreshCatalogArt(n);
-  return rec;
-}
-
 export async function finalizeTrackDownload(
   track: Track,
   codec: string,
