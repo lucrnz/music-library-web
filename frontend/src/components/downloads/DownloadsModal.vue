@@ -25,7 +25,7 @@ import {
   loadDownloadsTree,
 } from "@/components/tree/sources/downloadsSource";
 import TreeView from "@/components/tree/TreeView.vue";
-import { createTreeSession } from "@/components/tree/treeSession";
+import { createTreeSession, primePackedTree } from "@/components/tree/treeSession";
 import type { TreeNode } from "@/components/tree/sources/artistsSource";
 
 interface QueueItem {
@@ -90,12 +90,7 @@ const roots = ref<TreeNode[]>([]);
       try {
         const packed = await loadDownloadsTree();
         session.collapseAll();
-        for (const ar of packed.roots) {
-          session.primeChildren(ar.key, ar.children || []);
-          for (const al of ar.children || []) {
-            session.primeChildren(al.key, al.children || []);
-          }
-        }
+        primePackedTree(session, packed.roots);
         roots.value = packed.roots;
       } catch (err: unknown) {
         console.error(err);
@@ -229,22 +224,22 @@ const roots = ref<TreeNode[]>([]);
       );
     }
 
-    function dataField(data: unknown, key: string): string {
-      if (!data || typeof data !== "object" || !(key in data)) return "";
-      const v = (data as Record<string, unknown>)[key];
-      return v == null ? "" : String(v);
-    }
+    type DownloadLeaf = {
+      id?: string;
+      track?: number | null;
+      codec?: string;
+      bytes?: number | null;
+      status?: string;
+    };
 
-    function dataNum(data: unknown, key: string): number | null {
-      if (!data || typeof data !== "object" || !(key in data)) return null;
-      const v = (data as Record<string, unknown>)[key];
-      if (v == null) return null;
-      const n = Number(v);
-      return Number.isFinite(n) ? n : null;
+    function leaf(node: TreeNode): DownloadLeaf {
+      return node.data && typeof node.data === "object"
+        ? (node.data as DownloadLeaf)
+        : {};
     }
 
     function onGroupDelete(node: TreeNode) {
-      const id = dataField(node.data, "id");
+      const id = leaf(node).id || "";
       if (node.kind === "artist") {
         onDeleteArtist(id, node.title);
       } else if (node.kind === "album") {
@@ -254,21 +249,21 @@ const roots = ref<TreeNode[]>([]);
 
     function onLeafDelete(node: TreeNode) {
       if (node.kind === "track") {
-        onDeleteTrack(dataField(node.data, "id"));
+        onDeleteTrack(leaf(node).id || "");
       }
     }
 
     function leafTrackNum(node: TreeNode) {
-      return node.downloadMeta?.trackNum ?? dataNum(node.data, "track");
+      return leaf(node).track ?? null;
     }
     function leafCodec(node: TreeNode) {
-      return node.downloadMeta?.codec || dataField(node.data, "codec");
+      return leaf(node).codec || "";
     }
     function leafBytes(node: TreeNode) {
-      return node.downloadMeta?.bytes ?? dataNum(node.data, "bytes");
+      return leaf(node).bytes ?? null;
     }
     function leafStatus(node: TreeNode) {
-      return node.downloadMeta?.status || dataField(node.data, "status");
+      return leaf(node).status || "";
     }
 </script>
 

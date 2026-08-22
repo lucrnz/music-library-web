@@ -2,7 +2,7 @@
  * Download pump + job runner: classify once, apply once.
  */
 
-import { fetchTrack } from "@/api";
+import { fetchTrack, streamUrl } from "@/api";
 import {
   classifyError,
   isItemFailHttpStatus,
@@ -28,8 +28,6 @@ import {
   discardPartialForItem,
   emitQueueChange,
   flushProgressToIdb,
-  listQueue,
-  markActive,
   markFailed,
   markPaused,
   markPending,
@@ -38,14 +36,8 @@ import {
   updateLiveProgress,
   type QueueRecord,
 } from "@/downloads/queue";
-import { fromApiTrack, type Track } from "@/models/track";
-import {
-  canPump,
-  initPolicy,
-  onJobNetworkFailure,
-} from "@/downloads/queuePolicy";
-
-const MAX_CONCURRENT = 2;
+import type { Track } from "@/models/track";
+import { canPump, onJobNetworkFailure } from "@/downloads/queuePolicy";
 
 function errorNumericField(err: unknown, key: string): number | undefined {
   if (!err || typeof err !== "object") return undefined;
@@ -56,39 +48,6 @@ function errorNumericField(err: unknown, key: string): number | undefined {
 function errorFlag(err: unknown, key: string): boolean {
   if (!err || typeof err !== "object") return false;
   return Boolean(Reflect.get(err, key));
-}
-
-let pumpScheduled = false;
-
-export function schedulePump() {
-  if (pumpScheduled) return;
-  pumpScheduled = true;
-  queueMicrotask(() => {
-    pumpScheduled = false;
-    pump().catch(console.error);
-  });
-}
-
-// Wire policy → pump (avoids queue importing worker at top level).
-initPolicy({ schedulePump });
-
-async function pump() {
-  if (!canPump()) return;
-  while (activeIds.size < MAX_CONCURRENT && canPump()) {
-    const items = await listQueue();
-    const next = items.find((i) => i.state === QueueState.PENDING && i.id != null);
-    if (!next || next.id == null) break;
-    const nextId = next.id;
-    activeIds.add(nextId);
-    markActive(next);
-    await putOne("queue", next);
-    emitQueueChange();
-    runJob(next).finally(() => {
-      activeIds.delete(nextId);
-      controllers.delete(nextId);
-      schedulePump();
-    });
-  }
 }
 
 export type JobOutcomeKind =
@@ -243,7 +202,7 @@ const outcomeHandlers: Record<JobOutcomeKind, OutcomeHandler> = {
  * @param {JobOutcome} outcome
  * @param {JobCtx} [ctx]
  */
-async function applyJobOutcome(
+export async function applyJobOutcome(
   id: number,
   outcome: JobOutcome,
   ctx: JobCtx = {},
@@ -278,41 +237,16 @@ async function applyJobOutcome(
  * @param {object} item
  * @returns {Promise<void>}
  */
-async function runJob(item: QueueRecord): Promise<void> {
-  const id = item.id;
-  if (id == null) return;
-  const ac = new AbortController();
-  controllers.set(id, ac);
+export async function executeDownloadJob(
+  item: QueueRecord,
+  ac: AbortController,
+): Promise<{ outcome: JobOutcome; ctx?: JobCtx }> {
   const ext = codecExt(item.codec, item.snapshot?.sourceCodec);
   const fileName = audioFileName(item.trackId, item.codec, ext);
   const dirParts = audioDirParts();
   const fileCtx = { dirParts, fileName };
-
-  try {
-    const result = await executeDownloadJob(item, ac, fileCtx);
-    await applyJobOutcome(id, result.outcome, result.ctx || fileCtx);
-  } finally {
-    controllers.delete(id);
-  }
-}
-
-/**
- * Pure-ish job body: returns one classified outcome (no IDB side effects
- * except progress writes during stream).
- * @param {object} item
- * @param {AbortController} ac
- * @param {JobCtx} fileCtx
- * @returns {Promise<{ outcome: JobOutcome, ctx?: JobCtx }>}
- */
-async function executeDownloadJob(
-  item: QueueRecord,
-  ac: AbortController,
-  fileCtx: { dirParts: string[]; fileName: string },
-): Promise<{ outcome: JobOutcome; ctx?: JobCtx }> {
-  const { dirParts, fileName } = fileCtx;
   const id = item.id;
   if (id == null) return { outcome: { kind: "canceled" } };
-  const ext = codecExt(item.codec, item.snapshot?.sourceCodec);
 
   let current = await getOne<QueueRecord>("queue", id);
   if (!current || current.state === QueueState.CANCELED) {
@@ -322,7 +256,7 @@ async function executeDownloadJob(
     return { outcome: { kind: "paused" } };
   }
 
-  let track = fromApiTrack(current.snapshot);
+  let track = current.snapshot;
   try {
     track = await fetchTrack(current.trackId);
   } catch (err: unknown) {
@@ -349,10 +283,11 @@ async function executeDownloadJob(
   try {
     const headers: Record<string, string> = {};
     if (offset > 0) headers.Range = `bytes=${offset}-`;
-    res = await fetch(
-      `/api/stream?id=${encodeURIComponent(current.trackId)}&codec=${encodeURIComponent(current.codec)}`,
-      { headers, signal: ac.signal }
-    );
+    const url = streamUrl({ id: current.trackId }, current.codec);
+    if (!url) {
+      return { outcome: { kind: "failed", error: "No stream URL" } };
+    }
+    res = await fetch(url, { headers, signal: ac.signal });
   } catch (err: unknown) {
     if (ac.signal.aborted) {
       const cur = await getOne<QueueRecord>("queue", id);

@@ -5,7 +5,7 @@
 
 import { canReachServer, isHardOffline } from "@/connectivity";
 import { deliveryCodec } from "@/lossyKind";
-import { normalizeTrack, type Track } from "@/models/track";
+import { fromApiTrack, type Track } from "@/models/track";
 import { codecExt } from "@/downloads/media";
 import {
   clearStore,
@@ -42,35 +42,13 @@ export const QueueState = Object.freeze({
   CANCELED: "canceled",
 } as const);
 
-/** Snapshot of the track stored on a queue row (enough to commit if refresh fails). */
-export interface QueueTrackSnapshot {
-  id: string;
-  title: string;
-  artist: string;
-  album: string;
-  albumId: string | null;
-  artistId: string | null;
-  albumArtistId: string | null;
-  albumArtist: string;
-  track: number | null;
-  disc: number | null;
-  duration: number | null;
-  year: number | null;
-  isMissing: boolean;
-  isLossy: boolean;
-  sourceCodec: string | null;
-  bitrateKbps: number | null;
-  sampleRateHz: number | null;
-  bitrateMode: string | null;
-}
-
 /** IDB "queue" row. `id` is assigned by autoIncrement after insert. */
 export interface QueueRecord {
   id?: number;
   trackCodec: string;
   trackId: string;
   codec: string;
-  snapshot: QueueTrackSnapshot;
+  snapshot: Track;
   state: QueueStateName;
   error: string | null;
   loaded: number;
@@ -355,7 +333,7 @@ async function enqueueTrackCore(
   codec: string,
   ctx: { userPaused: boolean },
 ): Promise<QueueEnqueueResult> {
-  const n = normalizeTrack(track);
+  const n = fromApiTrack(track);
   if (n.isMissing) throw new Error("Track file is missing on server");
   const delivered = deliveryCodec(n, codec);
   if (delivered) codec = delivered;
@@ -391,26 +369,7 @@ async function enqueueTrackCore(
     trackCodec: key,
     trackId: n.id,
     codec,
-    snapshot: {
-      id: n.id,
-      title: n.title,
-      artist: n.artist,
-      album: n.album,
-      albumId: n.albumId,
-      artistId: n.artistId,
-      albumArtistId: n.albumArtistId,
-      albumArtist: n.albumArtist,
-      track: n.track,
-      disc: n.disc,
-      duration: n.duration,
-      year: n.year,
-      isMissing: false,
-      isLossy: !!n.isLossy,
-      sourceCodec: n.sourceCodec || null,
-      bitrateKbps: n.bitrateKbps ?? null,
-      sampleRateHz: n.sampleRateHz ?? null,
-      bitrateMode: n.bitrateMode ?? null,
-    },
+    snapshot: n,
     state: QueueState.PENDING,
     error: null,
     loaded: 0,
@@ -442,7 +401,7 @@ export async function enqueueMany(
   const results: QueueEnqueueResult[] = [];
   for (const t of tracks) {
     try {
-      const n = normalizeTrack(t);
+      const n = fromApiTrack(t);
       if (n.isMissing) continue;
       results.push(await enqueueTrackCore(n, codec, ctx));
     } catch {

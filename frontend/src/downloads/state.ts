@@ -2,7 +2,7 @@
  * Single reactive surface for downloads UI.
  * Mutations live in index.js; components read this object.
  */
-import type { QueueRecord } from "@/downloads/queue";
+import { QueueState, type QueueRecord } from "@/downloads/queue";
 import { reactive } from "vue";
 
 export type AutoPausedReason = "offline" | "server";
@@ -69,3 +69,43 @@ export const downloads = reactive<DownloadsState>({
     knownTotal: false,
   },
 });
+
+export function syncQueueSummary(items: QueueRecord[] = downloads.queue) {
+  let active = 0;
+  let pending = 0;
+  let paused = 0;
+  let failed = 0;
+  let loadedBytes = 0;
+  let totalBytes = 0;
+  let knownTotal = true;
+  let progressItems = 0;
+
+  for (const q of items) {
+    if (q.state === QueueState.ACTIVE) active++;
+    else if (q.state === QueueState.PENDING) pending++;
+    else if (q.state === QueueState.PAUSED) paused++;
+    else if (q.state === QueueState.FAILED) failed++;
+
+    if (
+      q.state === QueueState.ACTIVE ||
+      q.state === QueueState.PENDING ||
+      q.state === QueueState.PAUSED
+    ) {
+      progressItems++;
+      loadedBytes += q.loaded || 0;
+      if (q.total && q.total > 0) totalBytes += q.total;
+      else knownTotal = false;
+    }
+  }
+
+  downloads.queueSummary = {
+    active,
+    pending,
+    paused,
+    failed,
+    total: items.length,
+    loadedBytes,
+    totalBytes,
+    knownTotal: knownTotal && progressItems > 0 && totalBytes > 0,
+  };
+}

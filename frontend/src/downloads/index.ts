@@ -44,7 +44,6 @@ import {
   listQueue,
   onProgressChange,
   onQueueChange,
-  QueueState,
   retryQueueItem as queueRetryQueueItem,
 } from "@/downloads/queue";
 import {
@@ -56,7 +55,8 @@ import {
   resumeQueue,
   setDownloadsEnabled,
 } from "@/downloads/queuePolicy";
-import { downloads } from "@/downloads/state";
+import { downloads, syncQueueSummary } from "@/downloads/state";
+import { initQueueRuntime } from "@/downloads/queueRuntime";
 import {
   formatBytes,
   formatDownloadsStorageLine,
@@ -106,45 +106,7 @@ function overlayQueue(items: QueueRecord[]): QueueRecord[] {
   });
 }
 
-function computeQueueSummary(items: QueueRecord[]) {
-  let active = 0;
-  let pending = 0;
-  let paused = 0;
-  let failed = 0;
-  let loadedBytes = 0;
-  let totalBytes = 0;
-  let knownTotal = true;
-  let progressItems = 0;
 
-  for (const q of items) {
-    if (q.state === QueueState.ACTIVE) active++;
-    else if (q.state === QueueState.PENDING) pending++;
-    else if (q.state === QueueState.PAUSED) paused++;
-    else if (q.state === QueueState.FAILED) failed++;
-
-    if (
-      q.state === QueueState.ACTIVE ||
-      q.state === QueueState.PENDING ||
-      q.state === QueueState.PAUSED
-    ) {
-      progressItems++;
-      loadedBytes += q.loaded || 0;
-      if (q.total && q.total > 0) totalBytes += q.total;
-      else knownTotal = false;
-    }
-  }
-
-  downloads.queueSummary = {
-    active,
-    pending,
-    paused,
-    failed,
-    total: items.length,
-    loadedBytes,
-    totalBytes,
-    knownTotal: knownTotal && progressItems > 0 && totalBytes > 0,
-  };
-}
 
 /**
  * Reload catalog-only projection from IDB (boot / enable).
@@ -183,7 +145,7 @@ function bindQueueListener() {
       const row = downloads.queue[idx];
       downloads.queue[idx] = { ...row, loaded, total: total ?? row.total };
       downloads.queue = [...downloads.queue];
-      computeQueueSummary(downloads.queue);
+      syncQueueSummary(downloads.queue);
     }
     syncControlFlags();
   });
@@ -252,7 +214,7 @@ export async function refreshQueue(opts: { includeStorage?: boolean } = {}) {
   } catch {
     downloads.queue = [];
   }
-  computeQueueSummary(downloads.queue);
+  syncQueueSummary(downloads.queue);
   syncControlFlags();
   if (opts.includeStorage) {
     await refreshStorageInfo();
@@ -268,6 +230,7 @@ async function bootDownloadsRuntime() {
   await openDownloadsDb();
   downloads.persistent = await requestPersistentStorage();
   await setDownloadsEnabled(true);
+  initQueueRuntime();
   await resumeQueue();
   bindQueueListener();
   await hydrateCatalogProjection();

@@ -4,7 +4,7 @@
 
 import {
   artistIdsOf,
-  normalizeTrack,
+  fromApiTrack,
   primaryArtistIdOf,
   primaryArtistNameOf,
   type CatalogTrackRecord,
@@ -301,7 +301,7 @@ export async function commitTrackDownload(
   codec: string,
   audioMeta: CatalogTrackAudioMeta,
 ) {
-  const n = normalizeTrack(track);
+  const n = fromApiTrack(track);
   const rec = await withCatalogLock(() =>
     persistCatalogTrack(n, codec, audioMeta),
   );
@@ -316,7 +316,7 @@ export async function finalizeTrackDownload(
   audioMeta: CatalogTrackAudioMeta,
   queueId: number,
 ) {
-  const n = normalizeTrack(track);
+  const n = fromApiTrack(track);
   const rec = await withCatalogLock(() =>
     persistCatalogTrack(n, codec, audioMeta, queueId),
   );

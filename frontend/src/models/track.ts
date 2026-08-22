@@ -58,11 +58,6 @@ export interface CatalogTrackRecord {
   bitrateKbps?: number | null;
   sampleRateHz?: number | null;
   bitrateMode?: string | null;
-  id?: string;
-  artistId?: string;
-  albumArtistId?: string;
-  albumArtist?: string;
-  track?: number | null;
 }
 
 function asRecord(raw: unknown): Record<string, unknown> | null {
@@ -145,24 +140,24 @@ export function fromCatalogRecord(rec: CatalogTrackRecord | Record<string, unkno
   }
   const artistIds = Array.isArray(r.artistIds) ? r.artistIds : [];
   return fromApiTrack({
-    id: r.trackId || r.id,
+    id: r.trackId,
     title: r.title,
     artist: r.artist,
     album: r.album,
     albumId: r.albumId ?? null,
-    artistId: artistIds[0] || r.primaryArtistId || r.artistId || null,
-    albumArtistId: r.primaryArtistId || r.albumArtistId || null,
-    albumArtist: r.primaryArtistName || r.albumArtist || r.artist || "",
-    track: r.trackNum ?? r.track ?? null,
+    artistId: artistIds[0] || r.primaryArtistId || null,
+    albumArtistId: r.primaryArtistId || null,
+    albumArtist: r.primaryArtistName || r.artist || "",
+    track: r.trackNum ?? null,
     disc: r.disc ?? null,
     year: r.year ?? null,
     duration: r.duration ?? null,
     isMissing: false,
-    isLossy: r.isLossy ?? r.is_lossy,
-    sourceCodec: r.sourceCodec ?? r.source_codec ?? null,
-    bitrateKbps: r.bitrateKbps ?? r.bitrate_kbps,
-    sampleRateHz: r.sampleRateHz ?? r.sample_rate_hz,
-    bitrateMode: r.bitrateMode ?? r.bitrate_mode,
+    isLossy: r.isLossy,
+    sourceCodec: r.sourceCodec ?? null,
+    bitrateKbps: r.bitrateKbps,
+    sampleRateHz: r.sampleRateHz,
+    bitrateMode: r.bitrateMode,
   });
 }
 
@@ -221,11 +216,6 @@ export function mapTracks(list: unknown): Track[] {
     if (t) out.push(t);
   }
   return out;
-}
-
-/** Alias used by downloads enqueue/commit — same as fromApiTrack. */
-export function normalizeTrack(track: unknown): Track {
-  return fromApiTrack(track);
 }
 
 /** Artist ids to pin art for (album artist + track artist, unique). */
