@@ -517,3 +517,15 @@ Radio now shares `NowPlayingView` with on-demand, hides `#player` on `/radio`, a
 ```bash
 git show 90f80f00c5ec53eafa3e784daac8aaf03ee32a1f
 ```
+
+## 2026-08-20-m5ymnatw-household-radio-done
+
+**Title:** Household 24/7 radio
+
+**Commit:** `7b1486150434bb8d8ca3f80ccd83dc5da130e58b`
+
+Added a household-wide encode-and-seek radio station that ticks from process start (simulation when no tuners) and a Radio tab that Tunes in to the official clock. Open the delete commit for the picker/banlist/ffprobe path, SQLite catch-up, tuner WebSocket `tune_in` / `tune_out`, and the radio-owned audio element.
+
+```bash
+git show 7b1486150434bb8d8ca3f80ccd83dc5da130e58b
+```
