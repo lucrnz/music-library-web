@@ -40,10 +40,7 @@ import {
 import EntityListHost from "@/components/library/EntityListHost.vue";
 import LibraryChrome from "@/components/library/LibraryChrome.vue";
 import StatsView from "@/components/stats/StatsView.vue";
-import {
-  addSelected as addSelectedAction,
-  downloadCurrentAlbum as downloadAlbumAction,
-} from "@/components/library/libraryActions";
+import { addSelected as addSelectedAction } from "@/components/library/libraryActions";
 import {
   type LibraryAlbum,
   type LibraryBody,
@@ -170,15 +167,7 @@ function applyStatsChrome() {
 }
 
 function applyTreeChrome() {
-  const m = mode.value;
-  title.value =
-    m === "downloads"
-      ? "Downloads"
-      : m === "artists"
-        ? "Artists"
-        : m === "albums"
-          ? "Albums"
-          : "Folders";
+  title.value = source.value.treeTitle(mode.value);
   showBack.value = false;
   backArtistId.value = null;
   body.value = INITIAL_BODY;
@@ -333,9 +322,10 @@ async function addSelected() {
   await addSelectedAction();
 }
 
-async function downloadCurrentAlbum() {
-  if (body.value.kind !== "tracks") return;
-  await downloadAlbumAction(body.value.tracks);
+async function downloadAlbum() {
+  const id = albumId.value;
+  if (!id || !source.value.albumDownload) return;
+  await source.value.albumDownload({ id });
 }
 
 function onSearchInput() {
@@ -496,7 +486,7 @@ watch(
           type="button"
           class="pill"
           title="Download album"
-          @click="downloadCurrentAlbum"
+          @click="downloadAlbum"
         ><Icon name="download" /><span>Download</span></button>
       </template>
 

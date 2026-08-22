@@ -49,6 +49,6 @@ describe("downloadsBrowse.loadRoots", () => {
     const packed = await downloadsBrowse.loadRoots(loc);
     expect(packed.roots).toEqual([]);
     expect(packed.artUrls).toEqual({});
-    expect(packed.hierarchy).toBeUndefined();
+    expect("hierarchy" in packed).toBe(false);
   });
 });

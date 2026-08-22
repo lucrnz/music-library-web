@@ -181,6 +181,24 @@ export const onlineBrowse: BrowseSource = {
     return opts.mode === "artists" && !opts.isSearch;
   },
 
+  treeTitle(mode) {
+    if (mode === "artists") return "Artists";
+    if (mode === "albums") return "Albums";
+    return "Folders";
+  },
+
+  emptyTreeMessage() {
+    return "Nothing here yet";
+  },
+
+  resolveFocusPath(path) {
+    return path;
+  },
+
+  treeReloadKeys() {
+    return [];
+  },
+
   artistAddAll(id) {
     return addAllForArtist(id);
   },

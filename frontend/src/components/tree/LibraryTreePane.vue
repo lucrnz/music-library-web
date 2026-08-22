@@ -32,10 +32,6 @@ import {
   treeNodePath,
   type TreeNode,
 } from "@/components/tree/sources/artistsSource";
-import {
-  resolveDownloadsFocusPath,
-  type DownloadsHierarchy,
-} from "@/components/tree/sources/downloadsSource";
 import TreeView from "@/components/tree/TreeView.vue";
 import type { TreeViewExpose } from "@/components/tree/TreeView.vue";
 import {
@@ -43,7 +39,7 @@ import {
   getPendingFocusPath,
   treeNavState,
 } from "@/components/tree/treeNavigation";
-import { getTreeSession } from "@/components/tree/treeSession";
+import { getTreeSession, primePackedTree } from "@/components/tree/treeSession";
 import type { FileRowModel } from "@/components/library/loaders";
 
 const props = defineProps<{
@@ -172,18 +168,12 @@ const error = ref("");
 const treeRef = ref<TreeViewExpose | null>(null);
 const artUrls = ref<Record<string, string>>({});
 let loadSeq = 0;
-let downloadsHierarchy: DownloadsHierarchy | null = null;
 
 const session = computed(() => getTreeSession(props.mode));
 
-const emptyMessage = computed(() => {
-  if (props.mode === "downloads") {
-    return downloads.enabled
-      ? "No downloads yet"
-      : "Enable downloads in Settings";
-  }
-  return "Nothing here yet";
-});
+const emptyMessage = computed(() =>
+  source.value.emptyTreeMessage({ downloadsEnabled: downloads.enabled }),
+);
 
 const showTrackDownload = computed(() => source.value.showTrackDownload);
 
@@ -208,9 +198,7 @@ function nodeIndex() {
 async function applyFocusPath() {
   let path = getPendingFocusPath();
   if (!path?.length) return;
-  if (props.mode === "downloads" && downloadsHierarchy) {
-    path = resolveDownloadsFocusPath(path, downloadsHierarchy);
-  }
+  path = source.value.resolveFocusPath(path);
   clearPendingFocusPath();
   await nextTick();
   const map = nodeIndex();
@@ -236,14 +224,8 @@ async function loadRoots() {
     });
     if (seq !== loadSeq) return;
     artUrls.value = packed.artUrls || {};
-    downloadsHierarchy = packed.hierarchy ?? null;
-    if (packed.hierarchy) {
-      for (const ar of packed.roots) {
-        session.value.primeChildren(ar.key, ar.children || []);
-        for (const al of ar.children || []) {
-          session.value.primeChildren(al.key, al.children || []);
-        }
-      }
+    if (packed.roots.some((n) => n.children?.length)) {
+      primePackedTree(session.value, packed.roots);
     }
     roots.value = packed.roots;
     await applyFocusPath();
@@ -305,9 +287,9 @@ watch(
 );
 
 watch(
-  () => [downloads.enabled, downloads.trackCount],
-  () => {
-    if (props.mode === "downloads") loadRoots();
+  () => source.value.treeReloadKeys().join("\0"),
+  (key) => {
+    if (key) loadRoots();
   },
 );
 

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const buildDownloadsHierarchy = vi.hoisted(() => vi.fn());
+const loadDownloadsCatalogView = vi.hoisted(() => vi.fn());
 const addToQueue = vi.hoisted(() => vi.fn());
 
-vi.mock("@/downloads/hierarchy", () => ({ buildDownloadsHierarchy }));
+vi.mock("@/downloads/snapshot", () => ({ loadDownloadsCatalogView }));
 vi.mock("@/stores/playlist", () => ({ addToQueue }));
 
 import {
@@ -27,10 +27,13 @@ const t2: CatalogTrackRecord = {
 
 describe("addAllDownloaded*", () => {
   beforeEach(() => {
-    buildDownloadsHierarchy.mockReset();
+    loadDownloadsCatalogView.mockReset();
     addToQueue.mockReset();
     addToQueue.mockResolvedValue(undefined);
-    buildDownloadsHierarchy.mockResolvedValue({
+    loadDownloadsCatalogView.mockResolvedValue({
+      artUrls: {},
+      roots: [],
+      hierarchy: {
       artists: [
         {
           artistId: "art-1",
@@ -42,12 +45,13 @@ describe("addAllDownloaded*", () => {
           ],
         },
       ],
+      },
     });
   });
 
   it("queues one album from the catalog", async () => {
     await addAllDownloadedAlbum("alb-2");
-    expect(buildDownloadsHierarchy).toHaveBeenCalled();
+    expect(loadDownloadsCatalogView).toHaveBeenCalled();
     expect(addToQueue).toHaveBeenCalledOnce();
     const queued = addToQueue.mock.calls[0][0];
     expect(queued.map((t: { id: string }) => t.id)).toEqual(["t2"]);

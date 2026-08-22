@@ -93,22 +93,16 @@ export function emptyPage(opts: Partial<LibraryChrome> & { message?: string } = 
   return page({ title, showBack }, { kind: "empty", message });
 }
 
-export async function loadFolders(folderPath: string): Promise<LibraryPage> {
-  const title = folderPath
-    ? folderPath.split("/").filter(Boolean).pop() || "Folders"
-    : "Folders";
-  const chrome = { title, showBack: Boolean(folderPath) };
+export async function browseFolder(folderPath: string): Promise<{
+  dirs: BrowseDir[];
+  files: FileRowModel[];
+}> {
   const data = await apiGet<BrowseResponse>(
-    `/api/browse?path=${encodeURIComponent(folderPath)}`
+    `/api/browse?path=${encodeURIComponent(folderPath || "")}`,
   );
   const dirs = data.dirs || [];
   const rawFiles = data.files || [];
 
-  if (!dirs.length && !rawFiles.length) {
-    return page(chrome, { kind: "empty", message: "This folder is empty" });
-  }
-
-  /** @type {Map<string, import("../../models/track.js").Track>} */
   let byId = new Map<string, Track>();
   const ids = rawFiles.map((f) => f.id).filter((id): id is string => !!id);
   if (ids.length) {
@@ -120,7 +114,6 @@ export async function loadFolders(folderPath: string): Promise<LibraryPage> {
     }
   }
 
-  /** @type {FileRowModel[]} */
   const files = rawFiles.map((f) => {
     const track = f.id ? byId.get(f.id) || null : null;
     return {
@@ -134,6 +127,19 @@ export async function loadFolders(folderPath: string): Promise<LibraryPage> {
         : "/static/img/placeholder.svg",
     };
   });
+  return { dirs, files };
+}
+
+export async function loadFolders(folderPath: string): Promise<LibraryPage> {
+  const title = folderPath
+    ? folderPath.split("/").filter(Boolean).pop() || "Folders"
+    : "Folders";
+  const chrome = { title, showBack: Boolean(folderPath) };
+  const { dirs, files } = await browseFolder(folderPath);
+
+  if (!dirs.length && !files.length) {
+    return page(chrome, { kind: "empty", message: "This folder is empty" });
+  }
 
   return page(chrome, { kind: "folders", dirs, files });
 }

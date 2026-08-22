@@ -1,14 +1,7 @@
 /**
  * Folders FS tree: directory → nested dirs/files (lazy browse).
  */
-import {
-  apiGet,
-  coverUrl,
-  fetchTracksMeta,
-  type BrowseResponse,
-} from "@/api";
-import { formatTrackLabel } from "@/util";
-import type { Track } from "@/models/track";
+import { browseFolder } from "@/components/library/loaders";
 import {
   treeNodePath,
   type TreeNode,
@@ -17,25 +10,7 @@ import {
 export async function listFolderChildren(
   folderPath: string,
 ): Promise<TreeNode[]> {
-  const data = await apiGet<BrowseResponse>(
-    `/api/browse?path=${encodeURIComponent(folderPath || "")}`,
-  );
-  const dirs = data.dirs || [];
-  const rawFiles = data.files || [];
-
-  let byId = new Map<string, Track>();
-  const ids = rawFiles
-    .map((f) => f.id)
-    .filter((id): id is string => Boolean(id));
-  if (ids.length) {
-    try {
-      const meta = await fetchTracksMeta(ids);
-      byId = new Map(meta.map((m) => [m.id, m]));
-    } catch (err: unknown) {
-      console.error(err);
-    }
-  }
-
+  const { dirs, files } = await browseFolder(folderPath);
   const nodes: TreeNode[] = [];
 
   for (const dir of dirs) {
@@ -50,27 +25,15 @@ export async function listFolderChildren(
     });
   }
 
-  for (const f of rawFiles) {
-    const track = f.id ? byId.get(f.id) || null : null;
+  for (const file of files) {
     nodes.push({
-      key: `file:${f.path}`,
+      key: `file:${file.path}`,
       isLeaf: true,
       kind: "file",
-      title: track ? formatTrackLabel(track) : f.name || "",
+      title: file.displayName || file.name || "",
       subtitle: "",
-      cover: track
-        ? coverUrl(track, "thumb", false)
-        : "/static/img/placeholder.svg",
-      data: {
-        path: f.path,
-        name: f.name || "",
-        id: f.id || null,
-        track,
-        displayName: track ? formatTrackLabel(track) : f.name || "",
-        cover: track
-          ? coverUrl(track, "thumb", false)
-          : "/static/img/placeholder.svg",
-      },
+      cover: file.cover,
+      data: file,
     });
   }
 

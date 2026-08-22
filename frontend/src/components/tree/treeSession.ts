@@ -137,6 +137,15 @@ export function createTreeSession(): TreeSession {
 /** @type {Map<string, ReturnType<typeof createTreeSession>>} */
 const byScope = new Map<string, TreeSession>();
 
+export function primePackedTree(session: TreeSession, roots: TreeNode[]): void {
+  for (const ar of roots) {
+    session.primeChildren(ar.key, ar.children || []);
+    for (const al of ar.children || []) {
+      session.primeChildren(al.key, al.children || []);
+    }
+  }
+}
+
 export function getTreeSession(scope: string): TreeSession {
   let s = byScope.get(scope);
   if (!s) {

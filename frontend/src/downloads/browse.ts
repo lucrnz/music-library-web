@@ -5,12 +5,9 @@
 
 import { kindForTracks } from "@/lossyKind";
 import { fromCatalogRecord } from "@/models/track";
-import { getLocalArtistImageUrl, getLocalCoverUrl } from "@/downloads/catalog";
 import { emptyPage, page, type LibraryPage } from "@/components/library/loaders";
-import {
-  buildDownloadsHierarchy,
-  type DownloadsHierarchyAlbum,
-} from "@/downloads/hierarchy";
+import { loadDownloadsCatalogView } from "@/downloads/snapshot";
+import type { DownloadsHierarchyAlbum } from "@/downloads/hierarchy";
 
 export interface DownloadsBrowseOpts {
   routeName: string;
@@ -30,8 +27,9 @@ export async function loadDownloadsView(
     });
   }
 
-  const tree = await buildDownloadsHierarchy();
-  const artUrls: Record<string, string> = {};
+  const snap = await loadDownloadsCatalogView();
+  const tree = snap.hierarchy;
+  const artUrls = { ...snap.artUrls };
 
   if (opts.routeName === "downloads-album") {
     const id = opts.albumId;
@@ -52,10 +50,6 @@ export async function loadDownloadsView(
         showBack: true,
         message: "Album not in downloads",
       });
-    }
-    if (found.hasThumb) {
-      const u = await getLocalCoverUrl(found.albumId, "thumb");
-      if (u) artUrls[`cover:${found.albumId}:thumb`] = u;
     }
     return page(
       {
@@ -88,16 +82,6 @@ export async function loadDownloadsView(
         message: "Artist not in downloads",
       });
     }
-    if (ar.hasThumb) {
-      const u = await getLocalArtistImageUrl(ar.artistId, "thumb");
-      if (u) artUrls[`artist:${ar.artistId}:thumb`] = u;
-    }
-    for (const al of ar.albums) {
-      if (al.hasThumb) {
-        const u = await getLocalCoverUrl(al.albumId, "thumb");
-        if (u) artUrls[`cover:${al.albumId}:thumb`] = u;
-      }
-    }
     return page(
       { title: ar.name || "Artist", showBack: true },
       {
@@ -126,12 +110,6 @@ export async function loadDownloadsView(
     );
   }
 
-  for (const ar of tree.artists) {
-    if (ar.hasThumb) {
-      const u = await getLocalArtistImageUrl(ar.artistId, "thumb");
-      if (u) artUrls[`artist:${ar.artistId}:thumb`] = u;
-    }
-  }
   if (!tree.artists.length) {
     return page(
       { title: "Downloads", showBack: false },

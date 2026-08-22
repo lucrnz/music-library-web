@@ -5,7 +5,6 @@ import type { Router } from "vue-router";
 import type { BrowseDir } from "@/api";
 import type { Artist } from "@/models/artist";
 import type { LibraryAlbum, LibraryPage } from "@/components/library/loaders";
-import type { DownloadsHierarchy } from "@/downloads/hierarchy";
 import type { Track } from "@/models/track";
 import type { TreeNode } from "@/components/tree/sources/artistsSource";
 
@@ -29,7 +28,6 @@ export interface BrowseGoBackLoc {
 export interface BrowseTreeLoad {
   roots: TreeNode[];
   artUrls: Record<string, string>;
-  hierarchy?: DownloadsHierarchy;
 }
 
 export interface BrowseChromeInput {
@@ -77,6 +75,11 @@ export interface BrowseSource {
   }): Promise<void>;
 
   includeArtistPhoto(opts: { mode: string; isSearch: boolean }): boolean;
+
+  treeTitle(mode: string): string;
+  emptyTreeMessage(opts: { downloadsEnabled: boolean }): string;
+  resolveFocusPath(path: string[]): string[];
+  treeReloadKeys(): unknown[];
 
   artistAddAll(id: string): void | Promise<void>;
   albumAddAll(id: string): void | Promise<void>;

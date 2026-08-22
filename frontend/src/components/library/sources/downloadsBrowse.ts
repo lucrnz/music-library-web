@@ -7,13 +7,16 @@ import type { LibraryAlbum, LibraryPage } from "@/components/library/loaders";
 import { addAllDownloadedAlbum, addAllDownloadedArtist } from "@/downloads/addAll";
 import { loadDownloadsView } from "@/downloads/browse";
 import { artUrlCache } from "@/downloads/catalog";
+import { downloads } from "@/downloads/state";
 import type { Track } from "@/models/track";
 import { addToQueue } from "@/stores/playlist";
-import {
-  loadDownloadsChildren,
-  loadDownloadsTree,
-} from "@/components/tree/sources/downloadsSource";
+import { resolveDownloadsFocusPath } from "@/components/tree/treeNavigation";
+import { loadDownloadsChildren } from "@/components/tree/sources/downloadsSource";
 import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { DownloadsHierarchy } from "@/downloads/hierarchy";
+import { loadDownloadsCatalogView } from "@/downloads/snapshot";
+
+let lastHierarchy: DownloadsHierarchy | null = null;
 
 export const downloadsBrowse: BrowseSource = {
   ariaLabel: "Downloads library",
@@ -36,13 +39,14 @@ export const downloadsBrowse: BrowseSource = {
 
   async loadRoots(loc) {
     if (!loc.downloadsEnabled) {
+      lastHierarchy = null;
       return { roots: [], artUrls: {} };
     }
-    const packed = await loadDownloadsTree();
+    const snap = await loadDownloadsCatalogView();
+    lastHierarchy = snap.hierarchy;
     return {
-      roots: packed.roots,
-      artUrls: packed.artUrls,
-      hierarchy: packed.hierarchy,
+      roots: snap.roots,
+      artUrls: snap.artUrls,
     };
   },
 
@@ -149,6 +153,25 @@ export const downloadsBrowse: BrowseSource = {
 
   includeArtistPhoto() {
     return false;
+  },
+
+  treeTitle() {
+    return "Downloads";
+  },
+
+  emptyTreeMessage(opts) {
+    return opts.downloadsEnabled
+      ? "No downloads yet"
+      : "Enable downloads in Settings";
+  },
+
+  resolveFocusPath(path) {
+    if (!lastHierarchy) return path;
+    return resolveDownloadsFocusPath(path, lastHierarchy);
+  },
+
+  treeReloadKeys() {
+    return [downloads.enabled, downloads.trackCount];
   },
 
   artistAddAll(id) {
