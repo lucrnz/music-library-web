@@ -12,9 +12,9 @@ from sqlalchemy import select
 from musicweb.db.engine import Database
 from musicweb.db.models import Track
 from musicweb.library import Library
-from musicweb.metadata import read_metadata
+from musicweb.metadata import TrackMetadata, read_metadata
 from musicweb.scan.fingerprint import compute_fingerprint
-from musicweb.scan.formats import audio_kind
+from musicweb.scan.formats import source_codec_is_lossy
 from musicweb.scan.identity import apply_track_fields, resolve_track
 from musicweb.scan.siblings import lossless_slots_in_dir, should_skip_lossy
 from musicweb.timeutil import utc_now_iso
@@ -45,6 +45,16 @@ def process_batch(
     covers: dict[str, Path] = {}
     skipped_rels: set[str] = set()
     slot_cache: dict[Path, dict] = {}
+    meta_by_path: dict[Path, TrackMetadata] = {}
+
+    def read_meta(path: Path) -> TrackMetadata:
+        hit = meta_by_path.get(path)
+        if hit is not None:
+            return hit
+        meta = read_metadata(path)
+        meta_by_path[path] = meta
+        return meta
+
     with database.session() as session:
         for path in paths:
             if cancel and cancel():
@@ -59,13 +69,14 @@ def process_batch(
             except OSError:
                 continue
 
-            lossy_meta = None
-            if audio_kind(path) == "lossy":
+            meta = read_meta(path)
+            if source_codec_is_lossy(meta.source_codec):
                 parent = path.parent
                 if parent not in slot_cache:
-                    slot_cache[parent] = lossless_slots_in_dir(parent)
-                lossy_meta = read_metadata(path)
-                if should_skip_lossy(path, lossy_meta, slot_cache[parent]):
+                    slot_cache[parent] = lossless_slots_in_dir(
+                        parent, read_meta=read_meta
+                    )
+                if should_skip_lossy(path, meta, slot_cache[parent]):
                     skipped_rels.add(rel)
                     continue
 
@@ -99,7 +110,6 @@ def process_batch(
                 existing_by_path=existing,
                 now=now,
             )
-            meta = lossy_meta if lossy_meta is not None else read_metadata(path)
             album_id = apply_track_fields(
                 session,
                 track,

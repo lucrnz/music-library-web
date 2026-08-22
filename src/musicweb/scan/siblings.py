@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from musicweb.metadata import TrackMetadata, read_metadata
-from musicweb.scan.formats import is_lossless_audio
+from musicweb.scan.formats import (
+    ALWAYS_LOSSLESS,
+    LOSSY_SOURCE_CODECS,
+    is_lossless_audio,
+)
 
 Slot = tuple[str, int | str, int] | tuple[str, str]
+ReadMeta = Callable[[Path], TrackMetadata | None]
 
 
 def slot_key(disc: int | None, track: int | None, stem: str) -> Slot:
@@ -17,8 +23,22 @@ def slot_key(disc: int | None, track: int | None, stem: str) -> Slot:
     return ("stem", stem.casefold())
 
 
-def lossless_slots_in_dir(directory: Path) -> dict[Slot, Path]:
+def _meta_is_lossless(path: Path, meta: TrackMetadata) -> bool:
+    ext = path.suffix.lower()
+    if ext in ALWAYS_LOSSLESS:
+        return True
+    codec = (meta.source_codec or "").lower()
+    if not codec or codec in LOSSY_SOURCE_CODECS:
+        return False
+    return True
+
+
+def lossless_slots_in_dir(
+    directory: Path,
+    read_meta: ReadMeta | None = None,
+) -> dict[Slot, Path]:
     """Map slot → lossless file in ``directory`` (one winner per slot)."""
+    load = read_meta or read_metadata
     slots: dict[Slot, Path] = {}
     try:
         entries = list(directory.iterdir())
@@ -28,11 +48,15 @@ def lossless_slots_in_dir(directory: Path) -> dict[Slot, Path]:
         if entry.name.startswith("."):
             continue
         try:
-            if not is_lossless_audio(entry):
+            if read_meta is None and not is_lossless_audio(entry):
                 continue
+            meta = load(entry)
         except OSError:
             continue
-        meta = read_metadata(entry)
+        if meta is None:
+            continue
+        if read_meta is not None and not _meta_is_lossless(entry, meta):
+            continue
         key = slot_key(meta.disc, meta.track, entry.stem)
         slots[key] = entry
     return slots
