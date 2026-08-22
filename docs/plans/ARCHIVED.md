@@ -661,3 +661,15 @@ Exclusive is a sink+profile, radio socket is separate from face/load, forget ret
 ```bash
 git show 475f38d76fd720655d8ece87c660b3fa370939bd
 ```
+
+## 2026-08-22-og7vslqu-ownership-deletes-done
+
+**Title:** Ownership deletes from nuclear review
+
+**Commit:** `9787073c7ee34b08beb96498830704aab70dc09e`
+
+One play-fail writer, stats out of the browse load machine, a one-way downloads abort graph, and the scan walk out of the job runner. Open the delete commit for `playback/load.ts`, BrowseSource `flags`/`chrome`/`cover`, `queueRuntime` abort invert, and `scan/index_phase.py`.
+
+```bash
+git show 9787073c7ee34b08beb96498830704aab70dc09e
+```
