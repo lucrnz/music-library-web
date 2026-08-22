@@ -26,7 +26,7 @@ Boot is **optimistic** `online` so the shell does not flash “Can’t reach ser
 
 ### Health probes
 
-A backoff health loop runs when **any** `setHealthWork` source has work (`"downloads"` or `"artist-art"`). Downloads still write `"downloads"` through `setHealthContext`. Preferred-art flush re-arms with `reportFailure` + `requestHealthProbe`, not “wait for recovered.” Recovery notifies listeners so queue policy can resume, pending artist-art can flush, and playback can retry prepare paths. Exact intervals and probe endpoints live in source.
+A backoff health loop runs when **any** `setHealthWork` source has work (`"downloads"` or `"artist-art"`). Downloads write `setHealthWork("downloads", enabled && queueHasWork)`. Preferred-art flush re-arms with `reportFailure` + `requestHealthProbe`, not “wait for recovered.” Recovery notifies listeners so queue policy can resume, pending artist-art can flush, and playback can retry prepare paths. Exact intervals and probe endpoints live in source.
 
 ### Auto-pause signal
 

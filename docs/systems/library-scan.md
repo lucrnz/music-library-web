@@ -2,19 +2,22 @@
 
 ## Source of truth
 
-- Job orchestration (scan + regen kinds): `src/musicweb/jobs/runner.py` (one `_begin`; `_progress` logs; a completed scan writes `last_scan_finished_at` for radio via `radio_repo.scan_finished_at`)
+- Job orchestration (scan + regen kinds): `src/musicweb/jobs/runner.py` (`PHASES` + `_run_phases`; one `_begin`; `_progress` logs; a completed scan writes `last_scan_finished_at` for radio via `radio_repo.scan_finished_at`)
 - Walk / formats: `src/musicweb/scan/walk.py`, `formats.py`
 - Album lossy-kind reduce: SQL in `finalize.recount_entities` (`mp3` / `aac` / `lossy` / `mixed`)
 - Fingerprints / identity: `src/musicweb/scan/fingerprint.py`, `identity.py`
 - Batch upsert: `src/musicweb/scan/batch.py`
+- Enrichment loop: `src/musicweb/scan/enrichment.py` (`iter_enrichment`)
 - Covers / artist images / lyrics phases: `scan/covers.py`, `scan/artist_images.py`, `scan/lyrics.py`
+- Sidecar `.lrc` probe: `sidecar_lrc_exists` in `src/musicweb/lyrics/fetch.py`
+- Album cover extract: `CoverStore` in `src/musicweb/cover.py` (has/path live on `WebpAssetStore`)
 - Finalize (missing + counts): `src/musicweb/scan/finalize.py`
 - HTTP triggers: `src/musicweb/routes/library_scan.py`
 - CLI: `src/musicweb/cli/`; live control plane: `src/musicweb/control/`
 
 ## Purpose
 
-Build and refresh the SQLite index from the files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. The walk is **indexable** audio: packed lossless always, plus MP3/AAC when `MUSICWEB_INDEX_LOSSY` is on. Eligibility classifies a file once (lossless / lossy / not); an unreadable MP4 is not treated as AAC and is not indexed. A lossy file that shares a folder + disc/track (or stem) with a lossless sibling is skipped so leftover transcode copies do not become duplicate tracks. After finalize, albums cache a lossy kind (`mp3` / `aac` / `lossy` / `mixed` / none) using the same reduce the client uses for title marks. All library jobs (scan and regen) share a **single-flight** runner with cancel support and persisted `ScanState` progress. HTTP, CLI (local or via UDS), and startup use the same runner (`_begin` writes the running row once). Radio catalog invalidation reads `last_scan_finished_at` (`ScanState` / `radio_repo.scan_finished_at`), not the last job kind.
+Build and refresh the SQLite index from the files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. The walk is **indexable** audio: packed lossless always, plus MP3/AAC when `MUSICWEB_INDEX_LOSSY` is on. Eligibility classifies a file once (lossless / lossy / not); an unreadable MP4 is not treated as AAC and is not indexed. A lossy file that shares a folder + disc/track (or stem) with a lossless sibling is skipped so leftover transcode copies do not become duplicate tracks. After finalize, albums cache a lossy kind (`mp3` / `aac` / `lossy` / `mixed` / none) using the same reduce the client uses for title marks. All library jobs (scan and regen) share a **single-flight** runner with cancel support and persisted `ScanState` progress. HTTP, CLI (local or via UDS), and startup use the same runner (`_begin` writes the running row once). Kind-to-phase lists live in `LibraryJobRunner.PHASES`; `_run_phases` owns progress, cancel checks, and the phase callables. Radio catalog invalidation reads `last_scan_finished_at` (`ScanState` / `radio_repo.scan_finished_at`), not the last job kind.
 
 ## Modes and kinds
 
@@ -42,9 +45,9 @@ Exact skip/rehash heuristics live in source; docs only state the product intent.
 
 ## Enrichment policies
 
-- **Covers:** embedded art or common folder filenames; stored once as full + thumb WebP.
-- **Artist images:** optional remote providers need keys/email in env; local `artist.jpg` / `artist.png` works without keys. Rate limits and retry cooldowns are source constants in `config.py`. Scan writes only `covers/artists/`. An operator override may live beside that pair under `covers/artists-preferred/`; fetch and `--force` must not delete it. `GET /api/artist-image` serves the override first (`artist_images/resolve.py`).
-- **Lyrics:** LRCLIB needs no API key; retries/cooldowns are source constants.
+- **Covers:** embedded art or common folder filenames; `CoverStore` extracts, `WebpAssetStore` owns has/path and writes full + thumb WebP.
+- **Artist images:** optional remote providers need keys/email in env; local `artist.jpg` / `artist.png` works without keys. Rate limits and retry cooldowns are source constants in `config.py`. Scan writes only `covers/artists/`. An operator override may live beside that pair under `covers/artists-preferred/`; fetch and `--force` must not delete it. `GET /api/artist-image` serves the override first (`artist_images/resolve.py`). Artist-image and lyrics commit loops share `iter_enrichment`.
+- **Lyrics:** LRCLIB needs no API key; retries/cooldowns are source constants. Local sidecar presence is `sidecar_lrc_exists`.
 
 ## Guardrails
 

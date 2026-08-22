@@ -7,12 +7,13 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 - Player store: `frontend/src/stores/player.ts` (on-demand session: gen, sink, load); `playerState.ts`, `playerSession.ts`, `playerPrefs.ts`, `playbackPosition.ts`
 - Play decision: `frontend/src/playback/playIntent.ts` (`resolvePlayIntent`)
 - Shared prepare: `frontend/src/playback/prepare.ts` (`prepareTracks`)
-- Session handoff: `frontend/src/playback/onDemandControl.ts` (`become("none" | "queue" | "radio")`)
+- Session handoff: `frontend/src/playback/session.ts` (`become("none" | "queue" | "radio")`)
+- Shared HTML element: `frontend/src/playback/sinks/htmlElement.ts`
 - Companion-stop decision: `needsCompanionStop` in `playback/playIntent.ts`
-- Quality prefs: `frontend/src/stores/settings.ts`
+- Quality prefs: `frontend/src/stores/settings.ts` (maps `/api/codecs` to camelCase once at hydrate)
 - Session queue: `frontend/src/stores/playlist.ts`
 - Delivery tag / lossy kind: `frontend/src/lossyKind.ts`
-- HTML play-source resolution: `frontend/src/downloads/resolve.ts`
+- HTML play-source resolution: `frontend/src/downloads/resolve.ts` (`resolvePlaySource` → delivery only)
 - Exclusive profile pick: `frontend/src/stores/exclusiveAudio.ts`
 - Block reasons / copy: `frontend/src/playBlock.ts`
 - Quality ranking: `frontend/src/qualityRank.ts`
@@ -41,7 +42,7 @@ Resolution is decision-first: load catalog record when downloads are enabled, ap
 
 When downloads are enabled and `connectivity.canUseRemote` is false, queue rows without a playable local file (`trackDownloadState` `ready` or `other`) are shown unavailable (`PlaylistView`). Cursor advance is `stepNext` / `stepPrev` on a record; skip is `pl.advanceToPlayable` (clone + those steps). `playNext` / `playPrev` stay thin; a tap still `playIndex`s that index. `computeNextIndex` / `peekNextIndex` stay download-agnostic. Current playback is not yanked when reachability drops.
 
-The reactive `player` record lives in `playerState.ts`. Cover / Media Session metadata: `playerSession.ts`. Volume / expanded storage: `playerPrefs.ts` (`setOutputVolume` writes face + storage). Resume position: `playbackPosition.ts` (`musicweb.playbackPosition.v1`). `player.ts` owns the on-demand session (generation, active sink, `loadResolved`). `resolvePlayIntent` is the single play decision (unavailable with a block, or ready with a required url): exclusive is companion + streaming (never OPFS; refuse lossy); HTML `resolvePlaySource` returns the same `PlayIntent` (`sink: htmlAudio`). Failures go through `failCurrentLoad` (exclusive toasts without a title prefix and opens Settings on `exclusive_needs_device`; other blocks prefix `Title:`). The exclusive device gate is `companionSink.load`. A broken local blob remints via `loadResolved({ localBroken: true })`. `prepareTracks` is the only prepare path (queue add, settings codec change, near-end). `preparedKeys`, `requestPrepare`, and `requestForget` live in `playback/prepare.ts`. `player.ts` does not import `radio.ts`.
+The reactive `player` record lives in `playerState.ts`. Cover / Media Session metadata: `playerSession.ts`. Volume / expanded storage: `playerPrefs.ts` (`setOutputVolume` writes face + storage). Resume position: `playbackPosition.ts` (`musicweb.playbackPosition.v1`). `player.ts` owns the on-demand session (generation, active sink, `loadResolved`). `resolvePlayIntent` is the single play decision (unavailable with a block, or ready with a required url): exclusive is companion + streaming (never OPFS; refuse lossy); HTML `resolvePlaySource` returns delivery only (`source` / `url` / `profile` / `block` — no sink). `resolvePlayIntent` attaches `htmlAudio` or `companion`. Failures go through `failCurrentLoad({ reason, message?, toast? })` (exclusive toasts without a title prefix and opens Settings on `exclusive_needs_device`; other blocks prefix `Title:`). `applyIntent` is the only play-source writer. The exclusive device gate is `companionSink.load`. A broken local blob remints via `loadResolved({ localBroken: true })`. `prepareTracks` is the only prepare path (queue add, settings codec change, near-end). `preparedKeys`, `requestPrepare`, and `requestForget` live in `playback/prepare.ts`. `setStreamCodec` persists + prepare only; the player restarts while `activeSession() === "queue"`. `player.ts` does not import `radio.ts`.
 
 On-demand teardown: `beginLoad` always stops the HTML sink, bumps generation, and clears play-source state. Companion stops only when the new intent is unavailable or the sink changes (`needsCompanionStop`). Exclusive track-to-track stays `selectSink` no-op + `load` (does not release the hog). Leaving on-demand (`become("none")` / `become("radio")`) stops both sinks and revokes the local blob. A sink error while `playSource` is `none` is ignored.
 
@@ -70,7 +71,7 @@ Independent client preferences (exact storage keys and defaults live in `setting
   - Prefer downloaded file
   - Prefer live stream when the server is reachable (`canUseRemoteMedia()`) (local only when unreachable / stream unavailable)
 
-The browser catalog is fetched at boot when the server answers and stored locally as the raw `/api/codecs` payload (`musicweb.codecCatalog.v1` in `settings.js`). That boot GET is a live probe (`cache: "no-store"`) so HTTP cache cannot confirm reachability. Offline or failed fetch reuses that cache; stored quality tags are not rewritten against the hardcoded one-row stub. Decode probes still run locally after hydrate and after a successful fetch.
+The browser catalog is fetched at boot when the server answers and mapped to camelCase once in settings (`musicweb.codecCatalog.v1`). That boot GET is a live probe (`cache: "no-store"`) so HTTP cache cannot confirm reachability. Offline or failed fetch reuses that cache; stored quality tags are not rewritten against the hardcoded one-row stub. Decode probes still run locally after hydrate and after a successful fetch.
 
 The Streaming setting is the active stream profile for prepare and play. Changing it restarts the current track.
 

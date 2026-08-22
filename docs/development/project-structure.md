@@ -32,22 +32,22 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `diag/` | Diagnostic JSONL store, emit, join-key reader |
 | `exclusive/` | macOS exclusive-audio companion (loopback WS + mpv); no DB/lock |
 | `runtime/` | Data-dir flock, bootstrap, exclusive maintenance, `run_library_job` |
-| `jobs/` | Single-flight library job runner (scan + regen kinds, one `_begin`, ScanState; scan finish stamps radio watermark) |
+| `jobs/` | Single-flight library job runner (`PHASES` + `_run_phases`; one `_begin`; ScanState; scan finish stamps radio watermark) |
 | `control/` | Private UDS JSON control plane (health + job RPC) for live CLI |
 | `config.py` | Settings from env + source-level tuning constants |
 | `library.py` | Path jail (`resolve`) and present indexable audio (`present_audio`) under `MUSIC_LIBRARY_PATH` |
 | `metadata.py` | Tag / audio tech reading (mutagen) |
 | `cache.py` | Process-scoped temp caches (streams) |
-| `cover.py` | Persisted album WebP covers under the data dir |
+| `cover.py` | Album cover extract (`CoverStore`); has/path live on `WebpAssetStore` |
 | `images/` | WebP render/store helpers (`WebpAssetStore`; scanned portraits at `covers/artists/`) |
 | `timeutil.py` | Shared UTC ISO helpers (`utc_now_iso`, `format_iso_utc`, `parse_iso_utc`) |
 | `http_client.py` | Shared HTTP client helpers for outbound fetch |
 | `pwa_shell.py` | Dist path, inventory walk, SW render, theme/manifest chrome constants |
 | `sw.template.js` | Service worker template (Python-injected precache list) |
 | `db/` | Engine, models, FTS helpers, repositories, Alembic migrations |
-| `scan/` | Walk, fingerprint, batch upsert, covers, artist images, lyrics, finalize (phases only) |
+| `scan/` | Walk, fingerprint, batch upsert, covers, artist images, lyrics, finalize; shared enrichment loop in `enrichment.py` |
 | `transcode/` | Dependency check (ffmpeg + ffprobe), profiles, probe, encode worker, shared `enqueue_prepare`, idle stream-cache eviction |
-| `radio/` | Household station clock, picker, tuner prepare (reuses Transcoder) |
+| `radio/` | Household station clock, picker, tuner prepare (reuses Transcoder); snapshot serialize lives on `routes/radio.py` |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
 | `routes/` | HTTP API routers (health, scan, discovery, folders, `media.py` stream/cover, `artist_images.py` portraits, playlists, listens, radio, diag) + SPA pages |
@@ -62,9 +62,10 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **Present audio files** go through `Library.present_audio` (jail + exists + indexable). Stream maps `None` to 404. Enqueue, radio, scan lyrics/covers, and local artist-image folder lookup branch on `None`. Do not reimplement resolve-and-exists at those call sites. `resolve` stays for directory browse/collect.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
-- **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`. The source owns list load and tree `loadRoots` / `loadChildren` / `resolveCover`; the tree pane does not switch on mode for those jobs.
+- **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`. The source owns list load, tree `loadRoots` / `loadChildren` / `resolveCover`, and tree title / empty / focus / reload; the tree pane does not switch on mode for those jobs.
+- **Playback session** is `frontend/src/playback/session.ts` (`become`). Radio socket / load-gen / Media Session live in `frontend/src/radio/runtime.ts`; `stores/radio.ts` is the chrome face.
 - **Row action menus** live under `frontend/src/components/menu/`. Desktop media queries for new client code live in `frontend/src/layout.ts`. See `docs/frontend/conventions.md`.
-- **Offline downloads** stay under `frontend/src/downloads/` and must not write the server index.
+- **Offline downloads** stay under `frontend/src/downloads/` (`snapshot.ts` catalog view, `queueRuntime.ts` pump) and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.
 
 ## Documentation folders

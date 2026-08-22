@@ -7,13 +7,17 @@ Optional client-side offline music: users can download stream-profile audio to t
 - Package: `frontend/src/downloads/`
   - Lifecycle / queue actions: `index.ts`
   - User download with confirm: `ui.ts`
-  - Reactive fields: `state.ts`
+  - Reactive fields: `state.ts` (`syncQueueSummary`)
   - Filename / MIME: `media.ts`
   - Catalog barrel: `catalog.ts` re-exports `projection.ts` (status join), `art.ts` (OPFS art + blob URLs), `writer.ts` (IDB lock, pin/refcount, commit/delete)
-  - Queue store and pump side: `queue.ts`, `queuePolicy.ts`, `worker.ts`
+  - Catalog view (hierarchy + art + primed roots): `snapshot.ts` (`loadDownloadsCatalogView`)
+  - Queue IDB CRUD / live progress: `queue.ts`
+  - Queue pump + abort: `queueRuntime.ts`
+  - Network policy: `queuePolicy.ts`
+  - Job I/O (`executeDownloadJob`, `streamUrl`): `worker.ts`
   - OPFS binary storage: `opfs.ts`
   - IndexedDB metadata: `db.ts` (no `blobs` store; binaries live in OPFS)
-  - Play / cover resolution: `resolve.ts`
+  - Play / cover resolution: `resolve.ts` (delivery only)
   - Hierarchy / storage formatters: `hierarchy.ts`, `storageInfo.ts`
   - Offline browse loader: `browse.ts` (`loadDownloadsView` → `LibraryPage`)
 - Offline browse UI is `LibraryView` (`mode === "downloads"`), not a second library SFC. Source pieces: `frontend/src/components/library/sources/downloadsBrowse.ts`. Row covers: omitted/`null` `coverSrc` = remote fallback; `""` = placeholder (do not hit `/api/cover` when local art is missing).
@@ -59,8 +63,13 @@ Durable split so `index.ts` does not become a barrel:
 | Catalog projection / UI join | `projection.ts` (via `catalog.ts`) |
 | Local art files + blob URLs | `art.ts` (via `catalog.ts`) |
 | Catalog write mutex, pin/refcount, finalize, delete | `writer.ts` (via `catalog.ts`) |
+| Storage-only catalog row (`CatalogTrackRecord`) | `writer.ts` / `models/track.ts` (no snake aliases; queue snapshot is a `Track`) |
+| One catalog view for browse / add-all / tree | `snapshot.ts` |
 | Play/cover URL resolution | `resolve.ts` |
-| Queue guts / worker | internals (`queue.ts`, `queuePolicy.ts`, `worker.ts`) |
+| Queue row CRUD / live progress | `queue.ts` |
+| Pump + in-flight abort | `queueRuntime.ts` |
+| Auto-pause / health-work | `queuePolicy.ts` |
+| Stream I/O | `worker.ts` (`streamUrl`) |
 
 Import connectivity notes from `connectivity.js` / `stores/connectivity.js`, not via downloads re-exports.
 
