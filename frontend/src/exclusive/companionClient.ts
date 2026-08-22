@@ -8,6 +8,7 @@ import {
   isExclusiveArmed,
   isExclusiveEnabled,
   setCompanionDeviceId,
+  setExclusiveLive,
   type ExclusiveDevice,
 } from "@/stores/exclusiveAudio";
 import {
@@ -220,9 +221,11 @@ function handleMessage(raw: unknown): void {
   const type = msg.type;
 
   if (type === MSG_HELLO_OK) {
-    exclusiveAudio.connection = "connected";
-    exclusiveAudio.role = msg.role || null;
-    exclusiveAudio.lastError = null;
+    setExclusiveLive({
+      connection: "connected",
+      role: msg.role || null,
+      lastError: null,
+    });
     reconnectAttempt = 0;
     applyStatus(msg);
     if (msg.role === ROLE_CONTROLLER) {
@@ -234,16 +237,18 @@ function handleMessage(raw: unknown): void {
   }
 
   if (type === MSG_HELLO_REJECT) {
-    exclusiveAudio.connection = "rejected";
-    exclusiveAudio.role = null;
+    setExclusiveLive({
+      connection: "rejected",
+      role: null,
+    });
     clearLiveDevice();
-    exclusiveAudio.lastError = msg.reason || "rejected";
+    setExclusiveLive({ lastError: msg.reason || "rejected" });
     emit({ type: "hello_reject", reason: msg.reason });
     return;
   }
 
   if (type === MSG_STATUS) {
-    if (msg.role) exclusiveAudio.role = msg.role;
+    if (msg.role) setExclusiveLive({ role: msg.role });
     applyStatus(msg);
     emit({ type: "status", ...msg } as CompanionEvent);
     return;
@@ -251,22 +256,21 @@ function handleMessage(raw: unknown): void {
 
   if (type === MSG_DEVICES) {
     const list = Array.isArray(msg.devices) ? msg.devices : [];
-    exclusiveAudio.devices = list.map((d) => {
+    const devices = list.map((d) => {
       const rec = d as {
         id: string;
         name?: string;
         sample_rates?: number[];
-        sampleRates?: number[];
         bit_depths?: number[];
-        bitDepths?: number[];
       };
       return {
         id: rec.id,
         name: rec.name || rec.id,
-        sample_rates: rec.sample_rates || rec.sampleRates || [],
-        bit_depths: rec.bit_depths || rec.bitDepths || [],
+        sample_rates: rec.sample_rates || [],
+        bit_depths: rec.bit_depths || [],
       };
     });
+    setExclusiveLive({ devices });
     const pref = exclusiveAudio.selectedDeviceId;
     if (pref && !exclusiveAudio.devices.some((dev) => dev.id === pref)) {
       clearSelectedDevicePreference();
@@ -288,7 +292,7 @@ function handleMessage(raw: unknown): void {
   }
 
   if (type === MSG_PAUSE_EVENT) {
-    exclusiveAudio.companionPaused = !!msg.paused;
+    setExclusiveLive({ companionPaused: !!msg.paused });
     emit({ type: "pause", paused: !!msg.paused });
     return;
   }
@@ -299,7 +303,7 @@ function handleMessage(raw: unknown): void {
   }
 
   if (type === MSG_ERROR) {
-    exclusiveAudio.lastError = msg.message || "companion error";
+    setExclusiveLive({ lastError: msg.message || "companion error" });
     emit({
       type: "error",
       message: msg.message,
@@ -320,14 +324,14 @@ function applyStatus(msg: CompanionWireMessage): void {
   }
 
   if (typeof msg.playing === "boolean") {
-    exclusiveAudio.companionPlaying = msg.playing;
+    setExclusiveLive({ companionPlaying: msg.playing });
   }
   if (typeof msg.paused === "boolean") {
-    exclusiveAudio.companionPaused = msg.paused;
+    setExclusiveLive({ companionPaused: msg.paused });
   }
   // TTL demotion: socket stays open so disconnect does not fire — hard-stop via error.
   if (msg.role === ROLE_READONLY && msg.reason === "controller_ttl") {
-    exclusiveAudio.lastError = "controller_ttl";
+    setExclusiveLive({ lastError: "controller_ttl" });
     clearLiveDevice();
     emit({
       type: "error",
@@ -345,21 +349,20 @@ function connectNow(): void {
 
   const token = (exclusiveAudio.hogToken || "").trim();
   if (!token) {
-    exclusiveAudio.connection = "disconnected";
+    setExclusiveLive({ connection: "disconnected" });
     return;
   }
 
   const port = exclusiveAudio.port || 18765;
   // Always 127.0.0.1 — never localhost (IPv6 ::1 mismatch).
   const url = `ws://127.0.0.1:${port}/ws`;
-  exclusiveAudio.connection = "connecting";
+  setExclusiveLive({ connection: "connecting" });
   intentionalClose = false;
 
   try {
     ws = new WebSocket(url);
   } catch (err: unknown) {
-    exclusiveAudio.connection = "disconnected";
-    exclusiveAudio.lastError = String(err);
+    setExclusiveLive({ connection: "disconnected", lastError: String(err) });
     scheduleReconnect();
     return;
   }
@@ -381,16 +384,18 @@ function connectNow(): void {
   ws.onmessage = (ev) => handleMessage(ev.data);
 
   ws.onerror = () => {
-    exclusiveAudio.lastError = "websocket error";
+    setExclusiveLive({ lastError: "websocket error" });
   };
 
   ws.onclose = (event) => {
     if (event.target !== ws) return;
     clearHeartbeat();
     ws = null;
-    exclusiveAudio.connection = "disconnected";
-    exclusiveAudio.role = null;
-    exclusiveAudio.companionPlaying = false;
+    setExclusiveLive({
+      connection: "disconnected",
+      role: null,
+      companionPlaying: false,
+    });
     clearLiveDevice();
     if (!intentionalClose && wantConnected) {
       emit({ type: "disconnect" });
@@ -414,8 +419,7 @@ export function disconnectCompanion(): void {
     }
     ws = null;
   }
-  exclusiveAudio.connection = "disconnected";
-  exclusiveAudio.role = null;
+  setExclusiveLive({ connection: "disconnected", role: null });
   clearLiveDevice();
 }
 

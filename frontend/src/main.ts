@@ -12,6 +12,7 @@ import {
   bindSettingsPrepareTracks,
   loadCodecs,
 } from "@/stores/settings";
+import { syncCompanionConnection } from "@/exclusive/companionClient";
 import { initExclusiveAudio } from "@/stores/exclusiveAudio";
 import { pl } from "@/stores/playlist";
 import { bindConnectivityToasts } from "@/connectivityUi";
@@ -32,7 +33,7 @@ initAudioListeners();
 // Connectivity store before codecs so the first probe report is mirrored.
 bindConnectivityStore();
 loadCodecs();
-initExclusiveAudio();
+void initExclusiveAudio().then(() => syncCompanionConnection());
 bindSettingsPrepareTracks(() => pl.tracks);
 bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.

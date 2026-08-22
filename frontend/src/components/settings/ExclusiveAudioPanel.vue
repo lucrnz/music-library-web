@@ -3,10 +3,7 @@
  * Exclusive audio settings — Mac installed PWA only.
  */
 import { computed } from "vue";
-import {
-  formatExclusiveFace,
-  type ExclusiveFaceSnapshot,
-} from "@/exclusive/statusFace";
+import { formatExclusiveFace } from "@/exclusive/statusFace";
 import {
   exclusiveAudio,
   exclusiveStatusSnapshot,
@@ -17,7 +14,12 @@ import {
   setHogToken,
   setSelectedDeviceId,
 } from "@/stores/exclusiveAudio";
-import { requestListDevices } from "@/exclusive/companionClient";
+import {
+  disconnectCompanion,
+  requestListDevices,
+  syncCompanionConnection,
+  syncPreferredDevice,
+} from "@/exclusive/companionClient";
 import { DEFAULT_PORT } from "@/exclusive/protocol";
 import SettingsSelect from "@/components/settings/SettingsSelect.vue";
 
@@ -45,7 +47,7 @@ const face = computed(() => {
   void exclusiveAudio.companionDeviceId;
   void exclusiveAudio.devices;
   void exclusiveAudio.capable;
-  const snap = exclusiveStatusSnapshot() as ExclusiveFaceSnapshot;
+  const snap = exclusiveStatusSnapshot();
   if (!snap.enabled) {
     return { kind: "off", text: "Off", icon: "", interactive: false };
   }
@@ -76,6 +78,7 @@ function onEnable(e: Event) {
   const target = e.target;
   if (!(target instanceof HTMLInputElement)) return;
   setExclusiveEnabled(target.checked);
+  syncCompanionConnection();
 }
 
 function onToken(e: Event) {
@@ -86,12 +89,15 @@ function onToken(e: Event) {
 
 function onTokenCommit() {
   commitHogToken();
+  if (!(exclusiveAudio.hogToken || "").trim()) disconnectCompanion();
+  else syncCompanionConnection();
 }
 
 function onPort(e: Event) {
   const target = e.target;
   if (!(target instanceof HTMLInputElement)) return;
   setExclusivePort(target.value);
+  syncCompanionConnection();
 }
 
 function onMenuToggle(id: string) {
@@ -104,6 +110,7 @@ function onFormatMode(id: string) {
 
 function onDevice(id: string) {
   setSelectedDeviceId(id);
+  syncPreferredDevice();
 }
 
 function onRefreshDevices() {

@@ -13,6 +13,7 @@ import {
   type ExclusiveFormat,
   type FormatMode,
 } from "@/exclusive/formatPolicy";
+import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
 import { DEFAULT_PORT, ROLE_CONTROLLER } from "@/exclusive/protocol";
 import type { Track } from "@/models/track";
 
@@ -24,8 +25,6 @@ export interface ExclusiveDevice {
   name: string;
   sample_rates: number[];
   bit_depths: number[];
-  sampleRates?: number[];
-  bitDepths?: number[];
 }
 
 export interface ExclusiveAudioState {
@@ -45,8 +44,6 @@ export interface ExclusiveAudioState {
   companionPlaying: boolean;
   companionPaused: boolean;
 }
-
-type CompanionClient = typeof import("@/exclusive/companionClient");
 
 const KEY_ENABLED = "musicweb.exclusive.enabled";
 const KEY_TOKEN = "musicweb.exclusive.hogToken";
@@ -180,7 +177,7 @@ function deviceForCaps(): ExclusiveDevice | null {
 /**
  * Snapshot for statusFace / details (reactive-friendly plain object).
  */
-export function exclusiveStatusSnapshot() {
+export function exclusiveStatusSnapshot(): ExclusiveFaceSnapshot {
   return {
     enabled: isExclusiveEnabled(),
     connection: exclusiveAudio.connection,
@@ -199,8 +196,8 @@ export function getExclusiveProfileTag(
   const device = deviceForCaps();
   const caps = device
     ? {
-        sample_rates: device.sample_rates || device.sampleRates || [],
-        bit_depths: device.bit_depths || device.bitDepths || [],
+        sample_rates: device.sample_rates || [],
+        bit_depths: device.bit_depths || [],
       }
     : null;
   const source =
@@ -226,28 +223,42 @@ export function consumeMissingTechToast(trackId: string): boolean {
   return true;
 }
 
-function companion(fn: (m: CompanionClient) => unknown) {
-  import("@/exclusive/companionClient")
-    .then(fn)
-    .catch(() => {});
+export function setExclusiveLive(partial: {
+  connection?: ConnState;
+  role?: string | null;
+  devices?: ExclusiveDevice[];
+  companionDeviceId?: string | null;
+  lastError?: string | null;
+  companionPlaying?: boolean;
+  companionPaused?: boolean;
+}) {
+  if (partial.connection != null) exclusiveAudio.connection = partial.connection;
+  if ("role" in partial) exclusiveAudio.role = partial.role ?? null;
+  if (partial.devices) exclusiveAudio.devices = partial.devices;
+  if ("companionDeviceId" in partial) {
+    exclusiveAudio.companionDeviceId = partial.companionDeviceId ?? null;
+  }
+  if ("lastError" in partial) exclusiveAudio.lastError = partial.lastError ?? null;
+  if (partial.companionPlaying != null) {
+    exclusiveAudio.companionPlaying = partial.companionPlaying;
+  }
+  if (partial.companionPaused != null) {
+    exclusiveAudio.companionPaused = partial.companionPaused;
+  }
 }
 
 export function setExclusiveEnabled(on: boolean) {
   exclusiveAudio.enabled = !!on;
   persist();
-  companion((m) => m.syncCompanionConnection());
 }
 
 export function setHogToken(token: string | number | null | undefined) {
   exclusiveAudio.hogToken = String(token || "");
   persist();
-  if (!(exclusiveAudio.hogToken || "").trim()) {
-    companion((m) => m.disconnectCompanion());
-  }
 }
 
 export function commitHogToken() {
-  companion((m) => m.syncCompanionConnection());
+  persist();
 }
 
 export function setExclusivePort(port: number | string) {
@@ -255,7 +266,6 @@ export function setExclusivePort(port: number | string) {
   if (!Number.isFinite(n) || n <= 0 || n >= 65536) return;
   exclusiveAudio.port = Math.floor(n);
   persist();
-  companion((m) => m.syncCompanionConnection());
 }
 
 export function setFormatMode(mode: string) {
@@ -279,7 +289,6 @@ export function setSelectedDeviceId(id: string | null) {
     exclusiveAudio.companionDeviceId = null;
   }
   persist();
-  companion((m) => m.syncPreferredDevice());
 }
 
 export function setCompanionDeviceId(id: string | null) {
@@ -324,8 +333,4 @@ export async function initExclusiveAudio() {
     return;
   }
   await fetchExclusiveFormats();
-  const { syncCompanionConnection } = await import(
-    "@/exclusive/companionClient"
-  );
-  syncCompanionConnection();
 }

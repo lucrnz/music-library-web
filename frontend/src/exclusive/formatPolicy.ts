@@ -17,8 +17,6 @@ export type SourceTech = {
 export type DeviceCaps = {
   sample_rates?: number[];
   bit_depths?: number[];
-  sampleRates?: number[];
-  bitDepths?: number[];
 } | null;
 
 export type FormatMode = "prefer_source" | "upsample_device";
@@ -36,10 +34,10 @@ function deviceSupported(
 ): ExclusiveFormat[] {
   if (!formats?.length) return [];
   const rates = new Set(
-    deviceCaps?.sample_rates || deviceCaps?.sampleRates || [],
+    deviceCaps?.sample_rates || [],
   );
   const depths = new Set(
-    deviceCaps?.bit_depths || deviceCaps?.bitDepths || [],
+    deviceCaps?.bit_depths || [],
   );
   // Empty caps → treat as no support (hard-fail upstream), not full allowlist.
   if (!rates.size || !depths.size) return [];
