@@ -3,10 +3,7 @@
  */
 import { coverUrl, fetchAlbums, fetchAlbumTracks } from "@/api";
 import { kindForAlbum, kindForTrack } from "@/lossyKind";
-import {
-  treeNodeId,
-  type TreeNode,
-} from "@/components/tree/sources/artistsSource";
+import { treeNodeId, type TreeNode } from "@/components/tree/treeNode";
 
 export async function listAlbumRoots(): Promise<TreeNode[]> {
   const items = await fetchAlbums();

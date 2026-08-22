@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { downloadsBrowse } from "@/components/library/sources/downloadsBrowse";
 import { artUrlCache } from "@/downloads/catalog";
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 
 const loc = {
   mode: "downloads",
@@ -17,7 +17,16 @@ function artistNode(id: string): TreeNode {
     isLeaf: false,
     kind: "artist",
     title: "A",
-    data: { id, name: "A" },
+    data: {
+      id,
+      name: "A",
+      sortName: null,
+      albumCount: 0,
+      trackCount: 0,
+      hasImage: false,
+      hasPreferredImage: false,
+      preferredRev: 0,
+    },
   };
 }
 

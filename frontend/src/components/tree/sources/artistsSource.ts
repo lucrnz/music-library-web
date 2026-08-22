@@ -9,36 +9,7 @@ import {
   fetchArtists,
 } from "@/api";
 import { kindForAlbum, kindForTrack } from "@/lossyKind";
-
-export interface TreeNode {
-  key: string;
-  isLeaf: boolean;
-  kind: string;
-  title: string;
-  subtitle?: string;
-  cover?: string;
-  lossyKind?: string | null;
-  data?: unknown;
-  children?: TreeNode[];
-}
-
-export function treeNodeId(node: TreeNode): string {
-  const data = node.data;
-  if (data && typeof data === "object" && "id" in data) {
-    const id = (data as { id?: unknown }).id;
-    if (typeof id === "string") return id;
-  }
-  return "";
-}
-
-export function treeNodePath(node: TreeNode): string {
-  const data = node.data;
-  if (data && typeof data === "object" && "path" in data) {
-    const path = (data as { path?: unknown }).path;
-    if (typeof path === "string") return path;
-  }
-  return "";
-}
+import { treeNodeId, type TreeNode } from "@/components/tree/treeNode";
 
 export async function listArtistRoots(): Promise<TreeNode[]> {
   const items = await fetchArtists();

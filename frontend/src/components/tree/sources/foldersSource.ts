@@ -2,10 +2,7 @@
  * Folders FS tree: directory → nested dirs/files (lazy browse).
  */
 import { browseFolder } from "@/components/library/loaders";
-import {
-  treeNodePath,
-  type TreeNode,
-} from "@/components/tree/sources/artistsSource";
+import { treeNodePath, type TreeNode } from "@/components/tree/treeNode";
 
 export async function listFolderChildren(
   folderPath: string,
@@ -18,6 +15,7 @@ export async function listFolderChildren(
       key: `dir:${dir.path}`,
       isLeaf: false,
       kind: "dir",
+      path: dir.path,
       title: dir.name || dir.path || "",
       subtitle: "",
       cover: "",

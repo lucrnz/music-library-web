@@ -1,7 +1,7 @@
 /**
  * Downloads offline tree: always artist → album → tracks.
  */
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 import { resolveDownloadsFocusPath } from "@/components/tree/treeNavigation";
 import { loadDownloadsCatalogView } from "@/downloads/snapshot";
 

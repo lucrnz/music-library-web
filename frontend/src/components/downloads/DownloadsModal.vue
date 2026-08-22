@@ -26,7 +26,7 @@ import {
 } from "@/components/tree/sources/downloadsSource";
 import TreeView from "@/components/tree/TreeView.vue";
 import { createTreeSession, primePackedTree } from "@/components/tree/treeSession";
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 
 interface QueueItem {
   id: number;
@@ -233,9 +233,19 @@ const roots = ref<TreeNode[]>([]);
     };
 
     function leaf(node: TreeNode): DownloadLeaf {
-      return node.data && typeof node.data === "object"
-        ? (node.data as DownloadLeaf)
-        : {};
+      if (node.kind === "track") {
+        return {
+          id: node.data.id,
+          track: node.data.track,
+          codec: node.data.codec,
+          bytes: node.data.bytes,
+          status: node.data.status,
+        };
+      }
+      if (node.kind === "artist" || node.kind === "album") {
+        return { id: node.data.id };
+      }
+      return {};
     }
 
     function onGroupDelete(node: TreeNode) {

@@ -10,7 +10,7 @@ import {
   type VisibleNode,
 } from "@/components/tree/flattenVisible";
 import type { TreeSession } from "@/components/tree/treeSession";
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 
 const props = withDefaults(
   defineProps<{

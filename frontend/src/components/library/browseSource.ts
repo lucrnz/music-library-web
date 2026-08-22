@@ -6,7 +6,7 @@ import type { BrowseDir } from "@/api";
 import type { Artist } from "@/models/artist";
 import type { LibraryAlbum, LibraryPage } from "@/components/library/loaders";
 import type { Track } from "@/models/track";
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 
 export interface BrowseLoc {
   mode: string;

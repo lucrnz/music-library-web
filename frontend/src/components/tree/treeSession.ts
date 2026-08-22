@@ -3,7 +3,7 @@
  * Not stored in ui.js.
  */
 import { reactive } from "vue";
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 
 export type ChildStatus = "idle" | "loading" | "ready" | "error";
 

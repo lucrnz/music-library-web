@@ -1,18 +1,16 @@
 /**
  * Downloads BrowseSource.
  */
-import type { Artist } from "@/models/artist";
 import type { BrowseSource } from "@/components/library/browseSource";
-import type { LibraryAlbum, LibraryPage } from "@/components/library/loaders";
+import type { LibraryPage } from "@/components/library/loaders";
 import { addAllDownloadedAlbum, addAllDownloadedArtist } from "@/downloads/addAll";
 import { loadDownloadsView } from "@/downloads/browse";
 import { artUrlCache } from "@/downloads/catalog";
 import { downloads } from "@/downloads/state";
-import type { Track } from "@/models/track";
 import { addToQueue } from "@/stores/playlist";
 import { resolveDownloadsFocusPath } from "@/components/tree/treeNavigation";
 import { loadDownloadsChildren } from "@/components/tree/sources/downloadsSource";
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 import type { DownloadsHierarchy } from "@/downloads/hierarchy";
 import { loadDownloadsCatalogView } from "@/downloads/snapshot";
 
@@ -113,22 +111,18 @@ export const downloadsBrowse: BrowseSource = {
     }
     const node = target.node;
     if (node.kind === "artist") {
-      const data = node.data;
-      const id =
-        data && typeof data === "object" && "id" in data
-          ? String((data as Artist).id || "")
-          : "";
+      const id = node.data.id;
       if (id) return artistThumb(id, artUrls, node.cover || "");
     }
     if (node.kind === "album") {
-      const album = node.data as LibraryAlbum | undefined;
-      if (album?.id) {
+      const album = node.data;
+      if (album.id) {
         return artUrls[`cover:${album.id}:thumb`] || node.cover || "";
       }
     }
     if (node.kind === "track") {
-      const track = node.data as Track | undefined;
-      if (track?.albumId) {
+      const track = node.data;
+      if (track.albumId) {
         return artUrls[`cover:${track.albumId}:thumb`] || node.cover || "";
       }
     }

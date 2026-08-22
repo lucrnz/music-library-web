@@ -12,7 +12,6 @@ import { entityActionsFor } from "@/components/library/entityActions";
 import { useEntityMenu } from "@/components/library/useEntityMenu";
 import { downloadsBrowse } from "@/components/library/sources/downloadsBrowse";
 import { onlineBrowse } from "@/components/library/sources/onlineBrowse";
-import type { LibraryAlbum } from "@/components/library/loaders";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
 import { isDesktopContextMenu } from "@/components/menu/rowActionMenu";
 import { downloads } from "@/downloads/state";
@@ -26,12 +25,8 @@ import Icon from "@/components/icons/Icon.vue";
 import FileRow from "@/components/library/rows/FileRow.vue";
 import TrackRow from "@/components/library/rows/TrackRow.vue";
 
-import type { Track } from "@/models/track";
 import { playOrQueueTrack } from "@/components/library/rows";
-import {
-  treeNodePath,
-  type TreeNode,
-} from "@/components/tree/sources/artistsSource";
+import { treeNodePath, type TreeNode } from "@/components/tree/treeNode";
 import TreeView from "@/components/tree/TreeView.vue";
 import type { TreeViewExpose } from "@/components/tree/TreeView.vue";
 import {
@@ -78,10 +73,7 @@ const {
 });
 
 function artistFromNode(node: TreeNode): Artist | null {
-  if (node.kind !== "artist") return null;
-  const data = node.data;
-  if (!data || typeof data !== "object" || !("id" in data)) return null;
-  return data as Artist;
+  return node.kind === "artist" ? node.data : null;
 }
 
 function resolveCover(node: TreeNode): string {
@@ -95,8 +87,8 @@ function targetFromNode(node: TreeNode): OpenMenu | null {
       return artist ? { kind: "artist", artist } : null;
     }
     case "album": {
-      const album = node.data as LibraryAlbum | undefined;
-      if (!album?.id) return null;
+      const album = node.data;
+      if (!album.id) return null;
       return { kind: "album", album };
     }
     case "dir":
@@ -105,8 +97,8 @@ function targetFromNode(node: TreeNode): OpenMenu | null {
         dir: { name: node.title, path: treeNodePath(node) },
       };
     case "track": {
-      const track = node.data as Track | undefined;
-      return track?.id ? { kind: "track", track } : null;
+      const track = node.data;
+      return track.id ? { kind: "track", track } : null;
     }
     case "file": {
       const file = fileFromNode(node);
@@ -245,21 +237,21 @@ async function loadRoots() {
 }
 
 function fileFromNode(node: TreeNode): FileRowModel | null {
-  const data = node.data;
-  if (!data || typeof data !== "object") return null;
-  const rec = data as FileRowModel;
-  if (typeof rec.path !== "string") return null;
-  return rec;
+  return node.kind === "file" ? node.data : null;
+}
+
+function trackFromNode(node: TreeNode) {
+  return node.kind === "track" ? node.data : null;
 }
 
 async function onActivateLeaf(node: TreeNode) {
-  if (node.kind === "track" && node.data) {
-    await playOrQueueTrack(node.data as Track);
+  if (node.kind === "track") {
+    await playOrQueueTrack(node.data);
     return;
   }
-  if (node.kind === "file" && node.data) {
-    const file = fileFromNode(node);
-    const t = file?.track || file?.id;
+  if (node.kind === "file") {
+    const file = node.data;
+    const t = file.track || file.id;
     if (t) await playOrQueueTrack(t);
   }
 }
@@ -344,8 +336,8 @@ onMounted(loadRoots);
       </template>
       <template #leaf="{ node }">
         <TrackRow
-          v-if="node.kind === 'track'"
-          :track="node.data as Track"
+          v-if="trackFromNode(node)"
+          :track="trackFromNode(node)"
           :show-download="showTrackDownload"
           :title-mode="showTrackDownload ? undefined : 'title'"
           :show-menu="true"

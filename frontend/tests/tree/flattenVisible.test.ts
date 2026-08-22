@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { flattenVisible } from "@/components/tree/flattenVisible";
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 
-function node(key: string, extra: Partial<TreeNode> = {}): TreeNode {
-  return { key, isLeaf: extra.isLeaf ?? true, kind: "x", title: key, ...extra };
+function node(key: string, extra: { isLeaf?: boolean } = {}): TreeNode {
+  return {
+    key,
+    isLeaf: extra.isLeaf ?? true,
+    kind: "dir",
+    path: key,
+    title: key,
+  };
 }
 
 describe("flattenVisible", () => {

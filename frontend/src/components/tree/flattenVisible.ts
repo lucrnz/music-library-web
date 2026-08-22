@@ -1,7 +1,7 @@
 /**
  * Pure flatten of expanded tree into visible rows (render + keyboard).
  */
-import type { TreeNode } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 
 export interface VisibleNode {
   node: TreeNode;

@@ -4,7 +4,6 @@
 import type { Router } from "vue-router";
 import { coverSrc } from "@/artistArt/state";
 import type { BrowseDir } from "@/api";
-import type { Artist } from "@/models/artist";
 import { runArtistDownloadAll } from "@/components/library/artistMenuItems";
 import type { BrowseSource } from "@/components/library/browseSource";
 import {
@@ -22,8 +21,8 @@ import { listAlbumRoots, loadAlbumChildren } from "@/components/tree/sources/alb
 import {
   listArtistRoots,
   loadArtistChildren,
-  type TreeNode,
 } from "@/components/tree/sources/artistsSource";
+import type { TreeNode } from "@/components/tree/treeNode";
 import {
   listFolderRoots,
   loadFolderNodeChildren,
@@ -129,10 +128,7 @@ export const onlineBrowse: BrowseSource = {
     if (target.kind === "album" || target.kind === "track") return "";
     const node = target.node;
     if (node.kind === "artist") {
-      const data = node.data;
-      if (data && typeof data === "object" && "id" in data) {
-        return coverSrc(data as Artist);
-      }
+      return coverSrc(node.data);
     }
     return node.cover || "";
   },
