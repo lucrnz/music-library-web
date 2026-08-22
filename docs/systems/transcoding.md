@@ -36,7 +36,7 @@ Exact argv fragments and profile tags live in `profiles.py`.
 - Shutdown always deletes this cache. After about an hour with no in-flight HTTP and no recent request, the server also runs `Transcoder.clear_cache()`. Those two are the only full wipes — there is no `POST /api/cache/clear`. Intervals are source constants in `idle.py`. Any HTTP to the library process counts; the control socket and exclusive companion WebSocket do not.
 - Queue clear and last-row-of-a-track remove may `POST /api/transcode/forget` with discarded track ids. The server drops those jobs and all-profile cache files unless the id is the radio current track or still remaining on the live radio queue. Body and count fields live in `media.py` / `forget.py`.
 - Concurrent requests for the same track+profile share one encode.
-- A single worker model applies: interactive play may preempt prewarm; partial files are never served as complete.
+- A single worker model applies, in this order: urgent (play, radio current, near-end, active download stream), radio next-2, download prewarm, playlist prewarm. A higher class preempts a running lower-class encode; partial files are never served as complete.
 - Seeking uses HTTP Range on completed cache files.
 
 ## Client interaction
@@ -46,8 +46,8 @@ Client quality prefs, play-source resolution, and prepare timing are owned by `d
 - Stream by stable track id (preferred) with a codec/profile tag.
 - Settings UI should only offer profiles the browser can decode (client probes).
 - Client may pick one stream tag and one download tag; `/api/codecs` exposes bitrate/depth/rate so the client can rank quality, plus `approx_mb_per_hour` as a product size constant for Settings (not an encode input). `GET /api/exclusive-formats` stays estimate-free.
-- Optional prepare endpoint prewarms encodes without blocking the main UX path. Radio and that endpoint share `enqueue_prepare`. Radio must not call `drop_pending_prewarm`. Radio jobs log `log_label` + profile tag, not paths. The 1-hour idle wipe is unchanged. Vite `/api` proxy sets `ws: true` so the radio WebSocket upgrades in `pnpm --dir frontend dev`.
-- Client may send prepare with `urgent: true` (near end of the current track, once per playback load) so the next queue item is promoted to the urgent encode tier before natural advance.
+- Optional prepare endpoint prewarms encodes without blocking the main UX path. Radio and that endpoint share `enqueue_prepare`. `drop_pending_prewarm` (Play all / stream-codec `replace: true`) drops only playlist prewarm — not download prewarm or radio next-2. Radio must not call `drop_pending_prewarm`. Radio jobs log `log_label` + profile tag, not paths. The 1-hour idle wipe is unchanged. Vite `/api` proxy sets `ws: true` so the radio WebSocket upgrades in `pnpm --dir frontend dev`.
+- Client may send prepare with `urgent: true` (near end of the current track, once per playback load) so the next queue item is promoted to the urgent encode tier before natural advance. Optional `tier: "download"` enqueues download prewarm; omitted `tier` is playlist prewarm. Download-window rules live in `docs/systems/downloads.md`.
 
 ## Guardrails
 

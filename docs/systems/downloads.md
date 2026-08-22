@@ -14,6 +14,7 @@ Optional client-side offline music: users can download stream-profile audio to t
   - Queue IDB CRUD / live progress: `queue.ts`
   - Concurrent-job cap (allowed values, persist, rank-to-keep): `concurrency.ts`
   - Queue pump + abort maps: `queueRuntime.ts`
+  - Download-tier prepare window + sync/forget: `prewarm.ts` (HTTP via `playback/prepare.ts`)
   - Network policy: `queuePolicy.ts`
   - Job I/O (`executeDownloadJob`, `streamUrl`): `worker.ts`
   - OPFS binary storage: `opfs.ts`
@@ -45,7 +46,7 @@ OPFS is mandatory for resumable Range downloads and partials. Exact object-store
 
 1. **Optional.** Downloads start disabled until the user enables them; enabling needs OPFS support. A failed cold-start boot (`initDownloads`) must not persist the enable flag off — only explicit disable, or a failed explicit enable, writes it false.
 2. **Enqueue.** Pure enqueue / lifecycle lives in `index.ts`. User-facing `downloadTrack(s)` in `ui.ts` may confirm near-quota, then call enqueue.
-3. **Queue.** Background workers fetch the chosen **download** stream profile from the server and write OPFS; catalog records track status (including broken/orphan cases). The pump admits up to the persisted concurrent-job cap (default 2). Raising the cap fills empty slots immediately unless the queue is user-paused or auto-paused. Lowering it keeps the in-flight jobs with the most bytes written and returns the extras to `pending` with OPFS partials kept so they resume when a slot opens. Lossy-indexed tracks always download the original file (`source`); the download quality picker applies to lossless only. Original-file extension and MIME are defined for MP3 and AAC only.
+3. **Queue.** Background workers fetch the chosen **download** stream profile from the server and write OPFS; catalog records track status (including broken/orphan cases). The pump admits up to the persisted concurrent-job cap (default 2). Raising the cap fills empty slots immediately unless the queue is user-paused or auto-paused. Lowering it keeps the in-flight jobs with the most bytes written and returns the extras to `pending` with OPFS partials kept so they resume when a slot opens. Pending and user-paused lossless rows also ask `POST /api/transcode/prepare` with `tier: "download"` for the first 8 in queue order so encodes can finish before the job is active; active jobs still `GET /api/stream`. Lossy / `source` rows are not prepared. User-pause still prewarms; auto-pause / offline does not. Cancel or disable-and-clear forgets unfinished ids that are not on the play queue; clear-finished does not forget. Lossy-indexed tracks always download the original file (`source`); the download quality picker applies to lossless only. Original-file extension and MIME are defined for MP3 and AAC only.
 4. **Network policy.** Auto-pause when hard offline or server unreachable. User pause is separate from auto-pause.
 5. **Catalog projection.** In-memory projection of downloaded tracks feeds UI icons, prepare skip, and tree/list browse of local content. `trackDownloadState` `ready` / `other` means a playable local file — playback uses that join to gray and skip undownloaded queue rows when `connectivity.canUseRemote` is false (see `docs/systems/playback.md`).
 6. **Play path.** Delivery choice (local blob vs stream) is owned by playback resolution (`resolve.ts`), used by the on-demand player and by `radio/session.ts`, not by re-encoding on the client.
@@ -70,6 +71,7 @@ Durable split so `index.ts` does not become a barrel:
 | Play/cover URL resolution | `resolve.ts` (queue via `playIntent.ts`; radio via `radio/session.ts`) |
 | Queue row CRUD / live progress `Map` | `queue.ts` (does not import runtime) |
 | Pump + in-flight abort (`freezeActive` / `cancelItem` / `stopAll` / `applyConcurrency`) | `queueRuntime.ts` |
+| Download-tier window, sync, forget (not play `preparedKeys`) | `prewarm.ts` |
 | Auto-pause / health-work (injected `freeze`) | `queuePolicy.ts` |
 | Stream I/O | `worker.ts` (`streamUrl`) |
 
