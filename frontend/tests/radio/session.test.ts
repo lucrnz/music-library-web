@@ -7,7 +7,12 @@ vi.mock("@/api", () => ({
   ),
   coverUrl: vi.fn(() => "/static/img/placeholder.svg"),
 }));
-vi.mock("@/listens/bridge", () => ({ discard: vi.fn() }));
+vi.mock("@/listens/bridge", () => ({
+  discard: vi.fn(),
+  startCycle: vi.fn(),
+  onTime: vi.fn(),
+  onEnded: vi.fn(),
+}));
 vi.mock("@/playback/session", () => ({
   restoreMediaSession: vi.fn(),
   suspendMediaSession: vi.fn(),
@@ -36,6 +41,7 @@ vi.mock("@/downloads/catalog", () => ({
 import { streamUrl } from "@/api";
 import { markTrackBroken } from "@/downloads/catalog";
 import { resolvePlaySource } from "@/downloads/resolve";
+import { discard, startCycle } from "@/listens/bridge";
 import {
   bumpRadioGen,
   loadCurrent,
@@ -49,6 +55,8 @@ describe("radio session", () => {
     vi.mocked(streamUrl).mockClear();
     vi.mocked(resolvePlaySource).mockClear();
     vi.mocked(markTrackBroken).mockClear();
+    vi.mocked(startCycle).mockClear();
+    vi.mocked(discard).mockClear();
     vi.spyOn(radioAudio, "load").mockResolvedValue();
     vi.spyOn(radioAudio, "seek").mockResolvedValue();
     vi.spyOn(radioAudio, "play").mockResolvedValue();
@@ -95,6 +103,14 @@ describe("radio session", () => {
       .invocationCallOrder[0];
     expect(loadOrder).toBeLessThan(seekOrder);
     expect(seekOrder).toBeLessThan(playOrder);
+    expect(startCycle).toHaveBeenCalledTimes(1);
+    expect(startCycle).toHaveBeenCalledWith({
+      trackId: "t1",
+      durationSec: null,
+      profile: "opus_192_48000",
+      playSource: "streaming",
+      origin: "radio",
+    });
   });
 
   it("loadCurrent plays a downloaded blob when resolve prefers local", async () => {
@@ -112,6 +128,13 @@ describe("radio session", () => {
     expect(radio.playSource).toBe("downloaded");
     expect(radio.playProfileId).toBe("flac_16_44100");
     expect(radio.chrome).toBe("tuned");
+    expect(startCycle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        playSource: "downloaded",
+        profile: "flac_16_44100",
+        origin: "radio",
+      }),
+    );
   });
 
   it("remints a failed download to the official stream", async () => {
@@ -185,6 +208,49 @@ describe("radio session", () => {
     expect(radioAudio.seek).not.toHaveBeenCalled();
     expect(radioAudio.play).not.toHaveBeenCalled();
     expect(radio.playSource).toBe("none");
+    expect(radio.chrome).toBe("tuning");
+  });
+
+  it("loadCurrent discards then starts a new radio cycle", async () => {
+    vi.mocked(resolvePlaySource).mockResolvedValue({
+      source: "streaming",
+      url: "/api/stream?id=t1&codec=opus_192_48000",
+      profile: "opus_192_48000",
+    });
+    radio.chrome = "tuning";
+    radio.face = "current";
+    radio.track = {
+      id: "t1",
+      title: "Song",
+      duration: 180,
+    } as never;
+    radio.tunerProfile = "opus_192_48000";
+    await loadCurrent(false);
+    expect(discard).toHaveBeenCalled();
+    expect(startCycle).toHaveBeenCalledTimes(1);
+    expect(startCycle).toHaveBeenCalledWith({
+      trackId: "t1",
+      durationSec: 180,
+      profile: "opus_192_48000",
+      playSource: "streaming",
+      origin: "radio",
+    });
+    vi.mocked(startCycle).mockClear();
+    vi.mocked(discard).mockClear();
+    await loadCurrent(false);
+    expect(discard).toHaveBeenCalled();
+    expect(startCycle).toHaveBeenCalledTimes(1);
+    expect(startCycle).toHaveBeenCalledWith(
+      expect.objectContaining({ trackId: "t1", origin: "radio" }),
+    );
+  });
+
+  it("catch-up while tuned discards and does not start a cycle", async () => {
+    radio.chrome = "tuned";
+    radio.face = "catching_up";
+    await onFaceOrTrack(null);
+    expect(discard).toHaveBeenCalled();
+    expect(startCycle).not.toHaveBeenCalled();
     expect(radio.chrome).toBe("tuning");
   });
 });

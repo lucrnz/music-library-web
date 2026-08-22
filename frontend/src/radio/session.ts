@@ -6,6 +6,12 @@ import { streamUrl } from "@/api";
 import { markTrackBroken } from "@/downloads/catalog";
 import { resolvePlaySource } from "@/downloads/resolve";
 import { downloads } from "@/downloads/state";
+import {
+  discard as discardListen,
+  onEnded as onListenEnded,
+  onTime as onListenTime,
+  startCycle as startListenCycle,
+} from "@/listens/bridge";
 import { SOURCE_TAG } from "@/lossyKind";
 import { suspendMediaSession } from "@/playback/session";
 import { needsReseek } from "@/radio/sync";
@@ -45,6 +51,7 @@ export function clearLoadedKeys(): void {
   lastLoadedLossy = null;
   revokeRadioLocalUrl();
   radio.playSource = "none";
+  discardListen();
 }
 
 export function maybeReseek(): void {
@@ -170,6 +177,15 @@ async function loadResolvedRadio(
     lastLoadedTrackId = track.id;
     lastLoadedLossy = radio.isLossy;
     radio.chrome = "tuned";
+    if (resolved.profile) {
+      startListenCycle({
+        trackId: track.id,
+        durationSec: radio.track?.duration ?? null,
+        profile: resolved.profile,
+        playSource: resolved.source,
+        origin: "radio",
+      });
+    }
     writeRadioMediaSession();
   } catch {
     if (gen !== radioGen) return;
@@ -186,6 +202,7 @@ async function loadResolvedRadio(
 export async function loadCurrent(countsAsFailure: boolean): Promise<void> {
   const track = radio.track;
   if (!track?.id) return;
+  discardListen();
   const gen = ++radioGen;
   await loadResolvedRadio(track, gen, countsAsFailure, false);
 }
@@ -222,7 +239,19 @@ export function bindAudioHandlers(): void {
     if (radio.chrome === "tuned" && !radioAudio.ended) tuneOut();
   });
   radioAudio.onEnded(() => {
+    onListenEnded();
     /* station clock owns advance */
+  });
+  radioAudio.sink.setHandlers({
+    onTime(t, d) {
+      if (radio.chrome !== "tuned") return;
+      if (radioAudio.loadInFlight || radioAudio.seekInFlight) return;
+      onListenTime({
+        currentTime: t,
+        duration: Number.isFinite(d) && d > 0 ? d : null,
+        playing: !radioAudio.paused && !radioAudio.ended,
+      });
+    },
   });
   radioAudio.onError(() => {
     if (radioFailures.record()) {

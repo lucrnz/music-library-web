@@ -7,7 +7,12 @@ vi.mock("@/api", () => ({
     track?.id ? `/api/stream?id=${track.id}&codec=${codec}` : null,
   ),
 }));
-vi.mock("@/listens/bridge", () => ({ discard: vi.fn() }));
+vi.mock("@/listens/bridge", () => ({
+  discard: vi.fn(),
+  startCycle: vi.fn(),
+  onTime: vi.fn(),
+  onEnded: vi.fn(),
+}));
 vi.mock("@/playback/session", () => ({
   restoreMediaSession: vi.fn(),
   suspendMediaSession: vi.fn(),
@@ -35,6 +40,7 @@ vi.mock("@/downloads/catalog", () => ({
 
 import { fromApiTrack } from "@/models/track";
 import { SOURCE_TAG } from "@/lossyKind";
+import { discard, startCycle } from "@/listens/bridge";
 import { streamUrl } from "@/api";
 import {
   applySnapshot,
@@ -72,6 +78,8 @@ describe("radio store", () => {
     resetRadioStore();
     vi.mocked(fetchRadioNow).mockReset();
     vi.mocked(streamUrl).mockClear();
+    vi.mocked(startCycle).mockClear();
+    vi.mocked(discard).mockClear();
   });
 
   it("does not call fromApiTrack without an id", () => {
@@ -142,6 +150,7 @@ describe("radio store", () => {
     expect(radio.chrome).toBe("inactive");
     expect(radio.tabOpen).toBe(true);
     expect(radioChromeActive()).toBe(false);
+    expect(startCycle).not.toHaveBeenCalled();
     setTabOpen(false);
     expect(radio.connected).toBe(false);
   });
@@ -224,7 +233,9 @@ describe("radio store", () => {
     vi.mocked(fetchRadioNow).mockResolvedValue(currentPayload);
     setTabOpen(true);
     await tuneIn();
+    vi.mocked(discard).mockClear();
     tuneOut();
+    expect(discard).toHaveBeenCalled();
     expect(radio.chrome).toBe("stopped");
     setTabOpen(false);
     expect(radioChromeActive()).toBe(true);
