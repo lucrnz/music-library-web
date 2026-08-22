@@ -11,7 +11,7 @@ This page owns the listen contract. Exact columns, JSON fields, and route wiring
 - Event row and rankings SQL: `src/musicweb/db/models.py`, `src/musicweb/db/repositories/listens.py`
 - HTTP ingest and rankings: `src/musicweb/routes/listens.py`
 - 70% cycle, outbox, flush, chips: `frontend/src/listens/`
-- Player call sites only: `frontend/src/stores/player.ts`
+- Player call sites: sink time/ended in `frontend/src/stores/player.ts`; cycle start after successful load in `frontend/src/playback/load.ts`
 - Stats browse UI: `frontend/src/components/stats/`
 - Related: `docs/systems/playback.md` (delivery, not listens), `docs/systems/diagnostics.md` (JSONL, not listens)
 

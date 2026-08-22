@@ -45,7 +45,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `pwa_shell.py` | Dist path, inventory walk, SW render, theme/manifest chrome constants |
 | `sw.template.js` | Service worker template (Python-injected precache list) |
 | `db/` | Engine, models, FTS helpers, repositories, Alembic migrations |
-| `scan/` | Walk, fingerprint, batch upsert, covers, artist images, lyrics, finalize; shared enrichment loop in `enrichment.py` |
+| `scan/` | Walk, `index_phase.py` (`run_index`), fingerprint, batch upsert, covers, artist images, lyrics, finalize; shared enrichment loop in `enrichment.py` |
 | `transcode/` | Dependency check (ffmpeg + ffprobe), profiles, probe, encode worker, shared `enqueue_prepare`, idle stream-cache eviction |
 | `radio/` | Household station clock, picker, tuner prepare (reuses Transcoder); snapshot serialize lives on `routes/radio.py` |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
@@ -62,10 +62,10 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **Present audio files** go through `Library.present_audio` (jail + exists + indexable). Stream maps `None` to 404. Enqueue, radio, scan lyrics/covers, and local artist-image folder lookup branch on `None`. Do not reimplement resolve-and-exists at those call sites. `resolve` stays for directory browse/collect.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
-- **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`. The source owns list load, tree `loadRoots` / `loadChildren` / `resolveCover`, and tree title / empty / focus / reload; the tree pane does not switch on mode for those jobs.
-- **Playback session** is `frontend/src/playback/session.ts` (`become`). Radio socket / load-gen / face machine / Media Session live in `frontend/src/radio/runtime.ts`; `stores/radio.ts` is the chrome face. Exclusive companion commands are a module-level `COMMANDS` table + `_with_live` in `exclusive/session.py`.
+- **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`. The source owns list load, tree `loadRoots` / `loadChildren`, `flags` / `chrome` / `cover`, and tree title / empty / focus / reload; the tree pane does not switch on mode for those jobs.
+- **Playback session** is `frontend/src/playback/session.ts` (`become`). Load/fail is `frontend/src/playback/load.ts`. Radio socket / load-gen / face machine / Media Session live in `frontend/src/radio/runtime.ts`; `stores/radio.ts` is the chrome face. Exclusive companion commands are a module-level `COMMANDS` table + `_with_live` in `exclusive/session.py`.
 - **Row action menus** live under `frontend/src/components/menu/`. Desktop media queries for new client code live in `frontend/src/layout.ts`. See `docs/frontend/conventions.md`.
-- **Offline downloads** stay under `frontend/src/downloads/` (`snapshot.ts` catalog view, `queueRuntime.ts` pump + abort) and must not write the server index.
+- **Offline downloads** stay under `frontend/src/downloads/` (`snapshot.ts` catalog view, `queueRuntime.ts` pump + abort; `queue.ts` does not import runtime) and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.
 
 ## Documentation folders

@@ -2,7 +2,8 @@
 
 ## Source of truth
 
-- Job orchestration (scan + regen kinds): `src/musicweb/jobs/runner.py` (`PHASES` + `_run_phases`; typed `PhaseCtx`; `_begin_phase` owns phase state + scan progress; one `_begin`; a completed scan writes `last_scan_finished_at` for radio via `radio_repo.scan_finished_at`)
+- Job orchestration (scan + regen kinds): `src/musicweb/jobs/runner.py` (`PHASES` + `_run_phases`; typed `PhaseCtx`; `_begin_phase` owns phase state + scan progress; one `_begin`; a completed scan writes `last_scan_finished_at` for radio via `radio_repo.scan_finished_at`). The runner does not walk files.
+- Index walk + batch flush: `src/musicweb/scan/index_phase.py` (`run_index`)
 - Walk / formats: `src/musicweb/scan/walk.py`, `formats.py`
 - Album lossy-kind reduce: SQL in `finalize.recount_entities` (`mp3` / `aac` / `lossy` / `mixed`)
 - Fingerprints / identity: `src/musicweb/scan/fingerprint.py`, `identity.py`
