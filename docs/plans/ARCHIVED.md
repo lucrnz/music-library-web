@@ -493,3 +493,15 @@ Collapsed streaming quality to one Settings picker and removed cellular/Wi-Fi do
 ```bash
 git show c4236650c0cb14611e81902ec829f9ccb3269e35
 ```
+
+## 2026-08-20-5yx7hzdd-now-playing-cover-flip-done
+
+**Title:** Now-playing cover flip
+
+**Commit:** `066ce0136b9bbb51b98e0d30480f01ecd8008b9d`
+
+Large now-playing covers (expanded on-demand and the radio room) flip to the album-artist photo when the server confirms one exists. Open the delete commit for the eligibility helper (`canReachServer` plus `has_image` / `has_preferred_image`) and the shared `NowPlayingView` 3D card that mini and compact still treat as an open target.
+
+```bash
+git show 066ce0136b9bbb51b98e0d30480f01ecd8008b9d
+```
