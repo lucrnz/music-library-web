@@ -565,3 +565,15 @@ Unified exclusive vs HTML play into `resolvePlayIntent`, made server lossy/sourc
 ```bash
 git show 954766bbde4c5f7b6d3b95d16f694d7b3d683eb9
 ```
+
+## 2026-08-21-kqhga9l0-teardown-browse-jail-done
+
+**Title:** Delete session, browse, and path-jail twins
+
+**Commit:** `5f80411735ac287c956712929610029e0b4fcfb8`
+
+One on-demand teardown pair (always stop HTML; companion only on unavailable or sink change), one `LibraryView` over a `BrowseSource`, and `Library.present_audio` as the path-jail presence check. Open the delete commit for `useEntityMenu`, the cover-src empty-string vs omit contract, and the exclusive-keeps-playing teardown fix.
+
+```bash
+git show 5f80411735ac287c956712929610029e0b4fcfb8
+```
