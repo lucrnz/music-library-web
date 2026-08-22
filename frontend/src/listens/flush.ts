@@ -77,6 +77,7 @@ export function enqueueListen(event: ListenEvent): boolean {
     track_id: event.trackId,
     profile: event.profile,
     play_source: event.playSource,
+    origin: event.origin,
     counted_at: event.countedAt,
   });
   if (!wrote) return false;

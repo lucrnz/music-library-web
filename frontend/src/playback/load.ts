@@ -202,6 +202,7 @@ function maybeStartListenCycle(track: Track | null | undefined) {
     durationSec: track.duration,
     profile,
     playSource: source,
+    origin: "queue",
   });
 }
 

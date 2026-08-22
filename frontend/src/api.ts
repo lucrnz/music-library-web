@@ -102,6 +102,7 @@ export async function postListen(body: {
   track_id: string;
   profile: string;
   play_source: string;
+  origin: string;
   counted_at: string;
 }): Promise<{ ok: true } | { status: number }> {
   try {

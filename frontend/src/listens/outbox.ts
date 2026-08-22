@@ -7,23 +7,36 @@ export interface PendingListen {
   track_id: string;
   profile: string;
   play_source: "streaming" | "downloaded";
+  origin: "queue" | "radio";
   counted_at: string;
 }
 
-function isPending(value: unknown): value is PendingListen {
-  if (!value || typeof value !== "object") return false;
+function parsePending(value: unknown): PendingListen | null {
+  if (!value || typeof value !== "object") return null;
   const rec = value as Record<string, unknown>;
-  return (
-    typeof rec.id === "string" &&
-    rec.id.length > 0 &&
-    typeof rec.track_id === "string" &&
-    rec.track_id.length > 0 &&
-    typeof rec.profile === "string" &&
-    rec.profile.length > 0 &&
-    (rec.play_source === "streaming" || rec.play_source === "downloaded") &&
-    typeof rec.counted_at === "string" &&
-    rec.counted_at.length > 0
-  );
+  const origin = rec.origin == null ? "queue" : rec.origin;
+  if (
+    typeof rec.id !== "string" ||
+    rec.id.length === 0 ||
+    typeof rec.track_id !== "string" ||
+    rec.track_id.length === 0 ||
+    typeof rec.profile !== "string" ||
+    rec.profile.length === 0 ||
+    (rec.play_source !== "streaming" && rec.play_source !== "downloaded") ||
+    (origin !== "queue" && origin !== "radio") ||
+    typeof rec.counted_at !== "string" ||
+    rec.counted_at.length === 0
+  ) {
+    return null;
+  }
+  return {
+    id: rec.id,
+    track_id: rec.track_id,
+    profile: rec.profile,
+    play_source: rec.play_source,
+    origin,
+    counted_at: rec.counted_at,
+  };
 }
 
 export function readPendingListens(): PendingListen[] {
@@ -32,7 +45,9 @@ export function readPendingListens(): PendingListen[] {
     if (raw == null) return [];
     const data: unknown = JSON.parse(raw);
     if (!Array.isArray(data)) return [];
-    return data.filter(isPending);
+    return data
+      .map(parsePending)
+      .filter((item): item is PendingListen => item != null);
   } catch {
     return [];
   }

@@ -4,12 +4,14 @@ export const LISTEN_SEEK_EPSILON_SECONDS = 2;
 export const LISTEN_THRESHOLD = 0.7;
 
 export type ListenPlaySource = "streaming" | "downloaded";
+export type ListenOrigin = "queue" | "radio";
 
 export interface ListenEvent {
   id: string;
   trackId: string;
   profile: string;
   playSource: ListenPlaySource;
+  origin: ListenOrigin;
   countedAt: string;
 }
 
@@ -31,13 +33,15 @@ export function createListenCycle(opts: {
   durationSec: number | null;
   profile: string;
   playSource: string;
+  origin: ListenOrigin;
 }): {
   onTime: (sample: ListenTimeSample) => ListenEvent | null;
   onEnded: () => ListenEvent | null;
   onRestart: () => null;
 } {
   const canFire =
-    opts.playSource === "streaming" || opts.playSource === "downloaded";
+    (opts.playSource === "streaming" || opts.playSource === "downloaded") &&
+    (opts.origin === "queue" || opts.origin === "radio");
   const playSource = opts.playSource as ListenPlaySource;
   let duration = knownDuration(opts.durationSec);
   let lastCurrentTime: number | null = null;
@@ -52,6 +56,7 @@ export function createListenCycle(opts: {
       trackId: opts.trackId,
       profile: opts.profile,
       playSource,
+      origin: opts.origin,
       countedAt: new Date().toISOString(),
     };
   }

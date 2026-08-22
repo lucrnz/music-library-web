@@ -12,6 +12,7 @@ const sample = {
   track_id: "t1",
   profile: "source",
   play_source: "streaming" as const,
+  origin: "queue" as const,
   counted_at: "2026-08-20T12:00:00.000Z",
 };
 
@@ -39,6 +40,26 @@ describe("listen outbox", () => {
     };
     expect(enqueuePending(sample)).toBe(false);
     localStorage.setItem = orig;
+    expect(readPendingListens()).toEqual([]);
+  });
+
+  it("treats a stored row without origin as queue", () => {
+    const { origin: _omit, ...legacy } = sample;
+    localStorage.setItem(LISTENS_PENDING_KEY, JSON.stringify([legacy]));
+    expect(readPendingListens()).toEqual([{ ...legacy, origin: "queue" }]);
+  });
+
+  it("keeps origin radio", () => {
+    const radio = { ...sample, origin: "radio" as const };
+    expect(enqueuePending(radio)).toBe(true);
+    expect(readPendingListens()).toEqual([radio]);
+  });
+
+  it("drops a row with an unknown origin", () => {
+    localStorage.setItem(
+      LISTENS_PENDING_KEY,
+      JSON.stringify([{ ...sample, origin: "exclusive" }]),
+    );
     expect(readPendingListens()).toEqual([]);
   });
 

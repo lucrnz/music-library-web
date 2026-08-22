@@ -9,12 +9,14 @@ import {
 function cycle(overrides?: {
   durationSec?: number | null;
   playSource?: string;
+  origin?: "queue" | "radio";
 }) {
   return createListenCycle({
     trackId: "t1",
     durationSec: overrides?.durationSec === undefined ? 100 : overrides.durationSec,
     profile: "source",
     playSource: overrides?.playSource ?? "streaming",
+    origin: overrides?.origin ?? "queue",
   });
 }
 
@@ -41,6 +43,7 @@ describe("createListenCycle", () => {
       trackId: "t1",
       profile: "source",
       playSource: "streaming",
+      origin: "queue",
     });
     expect(play(c, 70.5, 80)).toBeNull();
     expect(c.onEnded()).toBeNull();
@@ -118,6 +121,11 @@ describe("createListenCycle", () => {
     const second = play(c, 0, 7.5);
     expect(second).not.toBeNull();
     expect(second!.id).not.toBe(first!.id);
+  });
+
+  it("copies origin radio through on fire", () => {
+    const c = cycle({ durationSec: 10, origin: "radio" });
+    expect(play(c, 0, 7.5)).toMatchObject({ origin: "radio" });
   });
 
   it("never fires when playSource is none", () => {

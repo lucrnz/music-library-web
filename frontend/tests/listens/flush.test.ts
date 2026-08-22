@@ -29,6 +29,7 @@ function event(id: string) {
     trackId: "t1",
     profile: "source",
     playSource: "streaming" as const,
+    origin: "queue" as const,
     countedAt: "2026-08-20T12:00:00.000Z",
   };
 }
@@ -53,6 +54,7 @@ describe("listen flush", () => {
       track_id: "t1",
       profile: "source",
       play_source: "streaming",
+      origin: "queue",
       counted_at: "2026-08-20T12:00:00.000Z",
     });
     enqueuePending({
@@ -60,6 +62,7 @@ describe("listen flush", () => {
       track_id: "t1",
       profile: "source",
       play_source: "streaming",
+      origin: "queue",
       counted_at: "2026-08-20T12:00:01.000Z",
     });
     enqueuePending({
@@ -67,6 +70,7 @@ describe("listen flush", () => {
       track_id: "t1",
       profile: "source",
       play_source: "streaming",
+      origin: "queue",
       counted_at: "2026-08-20T12:00:02.000Z",
     });
     postListen
@@ -78,6 +82,9 @@ describe("listen flush", () => {
 
     expect(canReachServer()).toBe(false);
     expect(postListen).toHaveBeenCalledTimes(3);
+    expect(postListen).toHaveBeenCalledWith(
+      expect.objectContaining({ origin: "queue" }),
+    );
     expect(readPendingListens().map((item) => item.id)).toEqual(["c"]);
     expect(reportSuccess).toHaveBeenCalledTimes(1);
     expect(reportFailure).toHaveBeenCalledTimes(1);
@@ -107,6 +114,7 @@ describe("listen flush", () => {
       track_id: "t1",
       profile: "source",
       play_source: "streaming",
+      origin: "queue",
       counted_at: "2026-08-20T12:00:00.000Z",
     });
     const first = flushListens();
@@ -125,6 +133,7 @@ describe("listen flush", () => {
       track_id: "t1",
       profile: "source",
       play_source: "streaming",
+      origin: "queue",
       counted_at: "2026-08-20T12:00:00.000Z",
     });
     postListen

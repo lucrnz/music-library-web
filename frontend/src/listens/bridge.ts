@@ -4,6 +4,7 @@
 import {
   createListenCycle,
   type ListenEvent,
+  type ListenOrigin,
   type ListenTimeSample,
 } from "@/listens/accumulator";
 import { enqueueListen } from "@/listens/flush";
@@ -22,6 +23,7 @@ export function startCycle(opts: {
   durationSec: number | null;
   profile: string;
   playSource: string;
+  origin: ListenOrigin;
 }): void {
   current = createListenCycle(opts);
 }
