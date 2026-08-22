@@ -12,6 +12,10 @@ import {
   setPlaybackPolicy,
 } from "@/stores/settings";
 import {
+  concurrencyLabel,
+  DOWNLOAD_CONCURRENCY_VALUES,
+} from "@/downloads/concurrency";
+import {
   clearStoredDownloads,
   disableDownloads,
   downloadsIdleSummaryLine,
@@ -19,6 +23,7 @@ import {
   enableDownloads,
   openDownloadsManager,
   refreshStorageInfo,
+  setDownloadConcurrency,
 } from "@/downloads/index";
 import { downloads } from "@/downloads/state";
 import { confirmDialog } from "@/stores/dialog";
@@ -75,6 +80,13 @@ const playbackPolicies = PLAYBACK_POLICIES;
       })),
     );
 
+    const concurrencyOptions = computed(() =>
+      DOWNLOAD_CONCURRENCY_VALUES.map((n) => ({
+        id: String(n),
+        label: concurrencyLabel(n),
+      })),
+    );
+
     function toggleMenu(id: string) {
       openMenu.value = openMenu.value === id ? null : id;
     }
@@ -95,6 +107,10 @@ const playbackPolicies = PLAYBACK_POLICIES;
       ) {
         setPlaybackPolicy(id);
       }
+    }
+
+    function chooseConcurrency(id: string) {
+      setDownloadConcurrency(Number(id));
     }
 
     function onDocPointer(e: PointerEvent) {
@@ -314,6 +330,21 @@ const playbackPolicies = PLAYBACK_POLICIES;
           <p v-if="downloads.enabled && downloads.nearQuota" class="modal-hint warn">
             Storage almost full — free space or delete downloads.
           </p>
+          <SettingsSelect
+            v-if="downloads.enabled"
+            menu-id="dl-concurrency"
+            label-id="dl-concurrency-label"
+            field-label="Concurrent downloads"
+            :options="concurrencyOptions"
+            :selected-id="String(downloads.concurrency)"
+            :open-menu="openMenu"
+            @toggle="toggleMenu"
+            @choose="chooseConcurrency"
+          >
+            <p class="modal-hint" style="margin-top:8px;margin-bottom:0">
+              How many tracks to download at the same time.
+            </p>
+          </SettingsSelect>
           <div v-if="downloads.enabled" class="scan-actions" style="margin-top:10px">
             <button
               type="button"
