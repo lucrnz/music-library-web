@@ -649,3 +649,15 @@ Collapsed leftover hosts so fail, volume, radio face, queue abort, job phase beg
 ```bash
 git show 93f6ffa5ab98b22cecb29d66c46e6d1b440ea786
 ```
+
+## 2026-08-22-7lo0z2o7-nuclear-judo-done
+
+**Title:** Nuclear judo
+
+**Commit:** `475f38d76fd720655d8ece87c660b3fa370939bd`
+
+Exclusive is a sink+profile, radio socket is separate from face/load, forget retain is a lifespan hook, tree nodes are a typed union, the downloads catalog view is cached, and scan/regen live in functions with one metadata open on the batch path. Open the delete commit for `deliveryPolicy.ts`, `radio/session.ts`, `treeNode.ts`, `scan/jobs.py`, and `retain_stream_ids`.
+
+```bash
+git show 475f38d76fd720655d8ece87c660b3fa370939bd
+```
