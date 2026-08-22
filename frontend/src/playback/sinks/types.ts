@@ -1,3 +1,5 @@
+import type { PlayBlockError } from "@/playBlock";
+
 export interface SinkErrorDetails {
   media_code?: number | null;
   network_state?: number | null;
@@ -9,8 +11,7 @@ export interface SinkHandlers {
   onDuration?: (d: number) => void;
   onEnded?: () => void;
   onError?: (
-    message: string,
-    code?: string | null,
+    err: PlayBlockError,
     details?: SinkErrorDetails | null,
   ) => void;
   onPauseState?: (paused: boolean) => void;

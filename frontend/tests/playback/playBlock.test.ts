@@ -6,8 +6,10 @@ vi.mock("@/downloads/catalog", () => ({
 
 import {
   PLAY_BLOCK_MESSAGES,
+  PlayBlockError,
   isOfflineUnplayable,
   playBlockMessage,
+  toPlayBlockError,
   type PlayBlockReason,
 } from "@/playBlock";
 
@@ -23,6 +25,34 @@ describe("playBlockMessage", () => {
     expect(playBlockMessage("")).toBeNull();
     expect(playBlockMessage(null)).toBeNull();
     expect(playBlockMessage(undefined)).toBeNull();
+  });
+});
+
+describe("PlayBlockError", () => {
+  it("defaults the message from PLAY_BLOCK_MESSAGES", () => {
+    const err = new PlayBlockError("exclusive_failed");
+    expect(err.reason).toBe("exclusive_failed");
+    expect(err.message).toBe(PLAY_BLOCK_MESSAGES.exclusive_failed);
+    expect(err.name).toBe("PlayBlockError");
+  });
+
+  it("keeps an explicit message", () => {
+    const err = new PlayBlockError("play_failed", "boom");
+    expect(err.message).toBe("boom");
+  });
+});
+
+describe("toPlayBlockError", () => {
+  it("returns the same PlayBlockError", () => {
+    const err = new PlayBlockError("exclusive_needs_device");
+    expect(toPlayBlockError(err, "play_failed")).toBe(err);
+  });
+
+  it("wraps a plain Error with the fallback reason", () => {
+    const wrapped = toPlayBlockError(new Error("nope"), "play_failed");
+    expect(wrapped).toBeInstanceOf(PlayBlockError);
+    expect(wrapped.reason).toBe("play_failed");
+    expect(wrapped.message).toBe("nope");
   });
 });
 

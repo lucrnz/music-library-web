@@ -12,8 +12,19 @@ import {
   ensurePreferredDevice,
   onCompanionEvent,
 } from "@/exclusive/companionClient";
-import { PLAY_BLOCK_MESSAGES } from "@/playBlock";
+import {
+  PlayBlockError,
+  isPlayBlockReason,
+} from "@/playBlock";
 import type { PlaybackSink, SinkHandlers } from "@/playback/sinks/types";
+
+function companionBlock(
+  code: string | null | undefined,
+  message: string,
+): PlayBlockError {
+  if (isPlayBlockReason(code)) return new PlayBlockError(code, message);
+  return new PlayBlockError("exclusive_failed", message);
+}
 
 export function createCompanionSink(): PlaybackSink {
   let handlers: SinkHandlers = {};
@@ -40,8 +51,10 @@ export function createCompanionSink(): PlaybackSink {
       } else if (evt.type === "error" || evt.type === "disconnect") {
         if (!hasLoad) return;
         handlers.onError?.(
-          evt.message || "Exclusive companion disconnected",
-          evt.code || null,
+          companionBlock(
+            evt.code,
+            evt.message || "Exclusive companion disconnected",
+          ),
         );
       }
     });
@@ -56,11 +69,7 @@ export function createCompanionSink(): PlaybackSink {
     async load(url) {
       const gate = await ensurePreferredDevice({ timeoutMs: 1500 });
       if (!gate.ok) {
-        const err = new Error(
-          PLAY_BLOCK_MESSAGES[gate.reason] || PLAY_BLOCK_MESSAGES.exclusive_not_ready,
-        ) as Error & { code: string };
-        err.code = gate.reason;
-        throw err;
+        throw new PlayBlockError(gate.reason);
       }
       ensureListen();
       paused = false;
@@ -68,7 +77,10 @@ export function createCompanionSink(): PlaybackSink {
       duration = 0;
       hasLoad = companionLoad(url);
       if (!hasLoad) {
-        throw new Error("Companion not ready for load");
+        throw new PlayBlockError(
+          "exclusive_not_ready",
+          "Companion not ready for load",
+        );
       }
     },
     pause() {

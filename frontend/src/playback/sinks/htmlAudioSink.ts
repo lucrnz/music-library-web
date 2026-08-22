@@ -8,6 +8,7 @@ import {
   setHtmlAudioVolume,
   stopHtmlAudio,
 } from "@/playback/sinks/htmlElement";
+import { PlayBlockError } from "@/playBlock";
 import type { PlaybackSink, SinkHandlers } from "@/playback/sinks/types";
 
 export function createHtmlAudioSink(): PlaybackSink {
@@ -35,11 +36,14 @@ export function createHtmlAudioSink(): PlaybackSink {
     audio.addEventListener("error", () => {
       if (!audio.getAttribute("src")) return;
       const media = audio.error;
-      handlers.onError?.("HTML audio playback failed", "html_audio", {
-        media_code: media ? media.code : null,
-        network_state: audio.networkState,
-        ready_state: audio.readyState,
-      });
+      handlers.onError?.(
+        new PlayBlockError("play_failed", "HTML audio playback failed"),
+        {
+          media_code: media ? media.code : null,
+          network_state: audio.networkState,
+          ready_state: audio.readyState,
+        },
+      );
     });
   }
 
@@ -51,7 +55,16 @@ export function createHtmlAudioSink(): PlaybackSink {
     async load(url) {
       ensureAttached();
       setHtmlAudioSrc(audio, url);
-      await audio.play();
+      try {
+        await audio.play();
+      } catch (err: unknown) {
+        throw err instanceof PlayBlockError
+          ? err
+          : new PlayBlockError(
+              "play_failed",
+              err instanceof Error ? err.message : undefined,
+            );
+      }
     },
     pause() {
       audio.pause();

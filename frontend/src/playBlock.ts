@@ -55,6 +55,39 @@ export function playBlockMessage(
   return (PLAY_BLOCK_MESSAGES as Record<string, string | undefined>)[reason] || null;
 }
 
+export function isPlayBlockReason(
+  value: string | null | undefined,
+): value is PlayBlockReason {
+  return !!value && value in PLAY_BLOCK_MESSAGES;
+}
+
+/** Sink/load failure. `reason` is the play-block; message defaults to the copy table. */
+export class PlayBlockError extends Error {
+  readonly reason: PlayBlockReason;
+
+  constructor(reason: PlayBlockReason, message?: string) {
+    super(message || PLAY_BLOCK_MESSAGES[reason]);
+    this.name = "PlayBlockError";
+    this.reason = reason;
+  }
+}
+
+function messageFromUnknown(err: unknown): string | undefined {
+  if (err instanceof Error && err.message) return err.message;
+  if (err == null) return undefined;
+  const text = String(err);
+  return text || undefined;
+}
+
+/** Identity on `PlayBlockError`; otherwise wrap with *fallback*. */
+export function toPlayBlockError(
+  err: unknown,
+  fallback: PlayBlockReason,
+): PlayBlockError {
+  if (err instanceof PlayBlockError) return err;
+  return new PlayBlockError(fallback, messageFromUnknown(err));
+}
+
 /** Queue row / skip gate: downloads on, remote unusable, no local playable file. */
 export function isOfflineUnplayable(
   trackId: string | null | undefined,
