@@ -144,3 +144,13 @@ class StationSnapshot:
         if pos > duration_s:
             return duration_s
         return pos
+
+
+@dataclass(frozen=True, slots=True)
+class DebugMutationResult:
+    """Result of a debug DJ mutation. Not a route DTO."""
+
+    ok: bool
+    error: str | None = None
+    changed_current: bool = False
+    changed_started_at: bool = False

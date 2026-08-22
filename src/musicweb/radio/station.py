@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,7 +12,11 @@ from random import Random
 
 from sqlalchemy.orm import Session
 
-from musicweb.config import RADIO_BANLIST_MAX_BATCHES, RADIO_TICK_SECONDS
+from musicweb.config import (
+    RADIO_BANLIST_MAX_BATCHES,
+    RADIO_MIN_DURATION_MS,
+    RADIO_TICK_SECONDS,
+)
 from musicweb.db.engine import Database
 from musicweb.db.models import Track
 from musicweb.db.repositories import radio as radio_repo
@@ -23,6 +28,7 @@ from musicweb.radio.probe import file_is_playable
 from musicweb.radio.types import (
     CatalogSnapshot,
     CatalogTrack,
+    DebugMutationResult,
     SnapshotTrack,
     StationSnapshot,
 )
@@ -33,6 +39,14 @@ logger = logging.getLogger(__name__)
 CatalogBuilder = Callable[[Session], CatalogSnapshot]
 Probe = Callable[[Path], bool]
 LoopListener = Callable[[], None]
+
+
+class _OperatorError(Exception):
+    """Abort a debug DJ mutation without persisting. ``code`` is the RPC error."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
 
 
 class RadioStation:
@@ -52,6 +66,7 @@ class RadioStation:
         self._probe = probe or file_is_playable
         self._rng = rng or Random()
         self._catalog_builder = catalog_builder
+        self._lock = threading.RLock()
         self.skip_ids: set[str] = set()
         self._catching_up = True
         self._loaded = False
@@ -81,10 +96,15 @@ class RadioStation:
             self._loop_listener()
 
     def now_playing(self) -> StationSnapshot:
-        return self._snapshot
+        with self._lock:
+            return self._snapshot
 
     def peek_upcoming_ids(self, n: int = 2) -> list[str]:
         """Next *n* ids after current. Internal — never serialize."""
+        with self._lock:
+            return self._peek_upcoming_ids(n)
+
+    def _peek_upcoming_ids(self, n: int) -> list[str]:
         ordered = self._ordered_queue()
         if self._current_track_id is None:
             return []
@@ -102,12 +122,13 @@ class RadioStation:
 
     def retained_track_ids(self) -> frozenset[str]:
         """Current plus remaining radio-queue ids. Internal — never serialize."""
-        current = self._current_track_id
-        if current is None:
-            return frozenset()
-        return frozenset(
-            (current, *self.peek_upcoming_ids(len(self._ordered_queue())))
-        )
+        with self._lock:
+            current = self._current_track_id
+            if current is None:
+                return frozenset()
+            return frozenset(
+                (current, *self._peek_upcoming_ids(len(self._ordered_queue())))
+            )
 
     def _with_session(
         self,
@@ -137,18 +158,299 @@ class RadioStation:
             self._catching_up = False
             self._stash_snapshot(session)
 
-        self._with_session(lambda session: self._run_catchup(session, now), after=after)
+        with self._lock:
+            self._with_session(lambda session: self._run_catchup(session, now), after=after)
 
     def tick(self, now: datetime) -> None:
-        self._with_session(
-            lambda session: self._tick(session, now),
-            after=lambda session: self._stash_snapshot(session),
-        )
+        with self._lock:
+            self._with_session(
+                lambda session: self._tick(session, now),
+                after=lambda session: self._stash_snapshot(session),
+            )
 
     def persist_shutdown(self) -> None:
-        if self._catching_up and not self._loaded:
+        with self._lock:
+            if self._catching_up and not self._loaded:
+                return
+            self._with_session(lambda _session: True, persist_always=True)
+
+    def debug_catalog_watermark(self) -> str | None:
+        with self._lock:
+            session = self._database.session()
+            try:
+                self._ensure_loaded(session)
+                self._refresh_catalog(session)
+                return self._catalog_watermark
+            finally:
+                session.close()
+
+    def debug_eligible_count(self) -> int:
+        with self._lock:
+            session = self._database.session()
+            try:
+                self._ensure_loaded(session)
+                self._refresh_catalog(session)
+                if self._catalog is not None:
+                    return len(self._catalog.all_tracks())
+                return len(radio_repo.list_eligible_rows(session))
+            finally:
+                session.close()
+
+    def debug_upcoming_ids(self) -> list[str]:
+        with self._lock:
+            session = self._database.session()
+            try:
+                self._ensure_loaded(session)
+            finally:
+                session.close()
+            return self._peek_upcoming_ids(len(self._ordered_queue()))
+
+    def debug_banlist_batches(self) -> list[list[str]]:
+        with self._lock:
+            session = self._database.session()
+            try:
+                self._ensure_loaded(session)
+            finally:
+                session.close()
+            return [list(batch) for batch in self._banlist]
+
+    def debug_skip_id_list(self) -> list[str]:
+        with self._lock:
+            return sorted(self.skip_ids)
+
+    def debug_track_labels(self, ids: list[str]) -> dict[str, dict[str, str]]:
+        session = self._database.session()
+        try:
+            rows = tracks_repo.get_many(session, ids)
+            return {
+                row.id: {"title": row.title, "artist": row.artist_name} for row in rows
+            }
+        finally:
+            session.close()
+
+    def clear_skip_ids(self) -> DebugMutationResult:
+        with self._lock:
+            self.skip_ids.clear()
+            return DebugMutationResult(ok=True)
+
+    def operator_skip(self, now: datetime) -> DebugMutationResult:
+        with self._lock:
+            if self._catching_up:
+                return DebugMutationResult(ok=False, error="catching_up")
+            if self._current_track_id is None:
+                return DebugMutationResult(ok=False, error="idle_skip")
+            old_current = self._current_track_id
+            old_started = self._track_started_at
+            logger.info("radio: skip %s (operator)", old_current)
+
+            def work(session: Session) -> bool:
+                self._track_started_at = now
+                self._advance(session, count_duration=False, duration_ms=None)
+                return True
+
+            self._with_session(work, after=lambda session: self._stash_snapshot(session))
+            return DebugMutationResult(
+                ok=True,
+                changed_current=self._current_track_id != old_current,
+                changed_started_at=self._track_started_at != old_started,
+            )
+
+    def operator_play(self, track_id: str, now: datetime) -> DebugMutationResult:
+        with self._lock:
+            if self._catching_up:
+                return DebugMutationResult(ok=False, error="catching_up")
+            if track_id == self._current_track_id:
+                return DebugMutationResult(ok=True)
+            old_current = self._current_track_id
+            old_started = self._track_started_at
+
+            def work(session: Session) -> bool:
+                self._ensure_loaded(session)
+                track, error = self._resolve_playable(session, track_id)
+                if error:
+                    raise _OperatorError(error)
+                assert track is not None
+                if self._current_track_id is None:
+                    self._install_batch(session, [track], started_at=now)
+                    return True
+                self._replace_current_with(track.id)
+                self._drop_later_copies(track.id)
+                self._ensure_on_banlist(track.id)
+                self._current_track_id = track.id
+                self._track_started_at = now
+                self._maybe_pick_next(session)
+                if self._log_advances:
+                    self._log_current(session)
+                return True
+
+            try:
+                self._with_session(
+                    work, after=lambda session: self._stash_snapshot(session)
+                )
+            except _OperatorError as exc:
+                return DebugMutationResult(ok=False, error=exc.code)
+            return DebugMutationResult(
+                ok=True,
+                changed_current=self._current_track_id != old_current,
+                changed_started_at=self._track_started_at != old_started,
+            )
+
+    def operator_pick(self, now: datetime) -> DebugMutationResult:
+        with self._lock:
+            if self._catching_up:
+                return DebugMutationResult(ok=False, error="catching_up")
+            old_current = self._current_track_id
+            old_started = self._track_started_at
+
+            def work(session: Session) -> bool:
+                self._ensure_loaded(session)
+                if self._current_track_id is None:
+                    if not self._try_start(session, now):
+                        raise _OperatorError("no_tracks")
+                    return True
+                discarded = self._drop_unplayed_remainder()
+                for track_id in discarded:
+                    self._strip_from_banlist(track_id)
+                self._refresh_catalog(session)
+                batch = self._pick(session)
+                if batch:
+                    self._append_batch(batch)
+                return True
+
+            try:
+                self._with_session(
+                    work, after=lambda session: self._stash_snapshot(session)
+                )
+            except _OperatorError as exc:
+                return DebugMutationResult(ok=False, error=exc.code)
+            return DebugMutationResult(
+                ok=True,
+                changed_current=self._current_track_id != old_current,
+                changed_started_at=self._track_started_at != old_started,
+            )
+
+    def operator_reset(self, now: datetime) -> DebugMutationResult:
+        with self._lock:
+            if self._catching_up:
+                return DebugMutationResult(ok=False, error="catching_up")
+            old_current = self._current_track_id
+            old_started = self._track_started_at
+
+            def work(session: Session) -> bool:
+                self._ensure_loaded(session)
+                self.skip_ids.clear()
+                self._batches = {}
+                self._banlist = []
+                self._current_track_id = None
+                self._current_batch_seq = None
+                self._current_index = 0
+                self._next_batch_seq = 1
+                self._track_started_at = None
+                self._try_start(session, now)
+                return True
+
+            self._with_session(work, after=lambda session: self._stash_snapshot(session))
+            return DebugMutationResult(
+                ok=True,
+                changed_current=self._current_track_id != old_current,
+                changed_started_at=self._track_started_at != old_started,
+            )
+
+    def _ensure_loaded(self, session: Session) -> None:
+        if not self._loaded:
+            self._load(session)
+
+    def _resolve_playable(
+        self, session: Session, track_id: str
+    ) -> tuple[CatalogTrack | None, str | None]:
+        row = tracks_repo.get(session, track_id)
+        if row is None:
+            return None, "not_found"
+        if (
+            row.album_id is None
+            or row.duration_ms is None
+            or row.duration_ms < RADIO_MIN_DURATION_MS
+            or row.is_missing
+        ):
+            return None, "not_eligible"
+        path = self._library.present_audio(row.rel_path)
+        if path is None:
+            return None, "not_eligible"
+        if not self._probe(path):
+            self.skip_ids.add(row.id)
+            return None, "not_eligible"
+        return (
+            CatalogTrack(
+                id=row.id,
+                duration_ms=row.duration_ms,
+                path=path,
+                album_id=row.album_id,
+                album_artist_id=row.album_artist_id or row.artist_id or "",
+            ),
+            None,
+        )
+
+    def _replace_current_with(self, track_id: str) -> None:
+        seq = self._current_batch_seq
+        if seq is None or seq not in self._batches:
+            seq = self._next_batch_seq
+            self._batches[seq] = [track_id]
+            self._next_batch_seq = seq + 1
+            self._current_batch_seq = seq
+            self._current_index = 0
             return
-        self._with_session(lambda _session: True, persist_always=True)
+        items = self._batches[seq]
+        if self._current_track_id in items:
+            self._current_index = items.index(self._current_track_id)
+        if self._current_index >= len(items):
+            items.append(track_id)
+            self._current_index = len(items) - 1
+        else:
+            items[self._current_index] = track_id
+
+    def _drop_later_copies(self, track_id: str) -> None:
+        if self._current_batch_seq is None:
+            return
+        for seq in list(sorted(self._batches)):
+            items = self._batches[seq]
+            if seq < self._current_batch_seq:
+                continue
+            if seq == self._current_batch_seq:
+                head = items[: self._current_index + 1]
+                tail = [tid for tid in items[self._current_index + 1 :] if tid != track_id]
+                self._batches[seq] = head + tail
+            else:
+                self._batches[seq] = [tid for tid in items if tid != track_id]
+                if not self._batches[seq]:
+                    del self._batches[seq]
+
+    def _ensure_on_banlist(self, track_id: str) -> None:
+        if any(track_id in batch for batch in self._banlist):
+            return
+        if self._banlist:
+            self._banlist[-1].append(track_id)
+        else:
+            self._banlist.append([track_id])
+        if len(self._banlist) > RADIO_BANLIST_MAX_BATCHES:
+            self._banlist = self._banlist[-2:]
+
+    def _drop_unplayed_remainder(self) -> list[str]:
+        discarded: list[str] = []
+        if self._current_batch_seq is None:
+            return discarded
+        for seq in list(sorted(self._batches)):
+            items = self._batches[seq]
+            if seq < self._current_batch_seq:
+                continue
+            if seq == self._current_batch_seq:
+                discarded.extend(
+                    tid for tid in items[self._current_index + 1 :] if tid
+                )
+                self._batches[seq] = items[: self._current_index + 1]
+            else:
+                discarded.extend(tid for tid in items if tid)
+                del self._batches[seq]
+        return discarded
 
     def _step(self, session: Session, now: datetime, *, skip_blocks: bool) -> bool:
         if self._current_track_id is None:
