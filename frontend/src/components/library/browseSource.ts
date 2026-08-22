@@ -33,6 +33,7 @@ export interface BrowseTreeLoad {
 export interface BrowseChromeInput {
   showTree: boolean;
   mode: string;
+  isSearch: boolean;
   artistId?: string;
   albumId?: string;
   trackCount: number;
@@ -41,7 +42,7 @@ export interface BrowseChromeInput {
   downloadsEnabled: boolean;
 }
 
-export interface BrowseSource {
+export interface BrowseSourceFlags {
   ariaLabel: string;
   showTrackDownload: boolean;
   showFolderSelection: boolean;
@@ -50,31 +51,40 @@ export interface BrowseSource {
   useLocalTrackCover: boolean;
   reportsConnectivity: boolean;
   clearsSelectionOnLoad: boolean;
+}
+
+export interface BrowseChrome {
+  showAddAll: boolean;
+  showAddSelected: boolean;
+  showDownloadAlbum: boolean;
+  includeArtistPhoto: boolean;
+}
+
+export type BrowseCoverTarget =
+  | { kind: "artist"; artist: Artist }
+  | { kind: "album"; album: LibraryAlbum }
+  | { kind: "track"; track: Track }
+  | { kind: "tree"; node: TreeNode };
+
+export interface BrowseSource {
+  flags: BrowseSourceFlags;
 
   load(loc: BrowseLoc): Promise<LibraryPage>;
   loadRoots(loc: BrowseLoc): Promise<BrowseTreeLoad>;
   loadChildren(node: TreeNode): Promise<TreeNode[]>;
-  resolveCover(node: TreeNode, artUrls: Record<string, string>): string;
   goBack(router: Router, loc: BrowseGoBackLoc): void;
   openArtist(router: Router, artist: { id: string }): void;
   openAlbum(router: Router, album: { id: string }): void;
   openFolder?(router: Router, dir: BrowseDir): void;
 
-  artistCover(artist: Artist, artUrls: Record<string, string>): string;
-  albumCover(album: LibraryAlbum, artUrls: Record<string, string>): string;
-  trackCover(track: Track, artUrls: Record<string, string>): string;
-
-  showAddAll(opts: BrowseChromeInput): boolean;
-  showAddSelected(opts: BrowseChromeInput): boolean;
-  showDownloadAlbum(opts: BrowseChromeInput): boolean;
+  cover(target: BrowseCoverTarget, artUrls: Record<string, string>): string;
+  chrome(input: BrowseChromeInput): BrowseChrome;
 
   addAll(ctx: {
     loc: BrowseLoc;
     showTree: boolean;
     tracks: Track[];
   }): Promise<void>;
-
-  includeArtistPhoto(opts: { mode: string; isSearch: boolean }): boolean;
 
   treeTitle(mode: string): string;
   emptyTreeMessage(opts: { downloadsEnabled: boolean }): string;

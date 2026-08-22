@@ -25,21 +25,27 @@ afterEach(() => {
   artUrlCache.urls = {};
 });
 
-describe("downloadsBrowse.resolveCover", () => {
+describe("downloadsBrowse.cover", () => {
   it("reads artist:${id}:thumb and ignores a: keys", () => {
     artUrlCache.urls = {};
-    const url = downloadsBrowse.resolveCover(artistNode("ar1"), {
-      "a:ar1": "blob:old",
-      "artist:ar1:thumb": "blob:new",
-    });
+    const url = downloadsBrowse.cover(
+      { kind: "tree", node: artistNode("ar1") },
+      {
+        "a:ar1": "blob:old",
+        "artist:ar1:thumb": "blob:new",
+      },
+    );
     expect(url).toBe("blob:new");
   });
 
   it("prefers the live artUrlCache over a: leftovers", () => {
     artUrlCache.urls = { "artist:ar1:thumb": "blob:cached" };
-    const url = downloadsBrowse.resolveCover(artistNode("ar1"), {
-      "a:ar1": "blob:old",
-    });
+    const url = downloadsBrowse.cover(
+      { kind: "tree", node: artistNode("ar1") },
+      {
+        "a:ar1": "blob:old",
+      },
+    );
     expect(url).toBe("blob:cached");
   });
 });

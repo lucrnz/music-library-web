@@ -50,11 +50,17 @@ const route = useRoute();
 const source = computed(() =>
   browseSourceFor(props.mode, onlineBrowse, downloadsBrowse),
 );
-const includeArtistPhoto = computed(() =>
-  source.value.includeArtistPhoto({
-    mode: props.mode,
-    isSearch: false,
-  }),
+const includeArtistPhoto = computed(
+  () =>
+    source.value.chrome({
+      showTree: true,
+      mode: props.mode,
+      isSearch: false,
+      trackCount: 0,
+      selectedCount: 0,
+      layout: ui.libraryLayout,
+      downloadsEnabled: downloads.enabled,
+    }).includeArtistPhoto,
 );
 const {
   menuOpen,
@@ -79,7 +85,7 @@ function artistFromNode(node: TreeNode): Artist | null {
 }
 
 function resolveCover(node: TreeNode): string {
-  return source.value.resolveCover(node, artUrls.value);
+  return source.value.cover({ kind: "tree", node }, artUrls.value);
 }
 
 function targetFromNode(node: TreeNode): OpenMenu | null {
@@ -175,7 +181,7 @@ const emptyMessage = computed(() =>
   source.value.emptyTreeMessage({ downloadsEnabled: downloads.enabled }),
 );
 
-const showTrackDownload = computed(() => source.value.showTrackDownload);
+const showTrackDownload = computed(() => source.value.flags.showTrackDownload);
 
 function loadChildren(node: TreeNode) {
   return source.value.loadChildren(node);

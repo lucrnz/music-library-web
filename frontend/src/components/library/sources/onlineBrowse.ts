@@ -75,14 +75,16 @@ function goBack(
 }
 
 export const onlineBrowse: BrowseSource = {
-  ariaLabel: "Library",
-  showTrackDownload: true,
-  showFolderSelection: true,
-  showListLoading: false,
-  useLocalAlbumCover: false,
-  useLocalTrackCover: false,
-  reportsConnectivity: true,
-  clearsSelectionOnLoad: true,
+  flags: {
+    ariaLabel: "Library",
+    showTrackDownload: true,
+    showFolderSelection: true,
+    showListLoading: false,
+    useLocalAlbumCover: false,
+    useLocalTrackCover: false,
+    reportsConnectivity: true,
+    clearsSelectionOnLoad: true,
+  },
 
   load(loc): Promise<LibraryPage> {
     return loadLibraryPage(loc);
@@ -108,16 +110,6 @@ export const onlineBrowse: BrowseSource = {
     return Promise.resolve([] as TreeNode[]);
   },
 
-  resolveCover(node: TreeNode) {
-    if (node.kind === "artist") {
-      const data = node.data;
-      if (data && typeof data === "object" && "id" in data) {
-        return coverSrc(data as Artist);
-      }
-    }
-    return node.cover || "";
-  },
-
   goBack,
 
   openArtist(router, artist) {
@@ -132,36 +124,40 @@ export const onlineBrowse: BrowseSource = {
     void router.push({ name: "folders", query: { path: dir.path } });
   },
 
-  artistCover(artist: Artist) {
-    return coverSrc(artist);
+  cover(target) {
+    if (target.kind === "artist") return coverSrc(target.artist);
+    if (target.kind === "album" || target.kind === "track") return "";
+    const node = target.node;
+    if (node.kind === "artist") {
+      const data = node.data;
+      if (data && typeof data === "object" && "id" in data) {
+        return coverSrc(data as Artist);
+      }
+    }
+    return node.cover || "";
   },
 
-  albumCover() {
-    return "";
-  },
-
-  trackCover() {
-    return "";
-  },
-
-  showAddAll(opts) {
-    if (opts.showTree) return opts.mode === "folders";
-    if (opts.mode === "search" && !opts.artistId && !opts.albumId) return false;
-    if (opts.mode === "folders") return true;
-    return Boolean(opts.artistId || opts.albumId);
-  },
-
-  showAddSelected(opts) {
-    return (
-      opts.mode === "folders" &&
-      opts.selectedCount > 0 &&
-      (opts.showTree || opts.layout !== "tree")
-    );
-  },
-
-  showDownloadAlbum(opts) {
-    if (opts.showTree) return false;
-    return opts.downloadsEnabled && Boolean(opts.albumId) && opts.trackCount > 0;
+  chrome(opts) {
+    const showAddAll = opts.showTree
+      ? opts.mode === "folders"
+      : opts.mode === "search" && !opts.artistId && !opts.albumId
+        ? false
+        : opts.mode === "folders"
+          ? true
+          : Boolean(opts.artistId || opts.albumId);
+    return {
+      showAddAll,
+      showAddSelected:
+        opts.mode === "folders" &&
+        opts.selectedCount > 0 &&
+        (opts.showTree || opts.layout !== "tree"),
+      showDownloadAlbum:
+        !opts.showTree &&
+        opts.downloadsEnabled &&
+        Boolean(opts.albumId) &&
+        opts.trackCount > 0,
+      includeArtistPhoto: opts.mode === "artists" && !opts.isSearch,
+    };
   },
 
   async addAll({ loc, showTree }) {
@@ -184,10 +180,6 @@ export const onlineBrowse: BrowseSource = {
     } catch (err: unknown) {
       console.error(err);
     }
-  },
-
-  includeArtistPhoto(opts) {
-    return opts.mode === "artists" && !opts.isSearch;
   },
 
   treeTitle(mode) {

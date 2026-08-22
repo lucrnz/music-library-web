@@ -18,15 +18,29 @@ import { loadDownloadsCatalogView } from "@/downloads/snapshot";
 
 let lastHierarchy: DownloadsHierarchy | null = null;
 
+function artistThumb(
+  id: string,
+  artUrls: Record<string, string>,
+  fallback = "",
+) {
+  return (
+    artUrlCache.urls[`artist:${id}:thumb`] ||
+    artUrls[`artist:${id}:thumb`] ||
+    fallback
+  );
+}
+
 export const downloadsBrowse: BrowseSource = {
-  ariaLabel: "Downloads library",
-  showTrackDownload: false,
-  showFolderSelection: false,
-  showListLoading: true,
-  useLocalAlbumCover: true,
-  useLocalTrackCover: true,
-  reportsConnectivity: false,
-  clearsSelectionOnLoad: false,
+  flags: {
+    ariaLabel: "Downloads library",
+    showTrackDownload: false,
+    showFolderSelection: false,
+    showListLoading: true,
+    useLocalAlbumCover: true,
+    useLocalTrackCover: true,
+    reportsConnectivity: false,
+    clearsSelectionOnLoad: false,
+  },
 
   load(loc): Promise<LibraryPage> {
     return loadDownloadsView({
@@ -52,37 +66,6 @@ export const downloadsBrowse: BrowseSource = {
 
   loadChildren(node: TreeNode) {
     return loadDownloadsChildren(node);
-  },
-
-  resolveCover(node: TreeNode, artUrls) {
-    if (node.kind === "artist") {
-      const data = node.data;
-      const id =
-        data && typeof data === "object" && "id" in data
-          ? String((data as Artist).id || "")
-          : "";
-      if (id) {
-        return (
-          artUrlCache.urls[`artist:${id}:thumb`] ||
-          artUrls[`artist:${id}:thumb`] ||
-          node.cover ||
-          ""
-        );
-      }
-    }
-    if (node.kind === "album") {
-      const album = node.data as LibraryAlbum | undefined;
-      if (album?.id) {
-        return artUrls[`cover:${album.id}:thumb`] || node.cover || "";
-      }
-    }
-    if (node.kind === "track") {
-      const track = node.data as Track | undefined;
-      if (track?.albumId) {
-        return artUrls[`cover:${track.albumId}:thumb`] || node.cover || "";
-      }
-    }
-    return node.cover || "";
   },
 
   goBack(router, loc) {
@@ -114,33 +97,51 @@ export const downloadsBrowse: BrowseSource = {
     });
   },
 
-  artistCover(artist: Artist, artUrls) {
-    return (
-      artUrlCache.urls[`artist:${artist.id}:thumb`] ||
-      artUrls[`artist:${artist.id}:thumb`] ||
-      ""
-    );
+  cover(target, artUrls) {
+    if (target.kind === "artist") {
+      return artistThumb(target.artist.id, artUrls);
+    }
+    if (target.kind === "album") {
+      return artUrls[`cover:${target.album.id}:thumb`] || "";
+    }
+    if (target.kind === "track") {
+      return (
+        (target.track.albumId &&
+          artUrls[`cover:${target.track.albumId}:thumb`]) ||
+        ""
+      );
+    }
+    const node = target.node;
+    if (node.kind === "artist") {
+      const data = node.data;
+      const id =
+        data && typeof data === "object" && "id" in data
+          ? String((data as Artist).id || "")
+          : "";
+      if (id) return artistThumb(id, artUrls, node.cover || "");
+    }
+    if (node.kind === "album") {
+      const album = node.data as LibraryAlbum | undefined;
+      if (album?.id) {
+        return artUrls[`cover:${album.id}:thumb`] || node.cover || "";
+      }
+    }
+    if (node.kind === "track") {
+      const track = node.data as Track | undefined;
+      if (track?.albumId) {
+        return artUrls[`cover:${track.albumId}:thumb`] || node.cover || "";
+      }
+    }
+    return node.cover || "";
   },
 
-  albumCover(album: LibraryAlbum, artUrls) {
-    return artUrls[`cover:${album.id}:thumb`] || "";
-  },
-
-  trackCover(track: Track, artUrls) {
-    return (track.albumId && artUrls[`cover:${track.albumId}:thumb`]) || "";
-  },
-
-  showAddAll(opts) {
-    if (opts.showTree) return false;
-    return opts.trackCount > 0;
-  },
-
-  showAddSelected() {
-    return false;
-  },
-
-  showDownloadAlbum() {
-    return false;
+  chrome(opts) {
+    return {
+      showAddAll: !opts.showTree && opts.trackCount > 0,
+      showAddSelected: false,
+      showDownloadAlbum: false,
+      includeArtistPhoto: false,
+    };
   },
 
   async addAll({ tracks }) {
@@ -149,10 +150,6 @@ export const downloadsBrowse: BrowseSource = {
     } catch (err: unknown) {
       console.error(err);
     }
-  },
-
-  includeArtistPhoto() {
-    return false;
   },
 
   treeTitle() {

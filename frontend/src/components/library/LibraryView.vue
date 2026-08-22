@@ -96,6 +96,7 @@ const trackCount = computed(() =>
 const chromeInput = computed(() => ({
   showTree: showTree.value,
   mode: mode.value,
+  isSearch: isSearch.value,
   artistId: artistId.value,
   albumId: albumId.value,
   trackCount: trackCount.value,
@@ -103,13 +104,10 @@ const chromeInput = computed(() => ({
   layout: ui.libraryLayout,
   downloadsEnabled: downloads.enabled,
 }));
-const showAddAll = computed(() => source.value.showAddAll(chromeInput.value));
-const showAddSelected = computed(() =>
-  source.value.showAddSelected(chromeInput.value),
-);
-const showDownloadAlbum = computed(() =>
-  source.value.showDownloadAlbum(chromeInput.value),
-);
+const sourceChrome = computed(() => source.value.chrome(chromeInput.value));
+const showAddAll = computed(() => sourceChrome.value.showAddAll);
+const showAddSelected = computed(() => sourceChrome.value.showAddSelected);
+const showDownloadAlbum = computed(() => sourceChrome.value.showDownloadAlbum);
 
 const showLayoutToggle = computed(() =>
   libraryShowLayoutToggle({
@@ -130,7 +128,7 @@ const gridHost = computed(() =>
   browseGridHost({
     isGrid: isGrid.value,
     bodyKind: body.value.kind,
-    pane: source.value.showFolderSelection ? "library" : "downloads",
+    pane: source.value.flags.showFolderSelection ? "library" : "downloads",
   }),
 );
 
@@ -153,19 +151,6 @@ function applyPage(page: LibraryPage) {
   artUrls.value = page.artUrls || {};
 }
 
-function applyStatsChrome() {
-  title.value = "Stats";
-  showBack.value = false;
-  backArtistId.value = null;
-  body.value = INITIAL_BODY;
-  headerArtist.value = null;
-  headerAlbum.value = null;
-  artUrls.value = {};
-  hasLoadedOnce.value = true;
-  loading.value = false;
-  error.value = "";
-}
-
 function applyTreeChrome() {
   title.value = source.value.treeTitle(mode.value);
   showBack.value = false;
@@ -186,7 +171,7 @@ async function load() {
   }
 
   const seq = ++renderSeq;
-  if (source.value.clearsSelectionOnLoad) clearLibSelection();
+  if (source.value.flags.clearsSelectionOnLoad) clearLibSelection();
   error.value = "";
   loading.value = true;
 
@@ -205,11 +190,11 @@ async function load() {
     if (!isCurrent(seq)) return;
     applyPage(page);
     hasLoadedOnce.value = true;
-    if (source.value.reportsConnectivity) noteServerReachable();
+    if (source.value.flags.reportsConnectivity) noteServerReachable();
   } catch (err: unknown) {
     if (!isCurrent(seq)) return;
     const msg = err instanceof Error ? err.message : String(err);
-    if (source.value.reportsConnectivity) {
+    if (source.value.flags.reportsConnectivity) {
       noteServerUnreachable(err);
       error.value =
         connectivityLoadError(connectivity.state, downloads.enabled) || msg;
@@ -232,7 +217,6 @@ const { coldStartTree, watchNavigation } = useBrowseLayout({
     mode.value !== "stats",
   onNavigate: () => {
     if (mode.value === "stats") {
-      applyStatsChrome();
       return;
     }
     if (route.meta.pane !== "library") {
@@ -262,7 +246,6 @@ watchNavigation(
 onMounted(() => {
   coldStartTree();
   if (mode.value === "stats") {
-    applyStatsChrome();
     return;
   }
   load();
@@ -349,11 +332,8 @@ const offlineBanner = computed(() =>
   connectivityBanner(connectivity.state, downloads.enabled),
 );
 
-const includeArtistPhoto = computed(() =>
-  source.value.includeArtistPhoto({
-    mode: mode.value,
-    isSearch: isSearch.value,
-  }),
+const includeArtistPhoto = computed(
+  () => sourceChrome.value.includeArtistPhoto,
 );
 
 const {
@@ -373,15 +353,15 @@ const {
 });
 
 function artistCover(artist: Artist) {
-  return source.value.artistCover(artist, artUrls.value);
+  return source.value.cover({ kind: "artist", artist }, artUrls.value);
 }
 
 function albumCover(album: LibraryAlbum) {
-  return source.value.albumCover(album, artUrls.value);
+  return source.value.cover({ kind: "album", album }, artUrls.value);
 }
 
 function trackCover(track: Track) {
-  return source.value.trackCover(track, artUrls.value);
+  return source.value.cover({ kind: "track", track }, artUrls.value);
 }
 
 async function onArtistThumbDrop(artist: Artist, file: File) {
@@ -411,7 +391,7 @@ const entityActions = computed((): EntityActions => ({
     onRowContextMenu: (track, e) =>
       onEntityContext({ kind: "track", track }, e),
   },
-  ...(source.value.showFolderSelection
+  ...(source.value.flags.showFolderSelection
     ? {
         folder: {
           onMenuClick: (dir: BrowseDir, e: MouseEvent) =>
@@ -453,9 +433,9 @@ watch(
 
 <template>
     <LibraryChrome
-      :aria-label="source.ariaLabel"
-      :title="title"
-      :show-back="showBack && !showTree"
+      :aria-label="source.flags.ariaLabel"
+      :title="mode === 'stats' ? 'Stats' : title"
+      :show-back="showBack && !showTree && mode !== 'stats'"
       :offline-banner="offlineBanner"
       :show-layout-toggle="showLayoutToggle"
       @back="goBack"
@@ -511,14 +491,14 @@ watch(
         v-else
         :body="body"
         :error="error"
-        :loading="source.showListLoading ? loading : false"
+        :loading="source.flags.showListLoading ? loading : false"
         :is-grid="isGrid"
         :grid-host="gridHost"
-        :show-track-download="source.showTrackDownload"
-        :is-selected="source.showFolderSelection ? isSelected : null"
+        :show-track-download="source.flags.showTrackDownload"
+        :is-selected="source.flags.showFolderSelection ? isSelected : null"
         :artist-cover="artistCover"
-        :album-cover="source.useLocalAlbumCover ? albumCover : null"
-        :track-cover="source.useLocalTrackCover ? trackCover : null"
+        :album-cover="source.flags.useLocalAlbumCover ? albumCover : null"
+        :track-cover="source.flags.useLocalTrackCover ? trackCover : null"
         :entity-actions="entityActions"
         @open-artist="openArtist"
         @open-album="openAlbum"
