@@ -2,6 +2,7 @@
  * Single reactive surface for downloads UI.
  * Mutations live in index.js; components read this object.
  */
+import { DEFAULT_DOWNLOAD_CONCURRENCY } from "@/downloads/concurrency";
 import { QueueState, type QueueRecord } from "@/downloads/queue";
 import { reactive } from "vue";
 
@@ -11,6 +12,7 @@ export interface DownloadsState {
   enabled: boolean;
   ready: boolean;
   managerOpen: boolean;
+  concurrency: number;
   queue: QueueRecord[];
   trackCount: number;
   downloadedBytes: number;
@@ -39,6 +41,7 @@ export const downloads = reactive<DownloadsState>({
   enabled: false,
   ready: false,
   managerOpen: false,
+  concurrency: DEFAULT_DOWNLOAD_CONCURRENCY,
   queue: [],
   trackCount: 0,
   downloadedBytes: 0,

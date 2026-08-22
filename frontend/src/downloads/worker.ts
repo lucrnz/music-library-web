@@ -35,6 +35,7 @@ import {
   type QueueRecord,
 } from "@/downloads/queue";
 import type { Track } from "@/models/track";
+import { DEMOTE_ABORT_REASON } from "@/downloads/concurrency";
 import { canPump, onJobNetworkFailure } from "@/downloads/queuePolicy";
 
 function errorNumericField(err: unknown, key: string): number | undefined {
@@ -52,9 +53,23 @@ export type JobOutcomeKind =
   | "done"
   | "canceled"
   | "paused"
+  | "queued"
   | "failed"
   | "network"
   | "retry";
+
+function abortOutcome(
+  cur: QueueRecord | null | undefined,
+  ac: AbortController,
+): JobOutcome {
+  if (
+    cur?.state !== QueueState.CANCELED &&
+    ac.signal.reason === DEMOTE_ABORT_REASON
+  ) {
+    return { kind: "queued" };
+  }
+  return { kind: resolveAbortKind(cur) };
+}
 
 export interface JobOutcome {
   kind: JobOutcomeKind;
@@ -192,6 +207,25 @@ const outcomeHandlers: Record<JobOutcomeKind, OutcomeHandler> = {
     await flushProgressToIdb(id);
     emitQueueChange();
   },
+
+  async queued(id, outcome, ctx, current) {
+    if (current && current.state !== QueueState.CANCELED) {
+      markPending(current);
+      if (outcome.loaded != null) current.loaded = outcome.loaded;
+      if (outcome.total !== undefined) current.total = outcome.total;
+      if (ctx.dirParts && ctx.fileName) {
+        try {
+          const size = await partialByteSize(ctx.dirParts, ctx.fileName);
+          if (size > 0) current.loaded = size;
+        } catch {
+          /* ignore */
+        }
+      }
+      await putOne("queue", current);
+    }
+    await flushProgressToIdb(id);
+    emitQueueChange();
+  },
 };
 
 /**
@@ -207,7 +241,10 @@ export async function applyJobOutcome(
 ) {
   const current = await getOne<QueueRecord>("queue", id);
   let kind = outcome.kind;
-  if (kind === "paused" && current?.state === QueueState.CANCELED) {
+  if (
+    (kind === "paused" || kind === "queued") &&
+    current?.state === QueueState.CANCELED
+  ) {
     kind = "canceled";
   } else if (
     kind !== "canceled" &&
@@ -267,7 +304,7 @@ export async function executeDownloadJob(
 
   if (ac.signal.aborted) {
     const cur = await getOne<QueueRecord>("queue", id);
-    return { outcome: { kind: resolveAbortKind(cur) } };
+    return { outcome: abortOutcome(cur, ac), ctx: fileCtx };
   }
 
   let offset = await partialByteSize(dirParts, fileName);
@@ -289,7 +326,7 @@ export async function executeDownloadJob(
   } catch (err: unknown) {
     if (ac.signal.aborted) {
       const cur = await getOne<QueueRecord>("queue", id);
-      return { outcome: { kind: resolveAbortKind(cur) } };
+      return { outcome: abortOutcome(cur, ac), ctx: fileCtx };
     }
     if (isNetworkClassError(err)) {
       reportFailure(err);
@@ -364,7 +401,7 @@ export async function executeDownloadJob(
   } catch (err: unknown) {
     if (err instanceof DownloadWriteAbortError || ac.signal.aborted) {
       const cur = await getOne<QueueRecord>("queue", id);
-      return { outcome: { kind: resolveAbortKind(cur) } };
+      return { outcome: abortOutcome(cur, ac), ctx: fileCtx };
     }
 
     console.error("Download job failed", err);

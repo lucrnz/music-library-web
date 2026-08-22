@@ -1,7 +1,12 @@
 /**
  * Download pump + in-flight abort. queue.ts is IDB CRUD.
  */
-import { deleteOne, putOne } from "@/downloads/db";
+import {
+  DEMOTE_ABORT_REASON,
+  selectActiveToKeep,
+  type ActiveJobRank,
+} from "@/downloads/concurrency";
+import { putOne } from "@/downloads/db";
 import {
   canPump,
   initPolicy,
@@ -9,15 +14,16 @@ import {
 import {
   cancelQueueItem,
   emitQueueChange,
+  flushProgressToIdb,
+  getLiveProgress,
   listQueue,
   markActive,
   pauseQueuedWork,
   QueueState,
   type QueueRecord,
 } from "@/downloads/queue";
+import { downloads } from "@/downloads/state";
 import { applyJobOutcome, executeDownloadJob } from "@/downloads/worker";
-
-const MAX_CONCURRENT = 2;
 
 export const activeIds = new Set<number>();
 
@@ -69,9 +75,41 @@ export function schedulePump() {
   });
 }
 
+export async function applyConcurrency(): Promise<void> {
+  if (!runtimeReady) return;
+  const cap = downloads.concurrency;
+  if (activeIds.size > cap) {
+    const items = await listQueue();
+    const actives: ActiveJobRank[] = [];
+    for (const row of items) {
+      if (
+        row.id == null ||
+        !activeIds.has(row.id) ||
+        row.state !== QueueState.ACTIVE
+      ) {
+        continue;
+      }
+      const live = getLiveProgress(row.id);
+      actives.push({
+        id: row.id,
+        loaded: live?.loaded ?? row.loaded ?? 0,
+        addedAt: row.addedAt || 0,
+      });
+    }
+    const keep = new Set(selectActiveToKeep(actives, cap));
+    for (const { id } of actives) {
+      if (keep.has(id)) continue;
+      await flushProgressToIdb(id);
+      abortJob(id, DEMOTE_ABORT_REASON);
+      activeIds.delete(id);
+    }
+  }
+  schedulePump();
+}
+
 async function pump() {
   if (!canPump()) return;
-  while (activeIds.size < MAX_CONCURRENT && canPump()) {
+  while (activeIds.size < downloads.concurrency && canPump()) {
     const items = await listQueue();
     const next = items.find((i) => i.state === QueueState.PENDING && i.id != null);
     if (!next || next.id == null) break;

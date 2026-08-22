@@ -53,8 +53,18 @@ import {
   resumeQueue,
   setDownloadsEnabled,
 } from "@/downloads/queuePolicy";
+import {
+  isDownloadConcurrency,
+  loadDownloadConcurrency,
+  saveDownloadConcurrency,
+} from "@/downloads/concurrency";
 import { downloads, syncQueueSummary } from "@/downloads/state";
-import { cancelItem, initQueueRuntime, stopAll } from "@/downloads/queueRuntime";
+import {
+  applyConcurrency,
+  cancelItem,
+  initQueueRuntime,
+  stopAll,
+} from "@/downloads/queueRuntime";
 import {
   formatBytes,
   formatDownloadsStorageLine,
@@ -226,6 +236,7 @@ async function bootDownloadsRuntime() {
 
 export async function initDownloads() {
   bindConnectivityListeners();
+  downloads.concurrency = loadDownloadConcurrency();
   const on = loadEnabledFlag();
   downloads.enabled = on;
   if (!on) {
@@ -249,6 +260,15 @@ export async function initDownloads() {
     downloads.ready = true;
   }
   syncControlFlags();
+}
+
+export function setDownloadConcurrency(v: number): boolean {
+  if (!isDownloadConcurrency(v)) return false;
+  if (v === downloads.concurrency) return false;
+  saveDownloadConcurrency(v);
+  downloads.concurrency = v;
+  void applyConcurrency();
+  return true;
 }
 
 export async function enableDownloads() {
