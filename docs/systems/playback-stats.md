@@ -12,8 +12,9 @@ This page owns the listen contract. Exact columns, JSON fields, and route wiring
 - HTTP ingest and rankings: `src/musicweb/routes/listens.py`
 - 70% cycle, outbox, flush, chips: `frontend/src/listens/`
 - Player call sites: sink time/ended in `frontend/src/stores/player.ts`; cycle start after successful load in `frontend/src/playback/load.ts`
+- Radio call sites: start after a successful tuned load, time/ended, and discard in `frontend/src/radio/session.ts`; Tune out / leave also discard via `frontend/src/stores/radio.ts`
 - Stats browse UI: `frontend/src/components/stats/`
-- Related: `docs/systems/playback.md` (delivery, not listens), `docs/systems/diagnostics.md` (JSONL, not listens)
+- Related: `docs/systems/playback.md` (delivery, not listens), `docs/systems/radio.md`, `docs/systems/diagnostics.md` (JSONL, not listens)
 
 ## What a listen is
 
@@ -21,13 +22,13 @@ A listen is **70% accumulated media time** in one play cycle (successful load, o
 
 Cold-load resume is a seek. Time skipped by the resume jump does not count. Finishing from a late resume without hearing 70% after that seek does not count.
 
-All sinks count: stream, downloaded OPFS, and exclusive companion. Start the cycle after a successful html or exclusive load. Do **not** infer listens from `GET /api/stream`, prepare, or diagnostic JSONL. **Radio must not start a listen cycle** and must not write listen-stat events.
+All sinks count: stream, downloaded OPFS, and exclusive companion. Start the cycle after a successful html or exclusive load. Radio **does** start a cycle after a successful tuned load (load + seek-to-clock + play), only while this client is `tuned`, with the same 70% / pause / seek / late-resume rules. The Tune-in seek is a cold-load resume. Tune-out discards the cycle (Stop, not Pause); two halves on the same official play do not add. Each tuned-in client posts independently. Tab-open, `tuning`, `stopped`, and the station clock with no this-client tune-in do not start a cycle. Do **not** infer listens from `GET /api/stream`, prepare, diagnostic JSONL, or the station clock.
 
 If duration is never known, count only on ended / companion eof.
 
 ## Where events live
 
-Each counted listen is a row in the SQLite index (event id, track, profile tag, play source, counted time, calendar month in the **server host timezone**). Rankings are `GROUP BY` over that log — no materialized counters. Performing artist (`tracks.artist_id`) keys the artist list. Missing tracks still count.
+Each counted listen is a row in the SQLite index (event id, track, profile tag, play source, **origin** (`queue` | `radio`), counted time, calendar month in the **server host timezone**). Omitted ingest `origin` and existing rows are `queue`. Rankings are `GROUP BY` over that log — no materialized counters and no origin filter. Performing artist (`tracks.artist_id`) keys the artist list. Missing tracks still count. `play_source` is delivery (`streaming` | `downloaded`); exclusive companion is still `origin=queue`.
 
 The client fires the event, writes it to `localStorage` (`musicweb.listens.pending.v1`) first, then `POST /api/listens` via `apiFetch` (never `apiPost` — that JSON-parses a 204). Flush owns retry; the POST is the probe. Do not gate on `canReachServer()`. A 204 deletes the row and calls `reportSuccess()`. A 422 deletes and does not report success. Network / 5xx keep the row, `reportFailure`, then local backoff. Do not add a `HealthWorkSource`. Do not use the diagnostics outbox or a listens IndexedDB.
 
