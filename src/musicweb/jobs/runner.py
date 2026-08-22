@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -35,6 +36,18 @@ JobKind = Literal[
     "regen-lyrics",
 ]
 BATCH_SIZE = 100
+
+
+@dataclass
+class PhaseCtx:
+    kind: JobKind
+    mode: ScanMode
+    force: bool
+    seen_count: int = 0
+    upserted: int = 0
+    missing: int = 0
+    seen_paths: set[str] = field(default_factory=set)
+    cover_queue: dict[str, Path] = field(default_factory=dict)
 
 
 class LibraryJobRunner:
@@ -304,6 +317,18 @@ class LibraryJobRunner:
         "regen-lyrics": ("lyrics",),
     }
 
+    def _begin_phase(self, ctx: PhaseCtx, name: str) -> None:
+        with self._db.session() as session:
+            self._set_state(session, phase=name, force=ctx.force)
+        if ctx.kind == "scan":
+            self._progress(
+                mode=ctx.mode,
+                phase=name,
+                files_seen=ctx.seen_count,
+                files_upserted=ctx.upserted,
+                files_missing=ctx.missing,
+            )
+
     def _run_phases(
         self,
         kind: JobKind,
@@ -314,105 +339,63 @@ class LibraryJobRunner:
         names = self.PHASES.get(kind)
         if names is None:
             raise ValueError(f"Unknown job kind: {kind}")
-        ctx: dict[str, object] = {
-            "kind": kind,
-            "mode": mode,
-            "force": force if kind != "scan" else mode == "full",
-            "seen_count": 0,
-            "upserted": 0,
-            "missing": 0,
-            "seen_paths": set(),
-            "cover_queue": {},
-        }
+        ctx = PhaseCtx(
+            kind=kind,
+            mode=mode,
+            force=force if kind != "scan" else mode == "full",
+        )
         for name in names:
             if self._cancel.is_set():
                 return
+            self._begin_phase(ctx, name)
             getattr(self, f"_do_{name}")(ctx)
 
-    def _do_index(self, ctx: dict[str, object]) -> None:
-        mode = ctx["mode"]
-        assert isinstance(mode, str)
-        seen_count, upserted, seen_paths, cover_queue = self._phase_index(mode)
-        ctx["seen_count"] = seen_count
-        ctx["upserted"] = upserted
-        ctx["seen_paths"] = seen_paths
-        ctx["cover_queue"] = cover_queue
+    def _do_index(self, ctx: PhaseCtx) -> None:
+        seen_count, upserted, seen_paths, cover_queue = self._phase_index(
+            ctx.mode
+        )
+        ctx.seen_count = seen_count
+        ctx.upserted = upserted
+        ctx.seen_paths = seen_paths
+        ctx.cover_queue = cover_queue
 
-    def _do_finalize(self, ctx: dict[str, object]) -> None:
-        mode = ctx["mode"]
-        assert isinstance(mode, str)
-        ctx["missing"] = self._phase_finalize(
-            mode,
-            seen_count=int(ctx["seen_count"]),  # type: ignore[arg-type]
-            upserted=int(ctx["upserted"]),  # type: ignore[arg-type]
-            seen_paths=ctx["seen_paths"],  # type: ignore[arg-type]
+    def _do_finalize(self, ctx: PhaseCtx) -> None:
+        ctx.missing = self._phase_finalize(
+            ctx.mode,
+            seen_count=ctx.seen_count,
+            upserted=ctx.upserted,
+            seen_paths=ctx.seen_paths,
         )
 
-    def _do_covers(self, ctx: dict[str, object]) -> None:
-        kind = ctx["kind"]
-        force = bool(ctx["force"])
-        cover_queue = ctx["cover_queue"]
-        assert isinstance(cover_queue, dict)
+    def _do_covers(self, ctx: PhaseCtx) -> None:
         with self._db.session() as session:
-            self._set_state(session, phase="covers", force=force)
-            if kind != "scan":
-                cover_queue = album_cover_sources(session, self._library)
-                ctx["cover_queue"] = cover_queue
-            if not cover_queue:
+            if ctx.kind != "scan":
+                ctx.cover_queue = album_cover_sources(session, self._library)
+            if not ctx.cover_queue:
                 return
-            if kind == "scan":
-                self._progress(
-                    mode=ctx["mode"],  # type: ignore[arg-type]
-                    phase="covers",
-                    files_seen=int(ctx["seen_count"]),  # type: ignore[arg-type]
-                    files_upserted=int(ctx["upserted"]),  # type: ignore[arg-type]
-                    files_missing=int(ctx["missing"]),  # type: ignore[arg-type]
-                )
             extract_covers(
                 session,
                 self._covers,
-                cover_queue,
-                force=force,
+                ctx.cover_queue,
+                force=ctx.force,
                 cancel=self._cancel.is_set,
             )
 
-    def _do_artist_images(self, ctx: dict[str, object]) -> None:
-        force = bool(ctx["force"])
-        with self._db.session() as session:
-            self._set_state(session, phase="artist_images", force=force)
-        if ctx["kind"] == "scan":
-            self._progress(
-                mode=ctx["mode"],  # type: ignore[arg-type]
-                phase="artist_images",
-                files_seen=int(ctx["seen_count"]),  # type: ignore[arg-type]
-                files_upserted=int(ctx["upserted"]),  # type: ignore[arg-type]
-                files_missing=int(ctx["missing"]),  # type: ignore[arg-type]
-            )
+    def _do_artist_images(self, ctx: PhaseCtx) -> None:
         fetch_artist_images(
             self._db,
             self._artist_fetcher,
             cancel=self._cancel.is_set,
-            force=force,
+            force=ctx.force,
         )
 
-    def _do_lyrics(self, ctx: dict[str, object]) -> None:
-        force = bool(ctx["force"])
-        with self._db.session() as session:
-            self._set_state(session, phase="lyrics", force=force)
-        if ctx["kind"] == "scan":
-            self._progress(
-                mode=ctx["mode"],  # type: ignore[arg-type]
-                phase="lyrics",
-                files_seen=int(ctx["seen_count"]),  # type: ignore[arg-type]
-                files_upserted=int(ctx["upserted"]),  # type: ignore[arg-type]
-                files_missing=int(ctx["missing"]),  # type: ignore[arg-type]
-            )
+    def _do_lyrics(self, ctx: PhaseCtx) -> None:
         fetch_track_lyrics(
             self._db,
             self._lyrics_fetcher,
             self._library,
             cancel=self._cancel.is_set,
-            force=force,
+            force=ctx.force,
         )
 
     def _phase_index(
@@ -481,13 +464,6 @@ class LibraryJobRunner:
         seen_paths: set[str],
     ) -> int:
         with self._db.session() as session:
-            self._set_state(session, phase="finalize")
-            self._progress(
-                mode=mode,
-                phase="finalize",
-                files_seen=seen_count,
-                files_upserted=upserted,
-            )
             missing = mark_missing(session, seen_paths)
             recount_entities(session)
             if mode == "full":

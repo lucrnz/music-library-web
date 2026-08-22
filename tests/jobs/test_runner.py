@@ -140,3 +140,10 @@ def test_scan_finish_sets_watermark_regen_does_not_clear(tmp_home, db):
         assert row is not None
         assert row.kind == "regen-lyrics"
         assert row.last_scan_finished_at == scan_stamp
+
+
+def test_phases_table_matches_do_methods():
+    for kind, names in LibraryJobRunner.PHASES.items():
+        assert names, kind
+        for name in names:
+            assert hasattr(LibraryJobRunner, f"_do_{name}"), (kind, name)
