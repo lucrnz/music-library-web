@@ -5,7 +5,6 @@ vi.mock("@/diag/log", () => ({ emit: () => {} }));
 import {
   hasHealthWork,
   requestHealthProbe,
-  setHealthContext,
   setHealthWork,
 } from "@/connectivity";
 
@@ -35,13 +34,13 @@ describe("setHealthWork OR", () => {
 
   it("keeps artist-art work when downloads health is cleared", () => {
     setHealthWork("artist-art", true);
-    setHealthContext({ enabled: false, queueHasWork: false });
+    setHealthWork("downloads", false);
     expect(hasHealthWork()).toBe(true);
   });
 
   it("requestHealthProbe schedules when only artist-art has work", async () => {
     setHealthWork("artist-art", true);
-    setHealthContext({ enabled: false, queueHasWork: false });
+    setHealthWork("downloads", false);
     requestHealthProbe(0);
     await vi.runAllTimersAsync();
     expect(fetch).toHaveBeenCalled();

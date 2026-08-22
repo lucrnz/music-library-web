@@ -9,7 +9,7 @@ import {
   onConnectivityChange,
   onConnectivityRecovered,
   requestHealthProbe,
-  setHealthContext,
+  setHealthWork,
 } from "@/connectivity";
 import { codecExt } from "@/downloads/media";
 import { getOne, putOne, type MetaRecord } from "@/downloads/db";
@@ -51,7 +51,7 @@ export function downloadAutoPauseReason(): DownloadAutoPauseReason | null {
 
 export async function syncHealthFromPolicy() {
   const hasWork = await queueHasWork();
-  setHealthContext({ enabled: downloadsEnabled, queueHasWork: hasWork });
+  setHealthWork("downloads", !!(downloadsEnabled && hasWork));
   if (downloadsEnabled && hasWork && !isHardOffline() && !canReachServer()) {
     requestHealthProbe(0);
   }

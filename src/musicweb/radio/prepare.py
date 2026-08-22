@@ -48,8 +48,7 @@ class RadioPrepare:
         if self._tuners.count() < 1 or snap.face != "current" or not track_id:
             return
         next_ids = self._station.peek_upcoming_ids(2)
-        session = self._database.session()
-        try:
+        with self._database.session() as session:
             for profile in sorted(self._tuners.profiles()):
                 self._enqueue(
                     session,
@@ -70,5 +69,3 @@ class RadioPrepare:
                         urgent=False,
                         log_label=RADIO_PREWARM_LABEL,
                     )
-        finally:
-            session.close()

@@ -274,7 +274,7 @@ async def cover(
     if not resolved_album_id:
         return _placeholder_response(size)
 
-    hit = store.cover_path(resolved_album_id, size)
+    hit = store.store.get_path(resolved_album_id, size)
     if hit is not None:
         return FileResponse(hit, media_type="image/webp", headers=_COVER_HEADERS)
 
@@ -285,7 +285,7 @@ async def cover(
         # Persist has_cover flag; get_db commits the session on success.
         album = db.get(Album, resolved_album_id)
         if album is not None:
-            album.has_cover = store.has_cover(resolved_album_id)
+            album.has_cover = store.store.has(resolved_album_id)
         item = result[size]
         if isinstance(item, Path):
             return FileResponse(item, media_type="image/webp", headers=_COVER_HEADERS)

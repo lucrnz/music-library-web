@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from musicweb.radio.now_playing import serialize
+from musicweb.routes.radio import serialize
 from musicweb.radio.types import SnapshotAlbum, SnapshotTrack, StationSnapshot
 from musicweb.routes.radio import NowPlayingHub, push_now_playing
 

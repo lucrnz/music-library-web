@@ -144,6 +144,25 @@ def _audio_tech_from_info(info: object, path: Path) -> dict:
     }
 
 
+def _blank(stem: str) -> TrackMetadata:
+    return TrackMetadata(
+        title=stem,
+        artist=None,
+        album=None,
+        albumartist=None,
+        track=None,
+        disc=None,
+        year=None,
+        duration=None,
+        sample_rate_hz=None,
+        bit_depth=None,
+        channels=None,
+        source_codec=None,
+        bitrate_kbps=None,
+        bitrate_mode=None,
+    )
+
+
 def read_metadata(path: Path) -> TrackMetadata:
     """
     Return common tags + source audio tech for a single audio file.
@@ -170,60 +189,15 @@ def read_metadata(path: Path) -> TrackMetadata:
     try:
         audio = MutagenFile(path, easy=True)
     except Exception:
-        return TrackMetadata(
-            title=title,
-            artist=artist,
-            album=album,
-            albumartist=albumartist,
-            track=track,
-            disc=disc,
-            year=year,
-            duration=duration,
-            sample_rate_hz=sample_rate_hz,
-            bit_depth=bit_depth,
-            channels=channels,
-            source_codec=source_codec,
-            bitrate_kbps=bitrate_kbps,
-            bitrate_mode=bitrate_mode,
-        )
+        return _blank(stem)
 
     if audio is None:
         try:
             audio = MutagenFile(path)
         except Exception:
-            return TrackMetadata(
-                title=title,
-                artist=artist,
-                album=album,
-                albumartist=albumartist,
-                track=track,
-                disc=disc,
-                year=year,
-                duration=duration,
-                sample_rate_hz=sample_rate_hz,
-                bit_depth=bit_depth,
-                channels=channels,
-                source_codec=source_codec,
-                bitrate_kbps=bitrate_kbps,
-                bitrate_mode=bitrate_mode,
-            )
+            return _blank(stem)
         if audio is None:
-            return TrackMetadata(
-                title=title,
-                artist=artist,
-                album=album,
-                albumartist=albumartist,
-                track=track,
-                disc=disc,
-                year=year,
-                duration=duration,
-                sample_rate_hz=sample_rate_hz,
-                bit_depth=bit_depth,
-                channels=channels,
-                source_codec=source_codec,
-                bitrate_kbps=bitrate_kbps,
-                bitrate_mode=bitrate_mode,
-            )
+            return _blank(stem)
 
     info = getattr(audio, "info", None)
     if info is not None:

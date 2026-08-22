@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from musicweb.db.models import Track
+
 
 @dataclass(frozen=True, slots=True)
 class EligibleRow:
@@ -95,6 +97,32 @@ class SnapshotTrack:
     source_codec: str | None
     bitrate_kbps: int | None
     bitrate_mode: str | None
+
+    @staticmethod
+    def from_track(row: Track) -> SnapshotTrack:
+        album = SnapshotAlbum(title=row.album.title) if row.album is not None else None
+        return SnapshotTrack(
+            id=row.id,
+            rel_path=row.rel_path,
+            is_missing=bool(row.is_missing),
+            title=row.title,
+            artist_name=row.artist_name,
+            album=album,
+            album_id=row.album_id,
+            artist_id=row.artist_id,
+            album_artist_name=row.album_artist_name,
+            album_artist_id=row.album_artist_id,
+            track_no=row.track_no,
+            disc_no=row.disc_no,
+            year=row.year,
+            duration_ms=row.duration_ms,
+            sample_rate_hz=row.sample_rate_hz,
+            bit_depth=row.bit_depth,
+            is_lossy=bool(row.is_lossy),
+            source_codec=row.source_codec,
+            bitrate_kbps=row.bitrate_kbps,
+            bitrate_mode=row.bitrate_mode,
+        )
 
 
 @dataclass(frozen=True, slots=True)

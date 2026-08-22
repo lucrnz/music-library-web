@@ -106,21 +106,12 @@ class CoverStore:
     """Persisted album-keyed WebP covers under the data directory."""
 
     def __init__(self, data_dir: Path) -> None:
-        self._store = WebpAssetStore(data_dir / "covers" / "albums")
+        self.store = WebpAssetStore(data_dir / "covers" / "albums")
         # Public root path for callers that inspect the store location.
-        self.root = self._store.root
+        self.root = self.store.root
 
     def path_for(self, album_id: str, size: str) -> Path:
-        return self._store.path_for(album_id, size)
-
-    def has_cover(self, album_id: str) -> bool:
-        return self._store.has(album_id)
-
-    def cover_path(self, album_id: str, size: str) -> Path | None:
-        return self._store.get_path(album_id, size)
-
-    def delete_album_cover(self, album_id: str) -> None:
-        self._store.delete(album_id)
+        return self.store.path_for(album_id, size)
 
     def ensure_album_cover(
         self, album_id: str, audio_path: Path, *, force: bool = False
@@ -132,32 +123,32 @@ class CoverStore:
         Returns True if files on disk represent real art.
         Returns False when no art source exists (nothing written, or removed on force).
         """
-        if not force and self.has_cover(album_id):
+        if not force and self.store.has(album_id):
             return True
 
         source = _cover_source_bytes(audio_path)
         if source is None:
             if force:
-                self.delete_album_cover(album_id)
+                self.store.delete(album_id)
             return False
 
-        ok = self._store.write_from_bytes(album_id, source)
+        ok = self.store.write_from_bytes(album_id, source)
         if not ok and force:
-            self.delete_album_cover(album_id)
+            self.store.delete(album_id)
         return ok
 
     def get_or_fill(
         self, album_id: str, audio_path: Path
     ) -> dict[str, Path | bytes]:
         """Return full/thumb as Path when on disk, else try extract; else in-memory placeholder."""
-        if self.has_cover(album_id):
+        if self.store.has(album_id):
             return {
-                "full": self.path_for(album_id, "full"),
-                "thumb": self.path_for(album_id, "thumb"),
+                "full": self.store.path_for(album_id, "full"),
+                "thumb": self.store.path_for(album_id, "thumb"),
             }
         self.ensure_album_cover(album_id, audio_path, force=False)
         out: dict[str, Path | bytes] = {}
         for size in ("full", "thumb"):
-            path = self.cover_path(album_id, size)
+            path = self.store.get_path(album_id, size)
             out[size] = path if path is not None else placeholder_webp(size)
         return out

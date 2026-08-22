@@ -1,10 +1,11 @@
 """Radio prepare: current urgent + next-2 prewarm, no-op ticks, no spoilers."""
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from musicweb.radio.now_playing import serialize
+from musicweb.routes.radio import serialize
 from musicweb.radio.prepare import RADIO_CURRENT_LABEL, RADIO_PREWARM_LABEL, RadioPrepare
 from musicweb.radio.tuners import TunerRegistry
 from musicweb.radio.types import SnapshotAlbum, SnapshotTrack, StationSnapshot
@@ -48,11 +49,16 @@ def _station(track_id: str = "cur", upcoming: list[str] | None = None):
     )
 
 
+@contextmanager
+def _session():
+    yield SimpleNamespace()
+
+
 def _prepare(station, tuners, enqueue) -> RadioPrepare:
     return RadioPrepare(
         station,  # type: ignore[arg-type]
         tuners,
-        database=SimpleNamespace(session=lambda: SimpleNamespace(close=lambda: None)),
+        database=SimpleNamespace(session=_session),
         library=SimpleNamespace(),
         transcoder=SimpleNamespace(),
         enqueue=enqueue,

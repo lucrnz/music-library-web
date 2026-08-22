@@ -11,7 +11,7 @@ vi.mock("@/connectivity", () => ({
   onConnectivityChange: vi.fn(),
   onConnectivityRecovered: vi.fn(),
   requestHealthProbe: vi.fn(),
-  setHealthContext: vi.fn(),
+  setHealthWork: vi.fn(),
 }));
 vi.mock("@/downloads/db", () => ({
   getOne: vi.fn(),

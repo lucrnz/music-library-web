@@ -67,7 +67,6 @@ def recount_entities(session: Session) -> None:
             """
         )
     )
-    # Same reduce as album_lossy_kind (mp3 / aac / lossy / mixed).
     session.execute(
         text(
             """

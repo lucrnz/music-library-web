@@ -24,8 +24,6 @@ const healthWork: Record<HealthWorkSource, boolean> = {
   downloads: false,
   "artist-art": false,
 };
-let downloadsHealthEnabled = false;
-let downloadsHealthQueueHasWork = false;
 /**
  * Private: schedule/run a health probe without advertising server_down.
  * Not part of ConnectivityState; never emitted to listeners.
@@ -283,18 +281,6 @@ export function hasHealthWork(): boolean {
 export function setHealthWork(source: HealthWorkSource, hasWork: boolean) {
   healthWork[source] = !!hasWork;
   syncHealthLoop();
-}
-
-export function setHealthContext(ctx: {
-  enabled?: boolean;
-  queueHasWork?: boolean;
-}) {
-  if (ctx.enabled != null) downloadsHealthEnabled = !!ctx.enabled;
-  if (ctx.queueHasWork != null) downloadsHealthQueueHasWork = !!ctx.queueHasWork;
-  setHealthWork(
-    "downloads",
-    !!(downloadsHealthEnabled && downloadsHealthQueueHasWork),
-  );
 }
 
 function stopHealthLoop() {

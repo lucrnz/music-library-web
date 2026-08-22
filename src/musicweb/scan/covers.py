@@ -71,7 +71,7 @@ def extract_covers(
         album = session.get(Album, album_id)
         if album is None:
             continue
-        if album.has_cover and not force and cover_store.has_cover(album_id):
+        if album.has_cover and not force and cover_store.store.has(album_id):
             continue
         ok = cover_store.ensure_album_cover(album_id, audio_path, force=force)
         album.has_cover = bool(ok)

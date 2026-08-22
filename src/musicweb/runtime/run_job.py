@@ -111,8 +111,8 @@ def _run_local(
     except DataDirLockError as exc:
         print(str(exc), file=sys.stderr)
         print(
-            "Stop the server first, or wait for Phase 2 control routing "
-            "(if the server is up, ensure the control socket is healthy).",
+            "The server holds the data-dir lock. Stop it first, "
+            "or ensure the control socket is healthy.",
             file=sys.stderr,
         )
         return 1

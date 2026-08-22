@@ -17,7 +17,7 @@ def exclusive_maintenance(
     """
     Acquire data-dir exclusive lock and bootstrap for local write jobs.
 
-    Phase 2 remote path uses ``run_library_job`` instead (health → UDS).
+    Live-server jobs go through ``run_library_job`` (health → UDS) instead.
     """
     settings = settings or load_settings()
     settings.ensure_data_dir()
