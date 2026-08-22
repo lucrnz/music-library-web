@@ -18,6 +18,37 @@ from musicweb.config import Settings
 logger = logging.getLogger(__name__)
 
 
+def provider_json(
+    ctx: FetchContext,
+    url: str,
+    *,
+    user_agent: str | None = None,
+    on_error: str = "error",
+    mbid: str | None = None,
+    not_found_statuses: tuple[int, ...] = (),
+) -> ProviderResult | dict:
+    """GET JSON. Returns the object on success, or a ProviderResult on failure."""
+    try:
+        status, payload = ctx.http.get_json(
+            url, user_agent=user_agent, max_bytes=ctx.max_bytes
+        )
+    except Exception as exc:
+        return ProviderResult(
+            status=on_error, mbid=mbid, detail=str(exc)[:200]
+        )
+    if status in (429, 503):
+        return ProviderResult(status="error", mbid=mbid, detail="rate_limited")
+    if status in not_found_statuses:
+        return ProviderResult(status="not_found", mbid=mbid)
+    if status != 200 or not isinstance(payload, dict):
+        return ProviderResult(
+            status=on_error,
+            mbid=mbid,
+            detail=f"http_{status}",
+        )
+    return payload
+
+
 class ImageProvider(Protocol):
     name: str
 
@@ -40,18 +71,14 @@ class MusicBrainzProvider:
         query = f'artist:"{artist.name}"'
         params = urllib.parse.urlencode({"query": query, "fmt": "json", "limit": "5"})
         search_url = f"https://musicbrainz.org/ws/2/artist?{params}"
-        try:
-            status, payload = ctx.http.get_json(
-                search_url, user_agent=ctx.mb_user_agent, max_bytes=ctx.max_bytes
+        payload = provider_json(
+            ctx, search_url, user_agent=ctx.mb_user_agent
+        )
+        if isinstance(payload, ProviderResult):
+            logger.debug(
+                "musicbrainz search failed for %s: %s", artist.name, payload.detail
             )
-        except Exception as exc:
-            logger.debug("musicbrainz search failed for %s: %s", artist.name, exc)
-            return ProviderResult(status="error", detail=str(exc)[:200])
-
-        if status in (429, 503):
-            return ProviderResult(status="error", detail="rate_limited")
-        if status != 200 or not isinstance(payload, dict):
-            return ProviderResult(status="error", detail=f"http_{status}")
+            return payload
 
         match = pick_musicbrainz_artist(payload, artist.name_norm)
         if match is None:
@@ -64,22 +91,18 @@ class MusicBrainzProvider:
 
         lookup_params = urllib.parse.urlencode({"fmt": "json", "inc": "url-rels"})
         lookup_url = f"https://musicbrainz.org/ws/2/artist/{mbid_s}?{lookup_params}"
-        try:
-            status, detail = ctx.http.get_json(
-                lookup_url, user_agent=ctx.mb_user_agent, max_bytes=ctx.max_bytes
+        detail = provider_json(
+            ctx,
+            lookup_url,
+            user_agent=ctx.mb_user_agent,
+            on_error="not_found",
+            mbid=mbid_s,
+        )
+        if isinstance(detail, ProviderResult):
+            logger.debug(
+                "musicbrainz lookup failed for %s: %s", mbid_s, detail.detail
             )
-        except Exception as exc:
-            logger.debug("musicbrainz lookup failed for %s: %s", mbid_s, exc)
-            return ProviderResult(
-                status="not_found", mbid=mbid_s, detail=str(exc)[:200]
-            )
-
-        if status in (429, 503):
-            return ProviderResult(
-                status="error", mbid=mbid_s, detail="rate_limited"
-            )
-        if status != 200 or not isinstance(detail, dict):
-            return ProviderResult(status="not_found", mbid=mbid_s)
+            return detail
 
         image_url = mb_image_url_from_lookup(detail)
         if not image_url:
@@ -114,20 +137,12 @@ class LastFmProvider:
         else:
             params["artist"] = artist.name
         url = "https://ws.audioscrobbler.com/2.0/?" + urllib.parse.urlencode(params)
-        try:
-            status, payload = ctx.http.get_json(url, max_bytes=ctx.max_bytes)
-        except Exception as exc:
-            logger.debug("lastfm getinfo failed for %s: %s", artist.name, exc)
-            return ProviderResult(
-                status="error", mbid=mbid, detail=str(exc)[:200]
+        payload = provider_json(ctx, url, mbid=mbid)
+        if isinstance(payload, ProviderResult):
+            logger.debug(
+                "lastfm getinfo failed for %s: %s", artist.name, payload.detail
             )
-
-        if status == 429:
-            return ProviderResult(status="error", mbid=mbid, detail="rate_limited")
-        if status != 200 or not isinstance(payload, dict):
-            return ProviderResult(
-                status="error", mbid=mbid, detail=f"http_{status}"
-            )
+            return payload
 
         if payload.get("error"):
             err = payload.get("error")
@@ -174,22 +189,12 @@ class FanartTvProvider:
             + "?"
             + urllib.parse.urlencode({"api_key": key})
         )
-        try:
-            status, payload = ctx.http.get_json(url, max_bytes=ctx.max_bytes)
-        except Exception as exc:
-            logger.debug("fanart.tv failed for %s: %s", mbid, exc)
-            return ProviderResult(
-                status="error", mbid=mbid, detail=str(exc)[:200]
-            )
-
-        if status in (429, 503):
-            return ProviderResult(status="error", mbid=mbid, detail="rate_limited")
-        if status == 404:
-            return ProviderResult(status="not_found", mbid=mbid)
-        if status != 200 or not isinstance(payload, dict):
-            return ProviderResult(
-                status="error", mbid=mbid, detail=f"http_{status}"
-            )
+        payload = provider_json(
+            ctx, url, mbid=mbid, not_found_statuses=(404,)
+        )
+        if isinstance(payload, ProviderResult):
+            logger.debug("fanart.tv failed for %s: %s", mbid, payload.detail)
+            return payload
 
         image_url = fanart_artist_thumb(payload)
         if not image_url:

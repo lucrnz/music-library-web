@@ -30,15 +30,7 @@ def serialize(snapshot: StationSnapshot, *, now: datetime | None = None) -> dict
     now = now or datetime.now(timezone.utc)
     body = {"face": "current"}
     body.update(track_dict(snapshot.track))
-    pos = snapshot.position_seconds(now)
-    if pos is None:
-        pos = 0.0
-    duration_s = (snapshot.duration_ms or 0) / 1000.0
-    if pos < 0:
-        pos = 0.0
-    if duration_s and pos > duration_s:
-        pos = duration_s
-    body["position"] = float(pos)
+    body["position"] = snapshot.position_seconds(now) or 0.0
     return body
 
 router = APIRouter(prefix="/api", tags=["radio"])
