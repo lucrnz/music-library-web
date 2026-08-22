@@ -32,7 +32,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `diag/` | Diagnostic JSONL store, emit, join-key reader |
 | `exclusive/` | macOS exclusive-audio companion (loopback WS + mpv); no DB/lock |
 | `runtime/` | Data-dir flock, bootstrap, exclusive maintenance, `run_library_job` |
-| `jobs/` | Single-flight library job runner (`PHASES` + `_run_phases`; one `_begin`; ScanState; scan finish stamps radio watermark) |
+| `jobs/` | Single-flight library job runner (`PHASES` + `_run_phases`; `PhaseCtx`; `_begin_phase`; one `_begin`; ScanState; scan finish stamps radio watermark) |
 | `control/` | Private UDS JSON control plane (health + job RPC) for live CLI |
 | `config.py` | Settings from env + source-level tuning constants |
 | `library.py` | Path jail (`resolve`) and present indexable audio (`present_audio`) under `MUSIC_LIBRARY_PATH` |
@@ -63,9 +63,9 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
 - **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`. The source owns list load, tree `loadRoots` / `loadChildren` / `resolveCover`, and tree title / empty / focus / reload; the tree pane does not switch on mode for those jobs.
-- **Playback session** is `frontend/src/playback/session.ts` (`become`). Radio socket / load-gen / Media Session live in `frontend/src/radio/runtime.ts`; `stores/radio.ts` is the chrome face.
+- **Playback session** is `frontend/src/playback/session.ts` (`become`). Radio socket / load-gen / face machine / Media Session live in `frontend/src/radio/runtime.ts`; `stores/radio.ts` is the chrome face. Exclusive companion commands are a module-level `COMMANDS` table + `_with_live` in `exclusive/session.py`.
 - **Row action menus** live under `frontend/src/components/menu/`. Desktop media queries for new client code live in `frontend/src/layout.ts`. See `docs/frontend/conventions.md`.
-- **Offline downloads** stay under `frontend/src/downloads/` (`snapshot.ts` catalog view, `queueRuntime.ts` pump) and must not write the server index.
+- **Offline downloads** stay under `frontend/src/downloads/` (`snapshot.ts` catalog view, `queueRuntime.ts` pump + abort) and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.
 
 ## Documentation folders

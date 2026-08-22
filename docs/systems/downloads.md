@@ -12,7 +12,7 @@ Optional client-side offline music: users can download stream-profile audio to t
   - Catalog barrel: `catalog.ts` re-exports `projection.ts` (status join), `art.ts` (OPFS art + blob URLs), `writer.ts` (IDB lock, pin/refcount, commit/delete)
   - Catalog view (hierarchy + art + primed roots): `snapshot.ts` (`loadDownloadsCatalogView`)
   - Queue IDB CRUD / live progress: `queue.ts`
-  - Queue pump + abort: `queueRuntime.ts`
+  - Queue pump + abort maps: `queueRuntime.ts`
   - Network policy: `queuePolicy.ts`
   - Job I/O (`executeDownloadJob`, `streamUrl`): `worker.ts`
   - OPFS binary storage: `opfs.ts`
@@ -67,7 +67,7 @@ Durable split so `index.ts` does not become a barrel:
 | One catalog view for browse / add-all / tree | `snapshot.ts` |
 | Play/cover URL resolution | `resolve.ts` |
 | Queue row CRUD / live progress | `queue.ts` |
-| Pump + in-flight abort | `queueRuntime.ts` |
+| Pump + in-flight abort (`abortJob` / `stopAll`) | `queueRuntime.ts` |
 | Auto-pause / health-work | `queuePolicy.ts` |
 | Stream I/O | `worker.ts` (`streamUrl`) |
 

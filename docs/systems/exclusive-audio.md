@@ -40,7 +40,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#ex
 - HTTP: `GET /api/exclusive-formats`, existing `GET /api/stream` + `POST /api/transcode/prepare` with tags
 - Client: `frontend/src/exclusive/` (including `statusFace.ts`, `companionClient.ts`), `stores/exclusiveAudio.ts`, `playback/sinks/`, `stores/player.ts`, `playbackStatus.ts`
 - One-way imports: `exclusiveAudio.ts` persists prefs and accepts `setExclusiveLive`; it does not import `companionClient`. The client writes live fields through `setExclusiveLive`. `main.ts` and `ExclusiveAudioPanel` call `syncCompanionConnection` / `syncPreferredDevice` / `disconnectCompanion` directly.
-- Companion hub: `src/musicweb/exclusive/session.py` (`_COMMANDS` table + `_still_live`)
+- Companion hub: `src/musicweb/exclusive/session.py` (module-level `COMMANDS` table + `_with_live`). Load is the only start command. Store has no companion playing/paused mirrors.
 - Device list items: `{ id, name, sample_rates, bit_depths }`
 - Commands: `docs/development/commands.md`
 
