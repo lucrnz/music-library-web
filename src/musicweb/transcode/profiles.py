@@ -61,6 +61,9 @@ class StreamProfile:
     # True → listed on GET /api/codecs (browser streaming UI).
     # False → resolvable via get_profile / stream / prepare only.
     browser_listed: bool = True
+    # Product size constant for Settings (decimal MB/hour). Browser-listed
+    # only; exclusive-only FLAC stays None and is not serialized.
+    approx_mb_per_hour: int | None = None
 
     def sample_fmt(self) -> str:
         """PCM sample format for this profile's encoder + bit depth."""
@@ -181,6 +184,7 @@ def _make_flac_profile(
         bit_depth=bit_depth,
         can_play=_CAN_PLAY_FLAC,
         browser_listed=browser_listed,
+        approx_mb_per_hour=_BROWSER_FLAC_APPROX.get((bit_depth, sample_rate)),
     )
 
 
@@ -193,6 +197,12 @@ _BROWSER_FLAC: frozenset[tuple[int, int]] = frozenset(
         (24, 96000),
     }
 )
+# Decimal MB/hour midpoints for the three marketing FLACs (Settings only).
+_BROWSER_FLAC_APPROX: dict[tuple[int, int], int] = {
+    (16, 44100): 380,
+    (16, 48000): 410,
+    (24, 96000): 1230,
+}
 
 
 def _build_profiles() -> dict[str, StreamProfile]:
@@ -208,6 +218,7 @@ def _build_profiles() -> dict[str, StreamProfile]:
             bit_depth=16,
             can_play=_CAN_PLAY_OPUS,
             browser_listed=True,
+            approx_mb_per_hour=86,
         ),
         StreamProfile(
             tag="opus_160_48000",
@@ -220,6 +231,7 @@ def _build_profiles() -> dict[str, StreamProfile]:
             bit_depth=16,
             can_play=_CAN_PLAY_OPUS,
             browser_listed=True,
+            approx_mb_per_hour=72,
         ),
         StreamProfile(
             tag="opus_128_48000",
@@ -232,6 +244,33 @@ def _build_profiles() -> dict[str, StreamProfile]:
             bit_depth=16,
             can_play=_CAN_PLAY_OPUS,
             browser_listed=True,
+            approx_mb_per_hour=58,
+        ),
+        StreamProfile(
+            tag="opus_96_48000",
+            sample_rate=48000,
+            bitrate_kbps=96,
+            extension="opus",
+            media_type="audio/ogg",
+            kind="opus",
+            label="Opus 96k 48kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_OPUS,
+            browser_listed=True,
+            approx_mb_per_hour=43,
+        ),
+        StreamProfile(
+            tag="opus_64_48000",
+            sample_rate=48000,
+            bitrate_kbps=64,
+            extension="opus",
+            media_type="audio/ogg",
+            kind="opus",
+            label="Opus 64k 48kHz",
+            bit_depth=16,
+            can_play=_CAN_PLAY_OPUS,
+            browser_listed=True,
+            approx_mb_per_hour=29,
         ),
     ]
     for rate in EXCLUSIVE_RATES_HZ:
@@ -275,6 +314,27 @@ def exclusive_formats_payload() -> dict:
             }
             for p in exclusive_flac_profiles()
         ]
+    }
+
+
+def browser_codecs_payload() -> dict:
+    """JSON body for GET /api/codecs (browser-listed profiles only)."""
+    return {
+        "codecs": [
+            {
+                "id": p.tag,
+                "label": p.label,
+                "kind": p.kind,
+                "media_type": p.media_type,
+                "can_play": p.can_play,
+                "bitrate_kbps": p.bitrate_kbps,
+                "bit_depth": p.bit_depth,
+                "sample_rate": p.sample_rate,
+                "approx_mb_per_hour": p.approx_mb_per_hour,
+            }
+            for p in browser_profiles()
+        ],
+        "default": DEFAULT_PROFILE_TAG,
     }
 
 

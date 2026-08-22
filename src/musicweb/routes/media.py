@@ -23,11 +23,11 @@ from musicweb.routes.deps import (
 )
 from musicweb.transcode import (
     DEFAULT_PROFILE_TAG,
-    browser_profiles,
     exclusive_formats_payload,
     get_profile,
     tech_from_track,
 )
+from musicweb.transcode.profiles import browser_codecs_payload
 from musicweb.transcode.enqueue import enqueue_prepare
 from musicweb.transcode.forget import resolve_forget
 from musicweb.transcode.null_tech_log import warn_null_track_tech
@@ -91,22 +91,7 @@ def _emit_stream_reject(
 @router.get("/codecs")
 async def codecs() -> dict:
     """Browser stream profiles only (exclusive FLAC tags are not listed)."""
-    return {
-        "codecs": [
-            {
-                "id": p.tag,
-                "label": p.label,
-                "kind": p.kind,
-                "media_type": p.media_type,
-                "can_play": p.can_play,
-                "bitrate_kbps": p.bitrate_kbps,
-                "bit_depth": p.bit_depth,
-                "sample_rate": p.sample_rate,
-            }
-            for p in browser_profiles()
-        ],
-        "default": DEFAULT_PROFILE_TAG,
-    }
+    return browser_codecs_payload()
 
 
 @router.get("/exclusive-formats")
