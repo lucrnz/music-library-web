@@ -481,3 +481,15 @@ Added `listen_events` plus a single-object ingest / rankings API, and a pure 70%
 ```bash
 git show f38df6b3cecaebb1a75cc40cb23a5008ef63c875
 ```
+
+## 2026-08-20-1wxkwgb3-drop-network-quality-prefs-done
+
+**Title:** Drop network-conditioned quality prefs
+
+**Commit:** `c4236650c0cb14611e81902ec829f9ccb3269e35`
+
+Collapsed streaming quality to one Settings picker and removed cellular/Wi-Fi download pause plus the Network Information module. Open the delete commit for `getActiveStreamCodec` becoming a thin persist read, the dropped `metered` auto-pause reason, and the docs that no longer mention cost hints.
+
+```bash
+git show c4236650c0cb14611e81902ec829f9ccb3269e35
+```
