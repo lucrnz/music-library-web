@@ -5,9 +5,15 @@ import { createApp } from "vue";
 import { router } from "@/router";
 import App from "@/components/App.vue";
 import { loadPlaylist } from "@/stores/playlist";
-import { applyExpanded, applyPlaybackPosition } from "@/stores/playerPrefs";
+import {
+  applyExpanded,
+  applyPlaybackPosition,
+  hydrateOutputVolume,
+  initOutputVolume,
+} from "@/stores/playerPrefs";
 import { updateMediaSession } from "@/stores/playerSession";
-import { applyVolume, initAudioListeners } from "@/stores/player";
+import { initAudioListeners } from "@/stores/player";
+import { initRadioListeners } from "@/stores/radio";
 import { loadCodecs } from "@/stores/settings";
 import { syncCompanionConnection } from "@/exclusive/companionClient";
 import { initExclusiveAudio } from "@/stores/exclusiveAudio";
@@ -22,10 +28,12 @@ import { initListens } from "@/listens/flush";
 initDiag();
 initListens();
 loadPlaylist();
-applyVolume();
+hydrateOutputVolume();
+initOutputVolume();
 applyExpanded();
 applyPlaybackPosition();
 initAudioListeners();
+initRadioListeners();
 // Connectivity store before codecs so the first probe report is mirrored.
 bindConnectivityStore();
 loadCodecs();

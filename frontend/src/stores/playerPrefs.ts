@@ -1,6 +1,8 @@
 /**
- * Volume / expanded / resume-position persistence. Sink apply stays in player.ts.
+ * Volume / expanded / resume-position persistence.
+ * One watch on player.volume; sinks subscribe (queue + radio).
  */
+import { watch } from "vue";
 import {
   readPlaybackPosition,
   resumeSeconds,
@@ -10,6 +12,9 @@ import { player } from "@/stores/playerState";
 
 const VOLUME_STORAGE_KEY = "musicweb.volume";
 const EXPANDED_STORAGE_KEY = "musicweb.nowPlayingExpanded.v1";
+
+const volumeSubscribers = new Set<(v: number) => void>();
+let volumeWatchBound = false;
 
 export function readVolume(): number | null {
   try {
@@ -31,11 +36,38 @@ export function writeVolume(v: number) {
   }
 }
 
-/** Face + storage. Sinks subscribe to player.volume (player.ts watch; radio already watches). */
+/** Face + storage. The only writer of player.volume and musicweb.volume. */
 export function setOutputVolume(v: number) {
   const n = Math.min(1, Math.max(0, Number(v)));
   player.volume = n;
   writeVolume(n);
+}
+
+/** Read musicweb.volume into the face. Does not notify sinks. */
+export function hydrateOutputVolume(): void {
+  const stored = readVolume();
+  if (stored != null) player.volume = stored;
+}
+
+/** Invoke fn now and on every later player.volume change. */
+export function subscribeOutputVolume(fn: (v: number) => void): () => void {
+  volumeSubscribers.add(fn);
+  fn(player.volume);
+  return () => {
+    volumeSubscribers.delete(fn);
+  };
+}
+
+/** One detached watch. Call from main.ts before createApp(). */
+export function initOutputVolume(): void {
+  if (volumeWatchBound) return;
+  volumeWatchBound = true;
+  watch(
+    () => player.volume,
+    (v) => {
+      for (const fn of volumeSubscribers) fn(v);
+    },
+  );
 }
 
 export function readExpanded(): boolean {

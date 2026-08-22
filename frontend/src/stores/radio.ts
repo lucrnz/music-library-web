@@ -28,7 +28,7 @@ import {
 } from "@/radio/runtime";
 import { connectivity } from "@/stores/connectivity";
 import type { PlayStatusState } from "@/playbackStatus";
-import { readVolume } from "@/stores/playerPrefs";
+import { subscribeOutputVolume } from "@/stores/playerPrefs";
 import { getActiveStreamCodec, settings } from "@/stores/settings";
 import { showToast } from "@/stores/ui";
 
@@ -99,10 +99,42 @@ export function cancelRadioRejoin(): void {
   rejoinClock.cancel();
 }
 let hydrateInFlight: Promise<void> | null = null;
-let connectivityBound = false;
 let visibilityBound = false;
-let volumeBound = false;
 let sessionBound = false;
+let radioListenersBound = false;
+
+export function initRadioListeners(): void {
+  if (radioListenersBound) return;
+  radioListenersBound = true;
+  subscribeOutputVolume((v) => audio.setVolume(v));
+  watch(
+    () => settings.streamCodec,
+    () => {
+      if (radioChromeActive()) void onStreamProfileChanged();
+    },
+  );
+  watch(
+    () => settings.playbackPolicy,
+    () => {
+      void onPlaybackPolicyChanged();
+    },
+  );
+  watch(
+    () => connectivity.state,
+    (state) => {
+      if (state === "online") {
+        if (radio.chrome === "tuning") kickRadioRejoin();
+        return;
+      }
+      if (radio.chrome === "tuning" || radio.chrome === "tuned") {
+        radio.chrome = "tuning";
+        audio.stop();
+        clearLoadedKeys();
+        bumpRadioGen();
+      }
+    },
+  );
+}
 
 export function radioChromeActive(): boolean {
   return radio.chrome === "stopped" || radio.chrome === "tuning" || radio.chrome === "tuned";
@@ -174,29 +206,6 @@ export function applySnapshot(raw: unknown, now = performance.now()): void {
   void onFaceOrTrack(prevId);
 }
 
-function bindVolumeWatch(): void {
-  if (volumeBound) return;
-  volumeBound = true;
-  watch(
-    () => player.volume,
-    (v) => {
-      audio.setVolume(v);
-    },
-  );
-  watch(
-    () => settings.streamCodec,
-    () => {
-      if (radioChromeActive()) void onStreamProfileChanged();
-    },
-  );
-  watch(
-    () => settings.playbackPolicy,
-    () => {
-      void onPlaybackPolicyChanged();
-    },
-  );
-}
-
 function bindSession(): void {
   if (sessionBound) return;
   sessionBound = true;
@@ -219,8 +228,6 @@ function leaveRadio(): void {
 
 export async function connect(): Promise<void> {
   bindSession();
-  bindVolumeWatch();
-  bindConnectivity();
   bindVisibility();
   if (!hydrateInFlight) {
     hydrateInFlight = (async () => {
@@ -265,7 +272,7 @@ export async function tuneIn(): Promise<void> {
   discardListen();
   radio.chrome = "tuning";
   clearLoadedKeys();
-  audio.setVolume(readVolume() ?? 1);
+  audio.setVolume(player.volume);
   const ok = await sendTuneIn();
   if (!ok) {
     scheduleRadioRejoin();
@@ -316,26 +323,6 @@ export async function onPlaybackPolicyChanged(): Promise<void> {
   bumpRadioGen();
   clearLoadedKeys();
   await onFaceOrTrack(null);
-}
-
-function bindConnectivity(): void {
-  if (connectivityBound) return;
-  connectivityBound = true;
-  watch(
-    () => connectivity.state,
-    (state) => {
-      if (state === "online") {
-        if (radio.chrome === "tuning") kickRadioRejoin();
-        return;
-      }
-      if (radio.chrome === "tuning" || radio.chrome === "tuned") {
-        radio.chrome = "tuning";
-        audio.stop();
-        clearLoadedKeys();
-        bumpRadioGen();
-      }
-    },
-  );
 }
 
 function bindVisibility(): void {

@@ -37,7 +37,7 @@ import {
   replaceQueue,
   type QueueEntry,
 } from "@/stores/playlist";
-import { readVolume, setOutputVolume } from "@/stores/playerPrefs";
+import { setOutputVolume, subscribeOutputVolume } from "@/stores/playerPrefs";
 import {
   invalidateCoverCache,
   updateMediaSession,
@@ -408,12 +408,6 @@ export function setVolume(v: number) {
   setOutputVolume(v);
 }
 
-export function applyVolume() {
-  const stored = readVolume();
-  if (stored != null) player.volume = stored;
-  getActiveSink().setVolume(player.volume);
-}
-
 export function initAudioListeners() {
   watch(
     () => settings.streamCodec,
@@ -429,16 +423,10 @@ export function initAudioListeners() {
       prepareTracks(pl.tracks, { replace: true });
     },
   );
-  watch(
-    () => player.volume,
-    (v) => {
-      getActiveSink().setVolume(v);
-    },
-  );
   wireSinkHandlers();
   // Ensure html sink element is in the document for first non-exclusive play.
   selectSink("htmlAudio");
-  getActiveSink().setVolume(player.volume);
+  subscribeOutputVolume((v) => getActiveSink().setVolume(v));
   onLeaveQueue(() => {
     invalidateLoads();
     teardownOnDemandMedia();

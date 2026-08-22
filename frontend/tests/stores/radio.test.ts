@@ -60,6 +60,7 @@ import {
   radioPlayState,
   radioSubtitle,
   resetRadioStore,
+  initRadioListeners,
   setTabOpen,
   tuneIn,
   tuneOut,
@@ -69,6 +70,7 @@ import { sendTuneIn } from "@/radio/runtime";
 import { connectivity } from "@/stores/connectivity";
 import { getActiveStreamCodec } from "@/stores/settings";
 import { showToast } from "@/stores/ui";
+import { initOutputVolume, setOutputVolume } from "@/stores/playerPrefs";
 import { nextTick } from "vue";
 
 const currentPayload = {
@@ -87,6 +89,8 @@ describe("radio store", () => {
   beforeEach(() => {
     resetRadioStore();
     connectivity.state = "online";
+    initOutputVolume();
+    initRadioListeners();
     vi.mocked(fetchRadioNow).mockReset();
     vi.mocked(streamUrl).mockClear();
     vi.mocked(startCycle).mockClear();
@@ -95,6 +99,28 @@ describe("radio store", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("setOutputVolume applies to radio audio without connect", async () => {
+    if (!radioAudio.el) return;
+    setOutputVolume(0.35);
+    await nextTick();
+    expect(radioAudio.el.volume).toBe(0.35);
+    setOutputVolume(0.1);
+    await nextTick();
+    expect(radioAudio.el.volume).toBe(0.1);
+  });
+
+  it("initRadioListeners twice still applies setOutputVolume once per write", async () => {
+    if (!radioAudio.el) return;
+    expect(() => initRadioListeners()).not.toThrow();
+    expect(() => initRadioListeners()).not.toThrow();
+    setOutputVolume(0.25);
+    await nextTick();
+    expect(radioAudio.el.volume).toBe(0.25);
+    setOutputVolume(0.6);
+    await nextTick();
+    expect(radioAudio.el.volume).toBe(0.6);
   });
 
   it("does not call fromApiTrack without an id", () => {
@@ -300,8 +326,6 @@ describe("radio store", () => {
   });
 
   it("connectivity loss while tuned stays tuning", async () => {
-    vi.mocked(fetchRadioNow).mockResolvedValue(currentPayload);
-    await connect();
     radio.chrome = "tuned";
     connectivity.state = "offline";
     await nextTick();
