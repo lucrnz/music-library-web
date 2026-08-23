@@ -5,7 +5,6 @@ import { buildAlbumMenuItems } from "@/components/library/albumMenuItems";
 import { buildArtistMenuItems } from "@/components/library/artistMenuItems";
 import type { BrowseSource } from "@/components/library/browseSource";
 import { type OpenMenu } from "@/components/library/entityMenu";
-import { buildFolderMenuItems } from "@/components/library/folderMenuItems";
 import { queueOnly } from "@/components/library/rows";
 import { buildTrackMenuItems } from "@/components/library/trackMenuItems";
 import type { ActionItem } from "@/components/menu/actionItem";
@@ -43,22 +42,6 @@ export function entityActionsFor(
           artist: target.track.artist,
           album: target.track.album,
           addToPlaylist: () => queueOnly(target.track),
-        });
-      case "file": {
-        const t = target.file.track;
-        return buildTrackMenuItems({
-          title: t?.title || target.file.displayName || target.file.name,
-          artist: t?.artist,
-          album: t?.album,
-          addToPlaylist: () =>
-            queueOnly(t || target.file.id || target.file.path),
-        });
-      }
-      case "folder":
-        return buildFolderMenuItems({
-          dir: target.dir,
-          addAll: () => source.folderAddAll?.(target.dir.path || ""),
-          playAll: () => source.folderPlayAll?.(target.dir.path || ""),
         });
     }
   };

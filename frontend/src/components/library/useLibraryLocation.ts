@@ -32,11 +32,6 @@ export function useLibraryLocation() {
     effectiveLibraryMode(route.meta, ui.lastLibrary.meta?.mode),
   );
   const isSearch = computed(() => mode.value === "search");
-  const folderPath = computed(() => {
-    const q = libLoc.value.query || {};
-    const path = (q as { path?: unknown }).path;
-    return mode.value === "folders" && path ? String(path) : "";
-  });
   const routeName = computed(() => libLoc.value.name);
   const artistId = computed(() => firstParam(libLoc.value.params, "artistId"));
   const albumId = computed(() => firstParam(libLoc.value.params, "albumId"));
@@ -46,7 +41,6 @@ export function useLibraryLocation() {
     libLoc,
     mode,
     isSearch,
-    folderPath,
     routeName,
     artistId,
     albumId,

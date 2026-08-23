@@ -54,10 +54,6 @@ function paramOf(route: RouteLike, key: string): string {
   return firstValue(route.params?.[key]);
 }
 
-function queryOf(route: RouteLike, key: string): string {
-  return firstValue(route.query?.[key]);
-}
-
 function stringRecord(src: Record<string, unknown> | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(src || {})) {
@@ -68,7 +64,7 @@ function stringRecord(src: Record<string, unknown> | undefined): Record<string, 
 
 export function snapRoute(route: RouteLike): RouteSnap {
   return {
-    name: String(route.name || "folders"),
+    name: String(route.name || "artists"),
     params: stringRecord(route.params as Record<string, unknown> | undefined),
     query: stringRecord(route.query as Record<string, unknown> | undefined),
     meta: { ...(route.meta || {}) },
@@ -76,7 +72,7 @@ export function snapRoute(route: RouteLike): RouteSnap {
 }
 
 export function libraryMode(route: RouteLike): string {
-  return String(route.meta?.mode || "folders");
+  return String(route.meta?.mode || "artists");
 }
 
 export function modeRootLocation(mode: string): RouteReplaceTo {
@@ -88,46 +84,25 @@ export function modeRootLocation(mode: string): RouteReplaceTo {
     case "downloads":
       return { name: "downloads", params: {}, query: {} };
     default:
-      return { name: "folders", params: {}, query: {} };
+      return { name: "artists", params: {}, query: {} };
   }
 }
 
 export function isTreeModeRoot(route: RouteLike): boolean {
   const name = String(route.name || "");
-  if (name === "folders") {
-    return !queryOf(route, "path");
-  }
   return name === "artists" || name === "albums" || name === "downloads";
 }
 
 export function isTreeCapable(route: RouteLike): boolean {
   if (route.meta?.pane !== "library") return false;
   const mode = libraryMode(route);
-  return (
-    mode === "folders" ||
-    mode === "artists" ||
-    mode === "albums" ||
-    mode === "downloads"
-  );
+  return mode === "artists" || mode === "albums" || mode === "downloads";
 }
 
 /** Expand keys for auto-focus after coerce to mode root. */
 export function focusPathFromRoute(route: RouteLike): string[] {
   const name = String(route.name || "");
   const mode = libraryMode(route);
-
-  if (mode === "folders") {
-    const path = queryOf(route, "path");
-    if (!path) return [];
-    const parts = path.split("/").filter(Boolean);
-    const keys: string[] = [];
-    let acc = "";
-    for (const p of parts) {
-      acc = acc ? `${acc}/${p}` : p;
-      keys.push(`dir:${acc}`);
-    }
-    return keys;
-  }
 
   const artistId = paramOf(route, "artistId");
   const albumId = paramOf(route, "albumId");

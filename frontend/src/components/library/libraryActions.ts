@@ -2,29 +2,17 @@
  * Library queue / download actions (not view wiring).
  */
 
-import {
-  collectTracks,
-  fetchAlbumTracks,
-  fetchArtistAlbums,
-} from "@/api";
+import { fetchAlbumTracks, fetchArtistAlbums } from "@/api";
 import { isLocallyPlayableDownload } from "@/downloads/catalog";
 import { downloadTracks } from "@/downloads/ui";
 import { downloads } from "@/downloads/state";
 import { addToQueue } from "@/stores/playlist";
-import { clearLibSelection, showToast, ui } from "@/stores/ui";
+import { showToast } from "@/stores/ui";
 import type { Track } from "@/models/track";
 
 async function playCollected(entries: Track[]) {
   const { playAllTracks } = await import("@/stores/player");
   await playAllTracks(entries);
-}
-
-export async function addAllForFolder(path: string): Promise<void> {
-  await addToQueue(await collectTracks(path || ""));
-}
-
-export async function playAllForFolder(path: string): Promise<void> {
-  await playCollected(await collectTracks(path || ""));
 }
 
 export async function collectArtistDownloadTracks(
@@ -84,23 +72,4 @@ export async function downloadAlbumById(albumId: string): Promise<void> {
     console.error(err);
     showToast(err instanceof Error ? err.message : "Download failed");
   }
-}
-
-/** Collect + queue tracks for currently multi-selected folder paths. */
-export async function addSelected(): Promise<void> {
-  if (!ui.libSelected.size) return;
-  const tracksOut = (
-    await Promise.all(
-      [...ui.libSelected].map(async ([p]) => {
-        try {
-          return await collectTracks(p);
-        } catch (err: unknown) {
-          console.error(err);
-          return [];
-        }
-      }),
-    )
-  ).flat();
-  clearLibSelection();
-  await addToQueue(tracksOut);
 }

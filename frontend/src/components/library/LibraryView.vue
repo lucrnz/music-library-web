@@ -12,7 +12,6 @@ import { entityActionsFor } from "@/components/library/entityActions";
 import type { EntityActions } from "@/components/library/EntityListHost.vue";
 import ActionMenu from "@/components/menu/ActionMenu.vue";
 import { useEntityMenu } from "@/components/library/useEntityMenu";
-import type { BrowseDir } from "@/api";
 import type { Artist } from "@/models/artist";
 import {
   connectivityBanner,
@@ -24,11 +23,7 @@ import {
   noteServerReachable,
   noteServerUnreachable,
 } from "@/stores/connectivity";
-import {
-  clearLibSelection,
-  toggleLibSelection,
-  ui,
-} from "@/stores/ui";
+import { ui } from "@/stores/ui";
 import Icon from "@/components/icons/Icon.vue";
 import LibraryTreePane from "@/components/tree/LibraryTreePane.vue";
 import {
@@ -40,7 +35,6 @@ import {
 import EntityListHost from "@/components/library/EntityListHost.vue";
 import LibraryChrome from "@/components/library/LibraryChrome.vue";
 import StatsView from "@/components/stats/StatsView.vue";
-import { addSelected as addSelectedAction } from "@/components/library/libraryActions";
 import {
   type LibraryAlbum,
   type LibraryBody,
@@ -50,7 +44,6 @@ import { useBrowseLayout } from "@/components/library/useBrowseLayout";
 import { useLibraryLocation } from "@/components/library/useLibraryLocation";
 import { downloadsBrowse } from "@/components/library/sources/downloadsBrowse";
 import { onlineBrowse } from "@/components/library/sources/onlineBrowse";
-import type { FileRowModel } from "@/components/library/loaders";
 import type { Track } from "@/models/track";
 
 const INITIAL_BODY: LibraryBody = { kind: "empty", message: "" };
@@ -60,7 +53,6 @@ const {
   libLoc,
   mode,
   isSearch,
-  folderPath,
   routeName,
   artistId,
   albumId,
@@ -71,7 +63,7 @@ const source = computed(() =>
 );
 const loading = ref(false);
 const error = ref("");
-const title = ref("Folders");
+const title = ref("Artists");
 const showBack = ref(false);
 const backArtistId = ref<string | null>(null);
 const body = ref<LibraryBody>(INITIAL_BODY);
@@ -89,7 +81,6 @@ const showTree = computed(() =>
   }),
 );
 
-const selectedCount = computed(() => ui.libSelected.size);
 const trackCount = computed(() =>
   body.value.kind === "tracks" ? body.value.tracks.length : 0,
 );
@@ -100,13 +91,11 @@ const chromeInput = computed(() => ({
   artistId: artistId.value,
   albumId: albumId.value,
   trackCount: trackCount.value,
-  selectedCount: selectedCount.value,
   layout: ui.libraryLayout,
   downloadsEnabled: downloads.enabled,
 }));
 const sourceChrome = computed(() => source.value.chrome(chromeInput.value));
 const showAddAll = computed(() => sourceChrome.value.showAddAll);
-const showAddSelected = computed(() => sourceChrome.value.showAddSelected);
 const showDownloadAlbum = computed(() => sourceChrome.value.showDownloadAlbum);
 
 const showLayoutToggle = computed(() =>
@@ -128,7 +117,6 @@ const gridHost = computed(() =>
   browseGridHost({
     isGrid: isGrid.value,
     bodyKind: body.value.kind,
-    pane: source.value.flags.showFolderSelection ? "library" : "downloads",
   }),
 );
 
@@ -171,7 +159,6 @@ async function load() {
   }
 
   const seq = ++renderSeq;
-  if (source.value.flags.clearsSelectionOnLoad) clearLibSelection();
   error.value = "";
   loading.value = true;
 
@@ -179,7 +166,6 @@ async function load() {
     const page = await source.value.load({
       mode: mode.value,
       routeName: routeName.value,
-      folderPath: folderPath.value,
       artistId: artistId.value,
       albumId: albumId.value,
       searchQuery:
@@ -255,13 +241,8 @@ function goBack() {
   source.value.goBack(router, {
     mode: mode.value,
     routeName: routeName.value,
-    folderPath: folderPath.value,
     backArtistId: backArtistId.value,
   });
-}
-
-function openFolder(dir: BrowseDir) {
-  source.value.openFolder?.(router, dir);
 }
 
 function openArtist(artist: { id: string }) {
@@ -272,25 +253,12 @@ function openAlbum(album: { id: string }) {
   source.value.openAlbum(router, album);
 }
 
-function isSelected(path: string) {
-  return ui.libSelected.has(path);
-}
-
-function onFolderSelect(dir: { path: string }) {
-  toggleLibSelection(dir.path, "dir");
-}
-
-function onFileSelect(file: FileRowModel) {
-  toggleLibSelection(file.path, "file");
-}
-
 async function addAll() {
   const tracks = body.value.kind === "tracks" ? body.value.tracks : [];
   await source.value.addAll({
     loc: {
       mode: mode.value,
       routeName: routeName.value,
-      folderPath: folderPath.value,
       artistId: artistId.value,
       albumId: albumId.value,
       searchQuery: searchQuery.value,
@@ -299,10 +267,6 @@ async function addAll() {
     showTree: showTree.value,
     tracks,
   });
-}
-
-async function addSelected() {
-  await addSelectedAction();
 }
 
 async function downloadAlbum() {
@@ -391,22 +355,6 @@ const entityActions = computed((): EntityActions => ({
     onRowContextMenu: (track, e) =>
       onEntityContext({ kind: "track", track }, e),
   },
-  ...(source.value.flags.showFolderSelection
-    ? {
-        folder: {
-          onMenuClick: (dir: BrowseDir, e: MouseEvent) =>
-            onEntityMenuClick({ kind: "folder", dir }, e),
-          onRowContextMenu: (dir: BrowseDir, e: MouseEvent) =>
-            onEntityContext({ kind: "folder", dir }, e),
-        },
-        file: {
-          onMenuClick: (file: FileRowModel, e: MouseEvent) =>
-            onEntityMenuClick({ kind: "file", file }, e),
-          onRowContextMenu: (file: FileRowModel, e: MouseEvent) =>
-            onEntityContext({ kind: "file", file }, e),
-        },
-      }
-    : {}),
 }));
 
 const headerMenuTarget = computed((): OpenMenu | null => {
@@ -450,12 +398,6 @@ watch(
           @click="onHeaderMenuClick"
         ><Icon name="more-vert" /></button>
         <button
-          v-if="showAddSelected"
-          type="button"
-          class="pill"
-          @click="addSelected"
-        >Add selected</button>
-        <button
           v-if="showAddAll"
           type="button"
           class="pill"
@@ -495,16 +437,12 @@ watch(
         :is-grid="isGrid"
         :grid-host="gridHost"
         :show-track-download="source.flags.showTrackDownload"
-        :is-selected="source.flags.showFolderSelection ? isSelected : null"
         :artist-cover="artistCover"
         :album-cover="source.flags.useLocalAlbumCover ? albumCover : null"
         :track-cover="source.flags.useLocalTrackCover ? trackCover : null"
         :entity-actions="entityActions"
         @open-artist="openArtist"
         @open-album="openAlbum"
-        @open-folder="openFolder"
-        @select-folder="onFolderSelect"
-        @select-file="onFileSelect"
       />
       <template #overlay>
         <ActionMenu

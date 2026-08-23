@@ -6,7 +6,7 @@ export function effectiveLibraryMode(
   lastLibraryMode: unknown,
 ): string {
   if (routeMeta.pane === "queue") {
-    return String(lastLibraryMode || "folders");
+    return String(lastLibraryMode || "artists");
   }
-  return String(routeMeta.mode || "folders");
+  return String(routeMeta.mode || "artists");
 }

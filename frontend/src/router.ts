@@ -4,20 +4,13 @@ import { createRouter, createWebHistory } from "vue-router";
 /**
  * Library routes share the App shell; components read $route via useRoute().
  * No router-view — a stub component satisfies vue-router's API.
- * Folder path lives in query (?path=) to avoid encoding issues with FS paths.
  * Must be defineComponent, not `() => null`: vue-router treats a bare function
  * as an async component factory and calls `.then` on the result.
  */
 const Shell = defineComponent({ name: "RouteShell", setup: () => () => null });
 
 const routes = [
-  { path: "/", redirect: "/folders" },
-  {
-    path: "/folders",
-    name: "folders",
-    component: Shell,
-    meta: { mode: "folders", pane: "library", title: "Folders" },
-  },
+  { path: "/", redirect: "/artists" },
   {
     path: "/artists",
     name: "artists",

@@ -188,7 +188,7 @@ function onRowClick(vn: VisibleNode, e: MouseEvent) {
   if (target.closest(".tree-actions") || target.closest(".tree-retry")) {
     return;
   }
-  // Leaf rows host interactive TrackRow/FileRow — they handle click/play.
+  // Leaf rows host interactive TrackRow — they handle click/play.
   if (vn.isLeaf) return;
   toggle(vn.node);
 }

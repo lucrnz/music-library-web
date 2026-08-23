@@ -4,7 +4,6 @@
 import { reactive } from "vue";
 
 export type LibraryLayout = "list" | "grid" | "tree";
-export type LibSelectionKind = "dir" | "file";
 
 export interface LibraryRouteSnapshot {
   name: string;
@@ -19,7 +18,6 @@ export interface UiToast {
 }
 
 export interface UiState {
-  libSelected: Map<string, LibSelectionKind>;
   libraryLayout: LibraryLayout;
   lastLibrary: LibraryRouteSnapshot;
   toast: UiToast | null;
@@ -50,10 +48,8 @@ function saveLibraryLayout(mode: LibraryLayout) {
 }
 
 export const ui = reactive<UiState>({
-  /** Folder multi-select: path -> 'dir'|'file' */
-  libSelected: new Map<string, LibSelectionKind>(),
   /**
-   * Global library browse layout (Folders / Artists / Albums / Downloads).
+   * Global library browse layout (Artists / Albums / Downloads).
    * Search, queue, and track lists ignore this and stay list.
    */
   libraryLayout: loadLibraryLayout(),
@@ -62,10 +58,10 @@ export const ui = reactive<UiState>({
    * content intact (and mobile tab can restore drill-down).
    */
   lastLibrary: {
-    name: "folders",
+    name: "artists",
     params: {},
     query: {},
-    meta: { mode: "folders", pane: "library", title: "Folders" },
+    meta: { mode: "artists", pane: "library", title: "Artists" },
   },
   /** Short-lived global toast (connectivity transitions, etc.). */
   toast: null,
@@ -90,17 +86,6 @@ export function showToast(message: string, durationMs = TOAST_DEFAULT_MS) {
   }, Math.max(0, durationMs));
 }
 
-export function clearLibSelection() {
-  ui.libSelected = new Map<string, LibSelectionKind>();
-}
-
-export function toggleLibSelection(path: string, kind: LibSelectionKind) {
-  const next = new Map(ui.libSelected);
-  if (next.has(path)) next.delete(path);
-  else next.set(path, kind);
-  ui.libSelected = next;
-}
-
 export function setLibraryLayout(mode: LibraryLayout) {
   if (mode !== "list" && mode !== "grid" && mode !== "tree") return;
   ui.libraryLayout = mode;
@@ -115,7 +100,7 @@ export function rememberLibraryRoute(route: {
 }) {
   if (route.meta?.pane !== "library") return;
   ui.lastLibrary = {
-    name: String(route.name || "folders"),
+    name: String(route.name || "artists"),
     params: { ...route.params },
     query: { ...route.query },
     meta: { ...route.meta },

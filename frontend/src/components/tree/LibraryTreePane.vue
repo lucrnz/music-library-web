@@ -16,17 +16,12 @@ import ActionMenu from "@/components/menu/ActionMenu.vue";
 import { isDesktopContextMenu } from "@/components/menu/rowActionMenu";
 import { downloads } from "@/downloads/state";
 import type { Artist } from "@/models/artist";
-import {
-  clearLibSelection,
-  toggleLibSelection,
-  ui,
-} from "@/stores/ui";
+import { ui } from "@/stores/ui";
 import Icon from "@/components/icons/Icon.vue";
-import FileRow from "@/components/library/rows/FileRow.vue";
 import TrackRow from "@/components/library/rows/TrackRow.vue";
 
 import { playOrQueueTrack } from "@/components/library/rows";
-import { treeNodePath, type TreeNode } from "@/components/tree/treeNode";
+import type { TreeNode } from "@/components/tree/treeNode";
 import TreeView from "@/components/tree/TreeView.vue";
 import type { TreeViewExpose } from "@/components/tree/TreeView.vue";
 import {
@@ -35,7 +30,6 @@ import {
   treeNavState,
 } from "@/components/tree/treeNavigation";
 import { getTreeSession, primePackedTree } from "@/components/tree/treeSession";
-import type { FileRowModel } from "@/components/library/loaders";
 
 const props = defineProps<{
   mode: string;
@@ -52,7 +46,6 @@ const includeArtistPhoto = computed(
       mode: props.mode,
       isSearch: false,
       trackCount: 0,
-      selectedCount: 0,
       layout: ui.libraryLayout,
       downloadsEnabled: downloads.enabled,
     }).includeArtistPhoto,
@@ -91,18 +84,9 @@ function targetFromNode(node: TreeNode): OpenMenu | null {
       if (!album.id) return null;
       return { kind: "album", album };
     }
-    case "dir":
-      return {
-        kind: "folder",
-        dir: { name: node.title, path: treeNodePath(node) },
-      };
     case "track": {
       const track = node.data;
       return track.id ? { kind: "track", track } : null;
-    }
-    case "file": {
-      const file = fileFromNode(node);
-      return file ? { kind: "file", file } : null;
     }
     default:
       return null;
@@ -211,12 +195,10 @@ async function loadRoots() {
   const seq = ++loadSeq;
   loading.value = true;
   error.value = "";
-  clearLibSelection();
   try {
     const packed = await source.value.loadRoots({
       mode: props.mode,
       routeName: route.name,
-      folderPath: "",
       searchQuery: "",
       downloadsEnabled: downloads.enabled,
     });
@@ -236,10 +218,6 @@ async function loadRoots() {
   }
 }
 
-function fileFromNode(node: TreeNode): FileRowModel | null {
-  return node.kind === "file" ? node.data : null;
-}
-
 function trackFromNode(node: TreeNode) {
   return node.kind === "track" ? node.data : null;
 }
@@ -247,34 +225,11 @@ function trackFromNode(node: TreeNode) {
 async function onActivateLeaf(node: TreeNode) {
   if (node.kind === "track") {
     await playOrQueueTrack(node.data);
-    return;
-  }
-  if (node.kind === "file") {
-    const file = node.data;
-    const t = file.track || file.id;
-    if (t) await playOrQueueTrack(t);
   }
 }
 
 function showGroupMenu(node: TreeNode) {
-  return (
-    node.kind === "artist" ||
-    node.kind === "album" ||
-    node.kind === "dir"
-  );
-}
-
-function isSelected(path: string) {
-  return ui.libSelected.has(path);
-}
-
-function onSelectFile(file: FileRowModel) {
-  toggleLibSelection(file.path, "file");
-}
-
-function onSelectDir(node: TreeNode, e?: MouseEvent) {
-  e?.stopPropagation?.();
-  toggleLibSelection(treeNodePath(node), "dir");
+  return node.kind === "artist" || node.kind === "album";
 }
 
 watch(
@@ -317,15 +272,6 @@ onMounted(loadRoots);
     >
       <template #group-actions="{ node }">
         <button
-          v-if="node.kind === 'dir'"
-          type="button"
-          class="icon-btn"
-          title="Select"
-          aria-label="Select folder"
-          :class="{ active: isSelected(treeNodePath(node)) }"
-          @click="onSelectDir(node, $event)"
-        ><Icon name="check" /></button>
-        <button
           v-if="showGroupMenu(node)"
           type="button"
           class="icon-btn row-menu"
@@ -342,14 +288,6 @@ onMounted(loadRoots);
           :title-mode="showTrackDownload ? undefined : 'title'"
           :show-menu="true"
           @menu-click="(t, e) => onLeafMenuClick({ kind: 'track', track: t }, e)"
-        />
-        <FileRow
-          v-else-if="node.kind === 'file'"
-          :file="fileFromNode(node)"
-          :selected="isSelected(treeNodePath(node))"
-          :show-menu="true"
-          @select="onSelectFile"
-          @menu-click="(f, e) => onLeafMenuClick({ kind: 'file', file: f }, e)"
         />
       </template>
     </TreeView>

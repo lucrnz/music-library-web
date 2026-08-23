@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildAlbumMenuItems } from "@/components/library/albumMenuItems";
-import { buildFolderMenuItems } from "@/components/library/folderMenuItems";
 import { buildTrackMenuItems } from "@/components/library/trackMenuItems";
 import { buildNowPlayingMenuItems } from "@/components/player/nowPlayingMenuItems";
 import type { LibraryAlbum } from "@/components/library/loaders";
@@ -99,23 +98,6 @@ describe("buildTrackMenuItems", () => {
         addToPlaylist: () => {},
       }).map((i) => i.id),
     ).toEqual(["add-to-playlist", "copy-title"]);
-  });
-});
-
-describe("buildFolderMenuItems", () => {
-  it("copies name and path", () => {
-    const items = buildFolderMenuItems({
-      dir: { name: "Jazz", path: "/music/Jazz" },
-      addAll: () => {},
-      playAll: () => {},
-    });
-    expect(items.map((i) => i.id)).toEqual([
-      "add-all",
-      "play-all",
-      "copy-folder-name",
-      "copy-folder-path",
-    ]);
-    expectCopyIcons(items);
   });
 });
 

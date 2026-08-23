@@ -6,7 +6,6 @@ import type { TreeNode } from "@/components/tree/treeNode";
 const loc = {
   mode: "downloads",
   routeName: "downloads",
-  folderPath: "",
   searchQuery: "",
   downloadsEnabled: false,
 };

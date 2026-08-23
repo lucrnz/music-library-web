@@ -3,17 +3,14 @@
  */
 import type { Router } from "vue-router";
 import { coverSrc } from "@/artistArt/state";
-import type { BrowseDir } from "@/api";
 import { runArtistDownloadAll } from "@/components/library/artistMenuItems";
 import type { BrowseSource } from "@/components/library/browseSource";
 import {
   addAllForAlbum,
   addAllForArtist,
-  addAllForFolder,
   downloadAlbumById,
   playAllForAlbum,
   playAllForArtist,
-  playAllForFolder,
 } from "@/components/library/libraryActions";
 import {
   loadLibraryPage,
@@ -26,39 +23,15 @@ import {
   loadArtistChildren,
 } from "@/components/tree/sources/artistsSource";
 import type { TreeNode } from "@/components/tree/treeNode";
-import {
-  listFolderRoots,
-  loadFolderNodeChildren,
-} from "@/components/tree/sources/foldersSource";
-
-export interface OnlineBrowseLoc {
-  mode: string;
-  routeName: string | symbol | null | undefined;
-  folderPath: string;
-  artistId?: string;
-  albumId?: string;
-  searchQuery: string;
-}
 
 function goBack(
   router: Router,
   loc: {
     mode: string;
     routeName: string | symbol | null | undefined;
-    folderPath: string;
     backArtistId: string | null;
   },
 ) {
-  if (loc.mode === "folders" && loc.folderPath) {
-    const parts = loc.folderPath.split("/").filter(Boolean);
-    parts.pop();
-    const parent = parts.join("/");
-    void router.push({
-      name: "folders",
-      query: parent ? { path: parent } : {},
-    });
-    return;
-  }
   if (loc.routeName === "album") {
     if (loc.backArtistId) {
       void router.push({ name: "artist", params: { artistId: loc.backArtistId } });
@@ -80,12 +53,10 @@ export const onlineBrowse: BrowseSource = {
   flags: {
     ariaLabel: "Library",
     showTrackDownload: true,
-    showFolderSelection: true,
     showListLoading: false,
     useLocalAlbumCover: false,
     useLocalTrackCover: false,
     reportsConnectivity: true,
-    clearsSelectionOnLoad: true,
   },
 
   load(loc): Promise<LibraryPage> {
@@ -99,16 +70,12 @@ export const onlineBrowse: BrowseSource = {
     if (loc.mode === "albums") {
       return { roots: await listAlbumRoots(), artUrls: {} };
     }
-    if (loc.mode === "folders") {
-      return { roots: await listFolderRoots(), artUrls: {} };
-    }
     return { roots: [], artUrls: {} };
   },
 
   loadChildren(node: TreeNode) {
     if (node.kind === "artist") return loadArtistChildren(node);
     if (node.kind === "album") return loadAlbumChildren(node);
-    if (node.kind === "dir") return loadFolderNodeChildren(node);
     return Promise.resolve([] as TreeNode[]);
   },
 
@@ -122,10 +89,6 @@ export const onlineBrowse: BrowseSource = {
     void router.push({ name: "album", params: { albumId: album.id } });
   },
 
-  openFolder(router, dir: BrowseDir) {
-    void router.push({ name: "folders", query: { path: dir.path } });
-  },
-
   cover(target) {
     if (target.kind === "artist") return coverSrc(target.artist);
     if (target.kind === "album" || target.kind === "track") return "";
@@ -137,19 +100,8 @@ export const onlineBrowse: BrowseSource = {
   },
 
   chrome(opts) {
-    const showAddAll = opts.showTree
-      ? opts.mode === "folders"
-      : opts.mode === "search" && !opts.artistId && !opts.albumId
-        ? false
-        : opts.mode === "folders"
-          ? true
-          : Boolean(opts.artistId || opts.albumId);
     return {
-      showAddAll,
-      showAddSelected:
-        opts.mode === "folders" &&
-        opts.selectedCount > 0 &&
-        (opts.showTree || opts.layout !== "tree"),
+      showAddAll: !opts.showTree && Boolean(opts.artistId || opts.albumId),
       showDownloadAlbum:
         !opts.showTree &&
         opts.downloadsEnabled &&
@@ -159,16 +111,8 @@ export const onlineBrowse: BrowseSource = {
     };
   },
 
-  async addAll({ loc, showTree }) {
+  async addAll({ loc }) {
     try {
-      if (showTree && loc.mode === "folders") {
-        await addAllForFolder("");
-        return;
-      }
-      if (loc.mode === "folders") {
-        await addAllForFolder(loc.folderPath);
-        return;
-      }
       if (loc.routeName === "album" && loc.albumId) {
         await addAllForAlbum(loc.albumId);
         return;
@@ -182,9 +126,8 @@ export const onlineBrowse: BrowseSource = {
   },
 
   treeTitle(mode) {
-    if (mode === "artists") return "Artists";
     if (mode === "albums") return "Albums";
-    return "Folders";
+    return "Artists";
   },
 
   emptyTreeMessage() {
@@ -221,14 +164,6 @@ export const onlineBrowse: BrowseSource = {
 
   albumDownload(album) {
     return downloadAlbumById(album.id);
-  },
-
-  folderAddAll(path) {
-    return addAllForFolder(path);
-  },
-
-  folderPlayAll(path) {
-    return playAllForFolder(path);
   },
 };
 

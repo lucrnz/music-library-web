@@ -11,30 +11,6 @@ import { fromApiArtist, mapArtists, type Artist } from "@/models/artist";
 import { fromApiLyrics, type Lyrics } from "@/models/lyrics";
 import { fromApiTrack, mapTracks, type Track } from "@/models/track";
 
-/** Today's GET /api/browse directory row. */
-export interface BrowseDir {
-  name: string;
-  path: string;
-}
-
-/** Today's GET /api/browse file row (id is joined after the walk). */
-export interface BrowseFile {
-  name: string;
-  path: string;
-  id?: string | null;
-}
-
-export interface BrowseResponse {
-  path: string;
-  dirs: BrowseDir[];
-  files: BrowseFile[];
-}
-
-export interface CollectResponse {
-  path: string;
-  files: Array<{ path: string; id?: string | null }>;
-}
-
 export interface ItemsResponse<T> {
   items?: T[];
   results?: T[];
@@ -251,17 +227,6 @@ export async function fetchSearch(q: string, limit = 50): Promise<SearchResult> 
     albums: mapAlbums(data.albums || []),
     tracks: mapTracks(data.tracks || []),
   };
-}
-
-/**
- * Collect file ids under path, then resolve full Track[] via meta.
- */
-export async function collectTracks(path: string): Promise<Track[]> {
-  const data = await apiGet<CollectResponse>(
-    `/api/collect?path=${encodeURIComponent(path || "")}`,
-  );
-  const ids = (data.files || []).map((f) => f.id).filter((id): id is string => !!id);
-  return fetchTracksMeta(ids);
 }
 
 /** GET /api/artists/{id}/albums → album list (not tracks). */

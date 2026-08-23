@@ -6,9 +6,9 @@ function node(key: string, extra: { isLeaf?: boolean } = {}): TreeNode {
   return {
     key,
     isLeaf: extra.isLeaf ?? true,
-    kind: "dir",
-    path: key,
+    kind: "album",
     title: key,
+    data: { id: key, title: key, artist: "" },
   };
 }
 

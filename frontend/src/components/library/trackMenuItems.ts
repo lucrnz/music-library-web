@@ -1,5 +1,5 @@
 /**
- * Track and folder-file action items.
+ * Track action items.
  */
 import { copyAction } from "@/components/menu/copyItems";
 import type { ActionItem } from "@/components/menu/actionItem";

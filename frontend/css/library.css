@@ -124,7 +124,7 @@
   padding: 4px 8px 16px;
 }
 
-/* Shared media cards (albums, artists, folders, files) */
+/* Shared media cards (albums, artists) */
 .media-card {
   display: flex;
   flex-direction: column;

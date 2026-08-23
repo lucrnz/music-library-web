@@ -4,8 +4,6 @@
  */
 
 import {
-  apiGet,
-  coverUrl,
   fetchAlbum,
   fetchAlbums,
   fetchAlbumTracks,
@@ -13,24 +11,10 @@ import {
   fetchArtistAlbums,
   fetchArtists,
   fetchSearch,
-  fetchTracksMeta,
-  type BrowseDir,
-  type BrowseResponse,
 } from "@/api";
-import { formatTrackLabel } from "@/util";
 import type { Album } from "@/models/album";
 import type { Artist } from "@/models/artist";
 import type { Track } from "@/models/track";
-
-/** Folder file row: path chrome + optional full Track. */
-export interface FileRowModel {
-  path: string;
-  name: string;
-  id: string | null;
-  track: Track | null;
-  displayName: string;
-  cover: string;
-}
 
 export interface LibraryChrome {
   title: string;
@@ -48,7 +32,6 @@ export type LibraryAlbum = Pick<Album, "id" | "title" | "artist"> & {
 };
 
 export type LibraryBody =
-  | { kind: "folders"; dirs: BrowseDir[]; files: FileRowModel[] }
   | { kind: "artists"; artists: Artist[] }
   | { kind: "albumGrid"; albums: LibraryAlbum[] }
   | { kind: "tracks"; tracks: Track[] }
@@ -91,57 +74,6 @@ export function page(
 export function emptyPage(opts: Partial<LibraryChrome> & { message?: string } = {}) {
   const { message = "", title = "Library", showBack = false } = opts;
   return page({ title, showBack }, { kind: "empty", message });
-}
-
-export async function browseFolder(folderPath: string): Promise<{
-  dirs: BrowseDir[];
-  files: FileRowModel[];
-}> {
-  const data = await apiGet<BrowseResponse>(
-    `/api/browse?path=${encodeURIComponent(folderPath || "")}`,
-  );
-  const dirs = data.dirs || [];
-  const rawFiles = data.files || [];
-
-  let byId = new Map<string, Track>();
-  const ids = rawFiles.map((f) => f.id).filter((id): id is string => !!id);
-  if (ids.length) {
-    try {
-      const meta = await fetchTracksMeta(ids);
-      byId = new Map(meta.map((m) => [m.id, m]));
-    } catch (err: unknown) {
-      console.error(err);
-    }
-  }
-
-  const files = rawFiles.map((f) => {
-    const track = f.id ? byId.get(f.id) || null : null;
-    return {
-      path: f.path,
-      name: f.name || "",
-      id: f.id || null,
-      track,
-      displayName: track ? formatTrackLabel(track) : f.name || "",
-      cover: track
-        ? coverUrl(track, "thumb", false)
-        : "/static/img/placeholder.svg",
-    };
-  });
-  return { dirs, files };
-}
-
-export async function loadFolders(folderPath: string): Promise<LibraryPage> {
-  const title = folderPath
-    ? folderPath.split("/").filter(Boolean).pop() || "Folders"
-    : "Folders";
-  const chrome = { title, showBack: Boolean(folderPath) };
-  const { dirs, files } = await browseFolder(folderPath);
-
-  if (!dirs.length && !files.length) {
-    return page(chrome, { kind: "empty", message: "This folder is empty" });
-  }
-
-  return page(chrome, { kind: "folders", dirs, files });
 }
 
 export async function loadSearch(q: string): Promise<LibraryPage> {
@@ -249,18 +181,14 @@ export async function loadAlbumsList(): Promise<LibraryPage> {
 
 /**
  * Resolve which loader to run for the current location.
- * @param {{ mode: string, routeName: string|symbol|null|undefined, folderPath: string, artistId?: string, albumId?: string, searchQuery: string }} loc
- * @returns {Promise<LibraryPage>}
  */
 export async function loadLibraryPage(loc: {
   mode: string;
   routeName: string | symbol | null | undefined;
-  folderPath: string;
   artistId?: string;
   albumId?: string;
   searchQuery: string;
 }): Promise<LibraryPage> {
-  if (loc.mode === "folders") return loadFolders(loc.folderPath);
   if (loc.mode === "search") return loadSearch(loc.searchQuery);
   if (loc.routeName === "artist") return loadArtistDetail(loc.artistId || "");
   if (loc.routeName === "album") return loadAlbumDetail(loc.albumId || "");

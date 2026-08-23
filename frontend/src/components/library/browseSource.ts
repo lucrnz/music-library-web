@@ -2,7 +2,6 @@
  * BrowseSource: load, navigate, covers, chrome, and menu runs for one library mode.
  */
 import type { Router } from "vue-router";
-import type { BrowseDir } from "@/api";
 import type { Artist } from "@/models/artist";
 import type { LibraryAlbum, LibraryPage } from "@/components/library/loaders";
 import type { Track } from "@/models/track";
@@ -11,7 +10,6 @@ import type { TreeNode } from "@/components/tree/treeNode";
 export interface BrowseLoc {
   mode: string;
   routeName: string | symbol | null | undefined;
-  folderPath: string;
   artistId?: string;
   albumId?: string;
   searchQuery: string;
@@ -21,7 +19,6 @@ export interface BrowseLoc {
 export interface BrowseGoBackLoc {
   mode: string;
   routeName: string | symbol | null | undefined;
-  folderPath: string;
   backArtistId: string | null;
 }
 
@@ -37,7 +34,6 @@ export interface BrowseChromeInput {
   artistId?: string;
   albumId?: string;
   trackCount: number;
-  selectedCount: number;
   layout: string;
   downloadsEnabled: boolean;
 }
@@ -45,17 +41,14 @@ export interface BrowseChromeInput {
 export interface BrowseSourceFlags {
   ariaLabel: string;
   showTrackDownload: boolean;
-  showFolderSelection: boolean;
   showListLoading: boolean;
   useLocalAlbumCover: boolean;
   useLocalTrackCover: boolean;
   reportsConnectivity: boolean;
-  clearsSelectionOnLoad: boolean;
 }
 
 export interface BrowseChrome {
   showAddAll: boolean;
-  showAddSelected: boolean;
   showDownloadAlbum: boolean;
   includeArtistPhoto: boolean;
 }
@@ -75,7 +68,6 @@ export interface BrowseSource {
   goBack(router: Router, loc: BrowseGoBackLoc): void;
   openArtist(router: Router, artist: { id: string }): void;
   openAlbum(router: Router, album: { id: string }): void;
-  openFolder?(router: Router, dir: BrowseDir): void;
 
   cover(target: BrowseCoverTarget, artUrls: Record<string, string>): string;
   chrome(input: BrowseChromeInput): BrowseChrome;
@@ -97,8 +89,6 @@ export interface BrowseSource {
   albumPlayAll(id: string): void | Promise<void>;
   artistDownloadAll?(artist: Artist): void | Promise<void>;
   albumDownload?(album: { id: string }): void | Promise<void>;
-  folderAddAll?(path: string): void | Promise<void>;
-  folderPlayAll?(path: string): void | Promise<void>;
 }
 
 export function browseSourceFor(

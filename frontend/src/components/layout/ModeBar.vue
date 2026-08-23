@@ -5,7 +5,6 @@ import { useLibraryLocation } from "@/components/library/useLibraryLocation";
 import { downloads } from "@/downloads/state";
 
 const BASE_MODES = [
-  { id: "folders", label: "Folders", name: "folders" },
   { id: "artists", label: "Artists", name: "artists" },
   { id: "albums", label: "Albums", name: "albums" },
   { id: "search", label: "Search", name: "search" },

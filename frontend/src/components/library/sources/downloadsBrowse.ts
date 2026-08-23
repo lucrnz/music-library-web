@@ -37,12 +37,10 @@ export const downloadsBrowse: BrowseSource = {
   flags: {
     ariaLabel: "Downloads library",
     showTrackDownload: false,
-    showFolderSelection: false,
     showListLoading: true,
     useLocalAlbumCover: true,
     useLocalTrackCover: true,
     reportsConnectivity: false,
-    clearsSelectionOnLoad: false,
   },
 
   load(loc): Promise<LibraryPage> {
@@ -137,7 +135,6 @@ export const downloadsBrowse: BrowseSource = {
   chrome(opts) {
     return {
       showAddAll: !opts.showTree && opts.trackCount > 0,
-      showAddSelected: false,
       showDownloadAlbum: false,
       includeArtistPhoto: false,
     };

@@ -1,17 +1,14 @@
 /**
  * Discriminated open target for library / downloads entity menus.
  */
-import type { BrowseDir } from "@/api";
 import type { Artist } from "@/models/artist";
-import type { FileRowModel, LibraryAlbum } from "@/components/library/loaders";
+import type { LibraryAlbum } from "@/components/library/loaders";
 import type { Track } from "@/models/track";
 
 export type OpenMenu =
   | { kind: "artist"; artist: Artist }
   | { kind: "album"; album: LibraryAlbum }
-  | { kind: "track"; track: Track }
-  | { kind: "file"; file: FileRowModel }
-  | { kind: "folder"; dir: BrowseDir };
+  | { kind: "track"; track: Track };
 
 export function openMenuKey(target: OpenMenu): string {
   switch (target.kind) {
@@ -21,9 +18,5 @@ export function openMenuKey(target: OpenMenu): string {
       return `album:${target.album.id}`;
     case "track":
       return `track:${target.track.id}`;
-    case "file":
-      return `file:${target.file.path}`;
-    case "folder":
-      return `folder:${target.dir.path}`;
   }
 }
