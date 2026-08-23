@@ -8,7 +8,6 @@ from musicweb.routes import (
     artist_images,
     diag,
     discovery,
-    folders,
     health,
     library_scan,
     listens,
@@ -21,7 +20,6 @@ router = APIRouter()
 router.include_router(health.router)
 router.include_router(library_scan.router)
 router.include_router(discovery.router)
-router.include_router(folders.router)
 router.include_router(media.router)
 router.include_router(artist_images.router)
 router.include_router(playlists.router)
