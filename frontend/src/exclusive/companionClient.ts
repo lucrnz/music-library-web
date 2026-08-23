@@ -74,7 +74,7 @@ let intentionalClose = false;
 
 function desiredConnectKey(): string {
   const port = exclusiveAudio.port || 18765;
-  const token = (exclusiveAudio.hogToken || "").trim();
+  const token = (exclusiveAudio.companionToken || "").trim();
   return `${port}\0${token}`;
 }
 
@@ -175,7 +175,7 @@ export async function ensurePreferredDevice({
   if (!isExclusiveEnabled()) {
     return { ok: false, reason: "exclusive_not_ready" };
   }
-  if (!(exclusiveAudio.hogToken || "").trim()) {
+  if (!(exclusiveAudio.companionToken || "").trim()) {
     return { ok: false, reason: "exclusive_not_ready" };
   }
   if (exclusiveAudio.connection === "rejected") {
@@ -340,7 +340,7 @@ function connectNow(): void {
     return;
   }
 
-  const token = (exclusiveAudio.hogToken || "").trim();
+  const token = (exclusiveAudio.companionToken || "").trim();
   if (!token) {
     setExclusiveLive({ connection: "disconnected" });
     return;
@@ -420,7 +420,7 @@ export function disconnectCompanion(): void {
  */
 export function syncCompanionConnection(): void {
   const should =
-    exclusiveAudio.capable && exclusiveAudio.enabled && !!(exclusiveAudio.hogToken || "").trim();
+    exclusiveAudio.capable && exclusiveAudio.enabled && !!(exclusiveAudio.companionToken || "").trim();
 
   if (!should) {
     disconnectCompanion();

@@ -30,7 +30,7 @@ export interface ExclusiveDevice {
 export interface ExclusiveAudioState {
   capable: boolean;
   enabled: boolean;
-  hogToken: string;
+  companionToken: string;
   port: number;
   selectedDeviceId: string | null;
   companionDeviceId: string | null;
@@ -44,7 +44,7 @@ export interface ExclusiveAudioState {
 }
 
 const KEY_ENABLED = "musicweb.exclusive.enabled";
-const KEY_TOKEN = "musicweb.exclusive.hogToken";
+const KEY_TOKEN = "musicweb.exclusive.companionToken";
 const KEY_PORT = "musicweb.exclusive.port";
 const KEY_DEVICE = "musicweb.exclusive.deviceId";
 const KEY_FORMAT_MODE = "musicweb.exclusive.formatMode";
@@ -53,7 +53,7 @@ export const exclusiveAudio = reactive<ExclusiveAudioState>({
   /** Capability: Mac + installed PWA */
   capable: false,
   enabled: false,
-  hogToken: "",
+  companionToken: "",
   port: DEFAULT_PORT,
   /** User preference (localStorage KEY_DEVICE). */
   selectedDeviceId: null,
@@ -83,9 +83,9 @@ function loadPersisted() {
     exclusiveAudio.enabled = false;
   }
   try {
-    exclusiveAudio.hogToken = localStorage.getItem(KEY_TOKEN) || "";
+    exclusiveAudio.companionToken = localStorage.getItem(KEY_TOKEN) || "";
   } catch {
-    exclusiveAudio.hogToken = "";
+    exclusiveAudio.companionToken = "";
   }
   try {
     const raw = localStorage.getItem(KEY_PORT);
@@ -112,7 +112,7 @@ function loadPersisted() {
 function persist() {
   try {
     localStorage.setItem(KEY_ENABLED, exclusiveAudio.enabled ? "1" : "0");
-    localStorage.setItem(KEY_TOKEN, exclusiveAudio.hogToken || "");
+    localStorage.setItem(KEY_TOKEN, exclusiveAudio.companionToken || "");
     localStorage.setItem(KEY_PORT, String(exclusiveAudio.port || DEFAULT_PORT));
     if (exclusiveAudio.selectedDeviceId) {
       localStorage.setItem(KEY_DEVICE, exclusiveAudio.selectedDeviceId);
@@ -239,8 +239,8 @@ export function setExclusiveEnabled(on: boolean) {
   persist();
 }
 
-export function setHogToken(token: string | number | null | undefined) {
-  exclusiveAudio.hogToken = String(token || "");
+export function setCompanionToken(token: string | number | null | undefined) {
+  exclusiveAudio.companionToken = String(token || "");
   persist();
 }
 

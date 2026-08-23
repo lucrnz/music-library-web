@@ -10,7 +10,7 @@ import {
   setExclusiveEnabled,
   setExclusivePort,
   setFormatMode,
-  setHogToken,
+  setCompanionToken,
   setSelectedDeviceId,
 } from "@/stores/exclusiveAudio";
 import {
@@ -83,11 +83,11 @@ function onEnable(e: Event) {
 function onToken(e: Event) {
   const target = e.target;
   if (!(target instanceof HTMLInputElement)) return;
-  setHogToken(target.value);
+  setCompanionToken(target.value);
 }
 
 function onTokenCommit() {
-  if (!(exclusiveAudio.hogToken || "").trim()) disconnectCompanion();
+  if (!(exclusiveAudio.companionToken || "").trim()) disconnectCompanion();
   else syncCompanionConnection();
 }
 
@@ -121,7 +121,7 @@ function onRefreshDevices() {
       <div class="modal-section-title">Exclusive audio (macOS)</div>
       <p class="modal-hint">
         Hog Core Audio via a local companion. Run
-        <code>HOG_TOKEN=… uv run musicweb exclusive-audio</code>
+        <code>COMPANION_TOKEN=… uv run musicweb companion</code>
         on this Mac, paste the same token below, then enable.
       </p>
 
@@ -137,7 +137,7 @@ function onRefreshDevices() {
 
       <div class="settings-field">
         <label class="settings-field-label" id="exclusive-token-label" for="exclusive-token">
-          HOG_TOKEN
+          COMPANION_TOKEN
         </label>
         <input
           id="exclusive-token"
@@ -145,7 +145,7 @@ function onRefreshDevices() {
           autocomplete="off"
           spellcheck="false"
           class="text-input text-input-block"
-          :value="exclusiveAudio.hogToken"
+          :value="exclusiveAudio.companionToken"
           @input="onToken"
           @change="onTokenCommit"
           placeholder="Same value as companion env"
