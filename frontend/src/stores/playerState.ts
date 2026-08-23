@@ -6,9 +6,13 @@ import { reactive } from "vue";
 import type { PlayBlockReason, PlaySourceState } from "@/playBlock";
 import { PLACEHOLDER_COVER } from "@/util";
 
+/** Desktop-rail / mobile-sheet occupant. Mobile `/radio` ignores this. */
+export type NowPlayingRail = "queue" | "radio";
+
 export interface PlayerState {
   seeking: boolean;
   expanded: boolean;
+  railFace: NowPlayingRail;
   sheetOffset: number;
   draggingSheet: boolean;
   volume: number;
@@ -28,6 +32,7 @@ export const player = reactive<PlayerState>({
   seeking: false,
   /** Full now-playing open (mobile sheet / desktop right panel) */
   expanded: false,
+  railFace: "queue",
   sheetOffset: 0,
   draggingSheet: false,
   volume: 1,

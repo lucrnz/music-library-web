@@ -17,11 +17,16 @@ vi.mock("@/playback/prepare", () => ({
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
 
 import {
+  applyExpanded,
   applyPlaybackPosition,
   hydrateOutputVolume,
   initOutputVolume,
+  openQueueRail,
+  openRadioRail,
+  setExpanded,
   setOutputVolume,
   subscribeOutputVolume,
+  toggleRadioRail,
 } from "@/stores/playerPrefs";
 import { writePlaybackPosition } from "@/stores/playbackPosition";
 import { pl } from "@/stores/playlist";
@@ -136,5 +141,64 @@ describe("output volume", () => {
     await nextTick();
     expect(fn).toHaveBeenCalledTimes(1);
     expect(fn).toHaveBeenCalledWith(0.4);
+  });
+});
+
+describe("now-playing rail", () => {
+  const EXPANDED_KEY = "musicweb.nowPlayingExpanded.v1";
+  const RAIL_KEY = "musicweb.nowPlayingRail.v1";
+
+  beforeEach(() => {
+    pl.clear();
+    player.expanded = false;
+    player.railFace = "queue";
+    localStorage.removeItem(EXPANDED_KEY);
+    localStorage.removeItem(RAIL_KEY);
+  });
+
+  it("openRadioRail sets expanded radio face and writes both keys with an empty playlist", () => {
+    expect(pl.length).toBe(0);
+    openRadioRail();
+    expect(player.expanded).toBe(true);
+    expect(player.railFace).toBe("radio");
+    expect(localStorage.getItem(EXPANDED_KEY)).toBe("1");
+    expect(localStorage.getItem(RAIL_KEY)).toBe("radio");
+  });
+
+  it("applyExpanded restores a radio rail when the playlist is empty", () => {
+    localStorage.setItem(EXPANDED_KEY, "1");
+    localStorage.setItem(RAIL_KEY, "radio");
+    applyExpanded();
+    expect(pl.length).toBe(0);
+    expect(player.expanded).toBe(true);
+    expect(player.railFace).toBe("radio");
+  });
+
+  it("applyExpanded stays collapsed for queue face when the playlist is empty", () => {
+    localStorage.setItem(EXPANDED_KEY, "1");
+    localStorage.setItem(RAIL_KEY, "queue");
+    applyExpanded();
+    expect(pl.length).toBe(0);
+    expect(player.expanded).toBe(false);
+    expect(player.railFace).toBe("queue");
+  });
+
+  it("toggleRadioRail opens then collapses without clearing railFace", () => {
+    toggleRadioRail();
+    expect(player.expanded).toBe(true);
+    expect(player.railFace).toBe("radio");
+    toggleRadioRail();
+    expect(player.expanded).toBe(false);
+    expect(player.railFace).toBe("radio");
+  });
+
+  it("openQueueRail then setExpanded(false) leaves railFace queue", () => {
+    pl.add([track("a", 200)]);
+    openQueueRail();
+    expect(player.expanded).toBe(true);
+    expect(player.railFace).toBe("queue");
+    setExpanded(false);
+    expect(player.expanded).toBe(false);
+    expect(player.railFace).toBe("queue");
   });
 });

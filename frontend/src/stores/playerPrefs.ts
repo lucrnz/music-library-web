@@ -8,10 +8,11 @@ import {
   resumeSeconds,
 } from "@/stores/playbackPosition";
 import { pl } from "@/stores/playlist";
-import { player } from "@/stores/playerState";
+import { player, type NowPlayingRail } from "@/stores/playerState";
 
 const VOLUME_STORAGE_KEY = "musicweb.volume";
 const EXPANDED_STORAGE_KEY = "musicweb.nowPlayingExpanded.v1";
+const RAIL_FACE_STORAGE_KEY = "musicweb.nowPlayingRail.v1";
 
 const volumeSubscribers = new Set<(v: number) => void>();
 let volumeWatchBound = false;
@@ -86,7 +87,30 @@ export function writeExpanded(on: boolean) {
   }
 }
 
-/** Open/close full now-playing and persist the preference. */
+export function readRailFace(): NowPlayingRail {
+  try {
+    const raw = localStorage.getItem(RAIL_FACE_STORAGE_KEY);
+    if (raw === "radio") return "radio";
+  } catch {
+    /* ignore */
+  }
+  return "queue";
+}
+
+export function writeRailFace(face: NowPlayingRail) {
+  try {
+    localStorage.setItem(RAIL_FACE_STORAGE_KEY, face);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function setRailFace(face: NowPlayingRail) {
+  player.railFace = face;
+  writeRailFace(face);
+}
+
+/** Open/close full now-playing and persist the preference. Does not change railFace. */
 export function setExpanded(open: boolean) {
   const next = !!open;
   player.expanded = next;
@@ -98,12 +122,38 @@ export function setExpanded(open: boolean) {
   writeExpanded(next);
 }
 
+export function openQueueRail() {
+  setRailFace("queue");
+  setExpanded(true);
+}
+
+export function openRadioRail() {
+  setRailFace("radio");
+  setExpanded(true);
+}
+
+/** Collapse when the radio rail is already open; otherwise open it. */
+export function toggleRadioRail() {
+  if (player.expanded && player.railFace === "radio") {
+    setExpanded(false);
+    return;
+  }
+  openRadioRail();
+}
+
 /**
- * Restore now-playing expanded flag from localStorage.
- * Call after loadPlaylist(); stays collapsed when the queue is empty.
+ * Restore now-playing expanded flag and rail face from localStorage.
+ * Call after loadPlaylist(). Radio face restores even when the queue is empty;
+ * queue face stays collapsed when the queue is empty.
  */
 export function applyExpanded() {
+  const face = readRailFace();
+  player.railFace = face;
   const want = readExpanded();
+  if (face === "radio") {
+    player.expanded = want;
+    return;
+  }
   player.expanded = !!(want && pl.length > 0);
 }
 
