@@ -14,7 +14,7 @@ Musicweb is a **personal LAN library player**: browse and stream your own lossle
 
 ## Experience principles
 
-- **Mobile-first.** Phones get bottom tabs (Library | Playlist | Radio), scrolling browse-mode chips, icon-only queue actions, a mini-player, and an expandable now-playing sheet. Desktop (≥ ~900px) keeps the tab bar; Library/Playlist restore the dual-pane; Radio replaces both. Chrome is an application shell, not a document: names and lyrics are copied from `⋯` menus, not by selecting page text.
+- **Mobile-first.** Phones get bottom tabs (Library | Playlist | Radio), scrolling browse-mode chips, icon-only queue actions, a mini-player, and an expandable now-playing sheet. Desktop (≥ ~900px) hides the tab bar; Library/Playlist stay the dual-pane; radio uses the now-playing right rail. Chrome is an application shell, not a document: names and lyrics are copied from `⋯` menus, not by selecting page text.
 
 - **Browse modes:** Folders (filesystem), Artists → Albums → Tracks, Albums grid, Search, Stats. Routes should remain bookmarkable. Stats is household most-played, not a Settings surface — see `docs/systems/playback-stats.md`.
 - **Queue vs playlists:** Session queue lives in the browser (survives reload). Saved playlists live in SQLite and are shared across devices on the same server.
