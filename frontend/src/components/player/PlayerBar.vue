@@ -5,7 +5,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { pl } from "@/stores/playlist";
-import { setExpanded } from "@/stores/playerPrefs";
+import { openQueueRail, setExpanded } from "@/stores/playerPrefs";
 import { player, playNext, togglePlay } from "@/stores/player";
 import { settings } from "@/stores/settings";
 import { downloads } from "@/downloads/state";
@@ -32,11 +32,23 @@ const root = ref<HTMLElement | null>(null);
     const route = useRoute();
     const onRadio = computed(() => route.meta.pane === "radio");
     const radioOn = computed(() => radioChromeActive());
-    const visible = computed(
+    const desktopRadioRail = computed(
       () =>
-        !onRadio.value &&
-        (radioOn.value || Boolean(pl.current) || pl.length > 0),
+        desktopViewport.value &&
+        player.expanded &&
+        player.railFace === "radio",
     );
+    const desktopQueueRail = computed(
+      () =>
+        desktopViewport.value &&
+        player.expanded &&
+        player.railFace === "queue",
+    );
+    const visible = computed(() => {
+      if (desktopRadioRail.value) return true;
+      if (onRadio.value && !desktopViewport.value) return false;
+      return radioOn.value || Boolean(pl.current) || pl.length > 0;
+    });
     const track = computed(() => pl.current);
     const title = computed(() => (track.value ? track.value.title : "—"));
     const lossyKind = computed(() => kindForTrack(track.value));
@@ -58,11 +70,11 @@ const root = ref<HTMLElement | null>(null);
     );
 
     function expand(ev?: Event) {
-      if (player.expanded) return;
+      if (player.expanded && player.railFace === "queue") return;
       if (ev?.currentTarget instanceof HTMLElement) {
         focusRestoreEl = ev.currentTarget;
       }
-      setExpanded(true);
+      openQueueRail();
       player.sheetOffset = 0;
       nextTick(() => {
         fullRef.value?.focusClose?.();
@@ -70,7 +82,7 @@ const root = ref<HTMLElement | null>(null);
     }
 
     function onCoverOrMetaOpen(ev?: Event) {
-      if (player.expanded) return;
+      if (player.expanded && player.railFace === "queue") return;
       expand(ev);
     }
 
@@ -98,6 +110,7 @@ const root = ref<HTMLElement | null>(null);
     }
 
     watch(desktopViewport, () => {
+      if (player.expanded && player.railFace === "radio") return;
       collapse();
     });
 
@@ -162,9 +175,17 @@ const root = ref<HTMLElement | null>(null);
         </button>
       </div>
 
-      <RadioNowPlaying v-if="radioOn && desktopViewport" layout="bar" />
+      <RadioNowPlaying
+        v-if="desktopRadioRail"
+        layout="room"
+        @collapse="collapse"
+      />
+      <RadioNowPlaying
+        v-else-if="radioOn && desktopViewport && !desktopQueueRail"
+        layout="bar"
+      />
       <NowPlayingFull
-        v-else-if="!radioOn"
+        v-else-if="desktopQueueRail || !radioOn"
         ref="fullRef"
         :title="title"
         :subtitle="subtitle"

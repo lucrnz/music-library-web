@@ -149,4 +149,18 @@
   #view-radio {
     max-width: none;
   }
+
+  #player.expanded .radio-now--room {
+    display: flex;
+    flex-direction: column;
+    max-width: none;
+    margin: 0;
+    padding: 8px 24px 24px;
+    box-sizing: border-box;
+  }
+
+  #player.expanded .radio-now--room .sheet-grab {
+    justify-content: flex-end;
+    width: 100%;
+  }
 }

@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
+import { onUnmounted } from "vue";
+import { isDesktopViewport } from "@/layout";
 import RadioNowPlaying from "@/components/radio/RadioNowPlaying.vue";
-import { setTabOpen } from "@/stores/radio";
+import { setExpanded } from "@/stores/playerPrefs";
 
-onMounted(() => {
-  setTabOpen(true);
-});
 onUnmounted(() => {
-  setTabOpen(false);
+  if (!isDesktopViewport()) setExpanded(false);
 });
 </script>
 

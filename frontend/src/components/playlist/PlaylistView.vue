@@ -22,6 +22,7 @@ import {
   playIndex,
   stopPlayback,
 } from "@/stores/player";
+import { toggleRadioRail } from "@/stores/playerPrefs";
 import { downloads } from "@/downloads/state";
 import { downloadTracks } from "@/downloads/ui";
 import { confirmDialog, promptDialog } from "@/stores/dialog";
@@ -286,6 +287,15 @@ const route = useRoute();
       <div class="view-bar">
         <div class="view-title">Queue</div>
         <div class="view-actions">
+          <button
+            v-if="desktop"
+            type="button"
+            class="icon-btn"
+            title="Radio"
+            aria-label="Radio"
+            :aria-pressed="player.expanded && player.railFace === 'radio' ? 'true' : 'false'"
+            @click="toggleRadioRail"
+          ><Icon name="radio" /></button>
           <button
             v-if="downloads.enabled && pl.length"
             type="button"

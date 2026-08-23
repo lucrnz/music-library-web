@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { coverUrl } from "@/api";
 import Icon from "@/components/icons/Icon.vue";
 import NowPlayingView from "@/components/player/NowPlayingView.vue";
+import { useDesktopViewport } from "@/layout";
 import { router } from "@/router";
 import { player } from "@/stores/playerState";
 import {
@@ -13,7 +14,7 @@ import {
   tuneIn,
   tuneOut,
 } from "@/stores/radio";
-import { setOutputVolume } from "@/stores/playerPrefs";
+import { openRadioRail, setExpanded, setOutputVolume } from "@/stores/playerPrefs";
 
 const props = withDefaults(
   defineProps<{
@@ -22,6 +23,11 @@ const props = withDefaults(
   { layout: "room" },
 );
 
+const emit = defineEmits<{
+  collapse: [];
+}>();
+
+const desktop = useDesktopViewport();
 const heard = ref(0);
 const lyricsOpen = ref(false);
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -52,6 +58,7 @@ const showSurface = computed(
   () => radio.face === "current" && !!radio.track,
 );
 const compact = computed(() => props.layout === "bar");
+const showRoomClose = computed(() => !compact.value && desktop.value);
 const progress = computed(() => {
   const dur = radio.officialDuration;
   if (!dur) return 0;
@@ -84,7 +91,16 @@ function onVolume(v: number) {
 }
 
 function openRadio() {
+  if (desktop.value) {
+    openRadioRail();
+    return;
+  }
   void router.push({ name: "radio" });
+}
+
+function onCollapse() {
+  setExpanded(false);
+  emit("collapse");
 }
 </script>
 
@@ -95,6 +111,17 @@ function openRadio() {
     :class="'radio-now--' + props.layout"
     :aria-label="props.layout === 'room' ? 'Radio' : 'Now playing'"
   >
+    <div v-if="showRoomClose" class="sheet-grab">
+      <button
+        type="button"
+        class="icon-btn"
+        title="Close"
+        aria-label="Close radio"
+        @click="onCollapse"
+      >
+        <Icon name="close" />
+      </button>
+    </div>
     <div v-if="waiting" class="radio-now-status" role="status">
       <span class="radio-spinner" aria-hidden="true" />
       <p>{{ statusLabel }}</p>
@@ -130,7 +157,8 @@ function openRadio() {
     :seek-interactive="false"
     :lyrics-open="!compact && lyricsOpen"
     :lyrics-seekable="false"
-    :show-close="false"
+    :show-close="showRoomClose"
+    @collapse="onCollapse"
     :show-status="!compact && radio.chrome === 'tuned'"
     :reserve-status="!compact"
     :show-lyrics-toggle="!compact"

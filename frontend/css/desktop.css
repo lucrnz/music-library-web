@@ -3,7 +3,7 @@
 
 @media (min-width: 900px) {
   #tab-bar {
-    display: flex;
+    display: none;
   }
 
   main {
@@ -182,7 +182,8 @@
     pointer-events: auto;
   }
 
-  #player.expanded .player-full {
+  #player.expanded .player-full,
+  #player.expanded .radio-now--room {
     position: absolute;
     top: 0;
     right: 0;
