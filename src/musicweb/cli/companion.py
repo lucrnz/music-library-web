@@ -1,4 +1,4 @@
-"""Run the loopback exclusive-audio companion (no data-dir lock / DB)."""
+"""Run the loopback Desktop companion (no data-dir lock / DB)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from musicweb.exclusive.session import ExclusiveHub
 logger = logging.getLogger(__name__)
 
 
-def run_exclusive_audio(
+def run_companion(
     *,
     port: int = DEFAULT_PORT,
     mpv: str | None = None,
@@ -27,12 +27,12 @@ def run_exclusive_audio(
     # Does not take data-dir lock or open the DB.
     load_env_file()
 
-    token = (os.environ.get("HOG_TOKEN") or "").strip()
+    token = (os.environ.get("COMPANION_TOKEN") or "").strip()
     if not token:
         print(
-            "HOG_TOKEN is required (non-empty).\n"
-            "  Put HOG_TOKEN=… in project .env, or:\n"
-            "  export HOG_TOKEN='$(openssl rand -hex 16)'\n"
+            "COMPANION_TOKEN is required (non-empty).\n"
+            "  Put COMPANION_TOKEN=… in project .env, or:\n"
+            "  export COMPANION_TOKEN='$(openssl rand -hex 16)'\n"
             "  # paste the same value into Mac PWA → Settings → Exclusive audio",
             file=sys.stderr,
         )
@@ -62,15 +62,15 @@ def run_exclusive_audio(
             file=sys.stderr,
         )
 
-    hub = ExclusiveHub(hog_token=token, mpv_path=mpv_path)
+    hub = ExclusiveHub(companion_token=token, mpv_path=mpv_path)
     app = create_exclusive_app(hub)
 
     print(
-        f"musicweb exclusive-audio  protocol v{PROTOCOL_VERSION}\n"
+        f"musicweb companion  protocol v{PROTOCOL_VERSION}\n"
         f"  listening  ws://127.0.0.1:{port}/ws\n"
         f"  health     http://127.0.0.1:{port}/health\n"
         f"  mpv        {mpv_path}\n"
-        f"  HOG_TOKEN  set ({len(token)} chars) — paste the same value into Mac PWA settings\n"
+        f"  COMPANION_TOKEN  set ({len(token)} chars) — paste the same value into Mac PWA settings\n"
         f"  note       no data-dir lock; not the library server",
         flush=True,
     )
@@ -87,7 +87,7 @@ def run_exclusive_audio(
     )
 
 
-def exclusive_audio(
+def companion(
     port: int = typer.Option(
         DEFAULT_PORT,
         "--port",
@@ -99,5 +99,5 @@ def exclusive_audio(
         help="Path to mpv binary (default: PATH lookup)",
     ),
 ) -> None:
-    """macOS exclusive-audio companion (mpv hog + WebSocket on loopback)."""
-    run_exclusive_audio(port=port, mpv=mpv)
+    """Desktop companion (macOS): exclusive audio via mpv hog + WebSocket on loopback."""
+    run_companion(port=port, mpv=mpv)

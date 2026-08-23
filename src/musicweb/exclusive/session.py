@@ -28,8 +28,8 @@ class ClientSession:
 class ExclusiveHub:
     """Process-wide companion state (one hub per companion process)."""
 
-    def __init__(self, *, hog_token: str, mpv_path: str | None = None) -> None:
-        self.hog_token = hog_token
+    def __init__(self, *, companion_token: str, mpv_path: str | None = None) -> None:
+        self.companion_token = companion_token
         self._clients: dict[str, ClientSession] = {}
         self._controller_id: str | None = None
         self._device_id: str | None = None
@@ -172,7 +172,7 @@ class ExclusiveHub:
         token: str,
         session_id: str,
     ) -> ClientSession | None:
-        if not token or token != self.hog_token:
+        if not token or token != self.companion_token:
             await websocket.send_json(
                 p.envelope(p.MSG_HELLO_REJECT, reason="invalid_token")
             )

@@ -72,7 +72,7 @@ class FakeWebSocket:
 
 
 def _hub_with_fake() -> tuple[ExclusiveHub, FakePlayer]:
-    hub = ExclusiveHub(hog_token="test-token")
+    hub = ExclusiveHub(companion_token="test-token")
     fake = FakePlayer()
     hub._player = fake  # type: ignore[assignment]
     return hub, fake

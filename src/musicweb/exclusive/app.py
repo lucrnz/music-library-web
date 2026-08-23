@@ -1,4 +1,4 @@
-"""Loopback FastAPI app for exclusive-audio companion WebSocket."""
+"""Loopback FastAPI app for the Desktop companion WebSocket."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
             hub.stop()
 
     app = FastAPI(
-        title="musicweb exclusive-audio",
+        title="musicweb companion",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,

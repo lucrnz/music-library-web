@@ -1,4 +1,4 @@
-"""Canonical WebSocket protocol for the exclusive-audio companion.
+"""Canonical WebSocket protocol for exclusive audio via the Desktop companion.
 
 Envelope: ``{ "v": PROTOCOL_VERSION, "type": <str>, ...fields }``.
 

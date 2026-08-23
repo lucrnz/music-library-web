@@ -1,4 +1,4 @@
-"""macOS exclusive-audio companion (loopback WS + mpv). No library/DB."""
+"""Desktop companion (loopback WS + mpv) for exclusive audio. No library/DB."""
 
 from musicweb.exclusive.protocol import PROTOCOL_VERSION
 
