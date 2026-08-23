@@ -50,7 +50,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `radio/` | Household station clock, picker, tuner prepare (reuses Transcoder); snapshot serialize lives on `routes/radio.py` |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
-| `routes/` | HTTP API routers (health, scan, discovery, folders, `media.py` stream/cover, `artist_images.py` portraits, playlists, listens, radio, diag) + SPA pages |
+| `routes/` | HTTP API routers (health, scan, discovery, `media.py` stream/cover, `artist_images.py` portraits, playlists, listens, radio, diag) + SPA pages |
 
 ## Ownership rules
 
@@ -59,7 +59,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **ORM models** live in `db/models.py`; query helpers in `db/repositories/` (including `listens.py`).
 - **Listen stats** HTTP is `routes/listens.py`; client cycle/outbox/chips are `frontend/src/listens/`. See `docs/systems/playback-stats.md`. Do not add `src/musicweb/listens/`.
 - **Stream encode policy** (profiles, aresample/dither rules) lives under `transcode/`. Do not reimplement encode argv in routes.
-- **Present audio files** go through `Library.present_audio` (jail + exists + indexable). Stream maps `None` to 404. Enqueue, radio, scan lyrics/covers, and local artist-image folder lookup branch on `None`. Do not reimplement resolve-and-exists at those call sites. `resolve` stays for directory browse/collect.
+- **Present audio files** go through `Library.present_audio` (jail + exists + indexable). Stream maps `None` to 404. Enqueue, radio, scan lyrics/covers, and local artist-image folder lookup branch on `None`. Do not reimplement resolve-and-exists at those call sites. `resolve` stays for path jail used by `present_audio`.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
 - **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`. The source owns list load, tree `loadRoots` / `loadChildren`, `flags` / `chrome` / `cover`, and tree title / empty / focus / reload; the tree pane does not switch on mode for those jobs.
