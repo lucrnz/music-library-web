@@ -138,21 +138,21 @@ uv run musicweb radio play <track-id>
 
 Exact flags: `uv run musicweb radio --help`.
 
-## Exclusive audio companion (macOS)
+## Desktop companion (macOS)
 
-Loopback companion for **hog / exclusive** Core Audio playback via **mpv**. This is **not** the library server: it does **not** take `musicweb.lock`, open the DB, or migrate.
+Desktop companion: loopback sidecar for **hog / exclusive** Core Audio playback via **mpv**. This is **not** the library server: it does **not** take `musicweb.lock`, open the DB, or migrate.
 
 Requires:
 
-- `HOG_TOKEN` (non-empty) — from project `.env` (loaded like the server) or the process environment; paste the same value into Mac PWA → Settings → Exclusive audio
+- `COMPANION_TOKEN` (non-empty) — from project `.env` (loaded like the server) or the process environment; paste the same value into Mac PWA → Settings → Exclusive audio
 - `mpv` on `PATH` (or `--mpv /path/to/mpv`)
 - macOS for real exclusive/hog device behavior
 
 ```sh
-# Prefer HOG_TOKEN in .env (see .env.example), then:
-uv run musicweb exclusive-audio
+# Prefer COMPANION_TOKEN in .env (see .env.example), then:
+uv run musicweb companion
 # optional: --port 18765 (default)  --mpv /opt/homebrew/bin/mpv
-# or one-shot: HOG_TOKEN=… uv run musicweb exclusive-audio
+# or one-shot: COMPANION_TOKEN=… uv run musicweb companion
 ```
 
 Listens on **127.0.0.1 only**, default port **18765**, WebSocket at `ws://127.0.0.1:18765/ws`. The installed Mac PWA connects with the token; first session is controller, further tabs are read-only.

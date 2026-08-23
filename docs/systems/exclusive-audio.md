@@ -17,24 +17,24 @@ Use this when Musicweb is already running on your network and you want exclusive
    openssl rand -hex 16
    ```
 
-   Put it in the project `.env` (or the environment) as `HOG_TOKEN=…` on the Mac where you run the companion. You will paste the same string into the PWA in step 6.
-5. **Run the companion on the Mac** (this is **not** the library server; it does not take the data-dir lock):
+   Put it in the project `.env` (or the environment) as `COMPANION_TOKEN=…` on the Mac where you run the Desktop companion. You will paste the same string into the PWA in step 6.
+5. **Run the Desktop companion on the Mac** (this is **not** the library server; it does not take the data-dir lock):
 
    ```sh
-   uv run musicweb exclusive-audio
+   uv run musicweb companion
    # optional: --port 18765 (default)  --mpv /opt/homebrew/bin/mpv
    ```
 
    Leave this process running. It listens on `127.0.0.1` only (default port **18765**).
-6. **PWA Settings → Exclusive audio** — enable exclusive, paste the same `HOG_TOKEN`, set the port if you changed it.
+6. **PWA Settings → Exclusive audio** — enable exclusive, paste the same `COMPANION_TOKEN`, set the port if you changed it.
 7. **Pick an output device** — first choice is manual; nothing is selected for you.
 8. **Play a track** — status should show **Ready ·** your device name, and audio should come from the Mac via the companion, not the browser element.
 
-CLI flags and env notes: [development/commands.md](../development/commands.md#exclusive-audio-companion-macos).
+CLI flags and env notes: [development/commands.md](../development/commands.md#desktop-companion-macos).
 
 ## Source of truth
 
-- Companion CLI: `src/musicweb/cli/exclusive_audio.py`
+- Companion CLI: `src/musicweb/cli/companion.py`
 - Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `mpv_player.py`, `coreaudio.py`, `volume.py`)
 - Profile tags + catalog: `src/musicweb/transcode/profiles.py`
 - HTTP: `GET /api/exclusive-formats`, existing `GET /api/stream` + `POST /api/transcode/prepare` with tags
@@ -47,8 +47,8 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#ex
 ## Architecture (prose)
 
 1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks are **unavailable** in exclusive mode (`exclusive_lossy`) until a future remux plan — do not send MP3/AAC through companion FLAC encode. **Exclusive-mode radio is TODO.** Tune-in stops the hog; radio audio is HTML-only until a future exclusive-radio design. See `docs/systems/radio.md`.
-2. **Mac PWA** (installed, standalone) enables exclusive mode, stores `HOG_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
-3. **Companion** (`musicweb exclusive-audio`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
+2. **Mac PWA** (installed, standalone) enables exclusive mode, stores `COMPANION_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
+3. **Desktop companion** (`musicweb companion`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
 4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until the companion **accepts** a live device.
 5. On play, the PWA **ensures** the preferred device is live, then builds an **absolute** stream URL (`new URL(streamPath, location.origin).href`) so mpv hits the **same host the browser uses**, not localhost on the Mac. It loads that URL into mpv with a **per-track exclusive FLAC tag**.
 
@@ -57,7 +57,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#ex
        ^                                         ^
        | prepare / stream                        | IPC
        |                                         |
-[ Mac PWA ] --ws://127.0.0.1:18765--> [ exclusive-audio companion ]
+[ Mac PWA ] --ws://127.0.0.1:18765--> [ Desktop companion ]
 ```
 
 ## Tags and catalog

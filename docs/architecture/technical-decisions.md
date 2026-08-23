@@ -42,7 +42,7 @@ The SPA is Vue 3 SFC (`<script setup lang="ts">`) plus TypeScript modules under 
 
 ### Exclusive audio via optional companion (not Electron)
 
-Browser engines cannot hog Core Audio. Exclusive playback is an **optional** Mac loopback companion (`musicweb exclusive-audio` + mpv), not an Electron rewrite. The SPA is Vue SFC + TypeScript; exclusive playback is still not an Electron rewrite. The companion does not take the library data-dir lock. See `docs/systems/exclusive-audio.md`.
+Browser engines cannot hog Core Audio. Exclusive playback is an **optional** feature on the Mac **Desktop companion** (`musicweb companion` + mpv), not an Electron rewrite. The SPA is Vue SFC + TypeScript; exclusive playback is still not an Electron rewrite. The companion does not take the library data-dir lock. See `docs/systems/exclusive-audio.md`.
 
 ### Shell-only PWA with configurable public origin
 
