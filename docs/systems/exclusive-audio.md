@@ -46,7 +46,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#de
 
 ## Architecture (prose)
 
-1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks play exclusive via a local download or an mpv `source` stream — do not remux MP3/AAC through a companion FLAC tag. **Exclusive-mode radio is TODO.** Tune-in stops the hog; radio audio is HTML-only until a future exclusive-radio design. See `docs/systems/radio.md`. **Windows hog is WIP**; the companion still runs on Windows/Linux for Downloads ([companion.md](companion.md)).
+1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks play exclusive via a local download or an mpv `source` stream — do not remux MP3/AAC through a companion FLAC tag. **Exclusive-mode radio is TODO.** Tune-in stops the hog; radio audio is HTML-only until a future exclusive-radio design. See `docs/systems/radio.md`. **Windows/Linux hog is a no-op stub**; the companion still runs there for Downloads ([companion.md](companion.md)).
 2. **Mac PWA** (installed, standalone) enables exclusive mode, stores `COMPANION_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
 3. **Desktop companion** (`musicweb companion`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
 4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until the companion **accepts** a live device.
@@ -176,13 +176,13 @@ Mac volume keys usually do nothing while hogged. The in-app slider is exclusive 
 2. Quit/close the PWA (not only hide).
 3. Companion logs controller disconnect / lock free **and** exclusive device released; another app can use the headphones immediately.
 4. Reopen PWA: reconnects as controller, preference re-applied via `set_device`, play works after ensure (exclusive re-armed).
-5. TTL path: starve JS heartbeats until TTL while PWA stays open — hard-stop toast (`controller_lost`), role readonly, headphones free for other apps.
+5. TTL path: starve JS heartbeats until TTL while PWA stays open — hard-stop toast (`controller_lost`), hog released. The client reconnects so a new hello can reclaim the free lock (a later heartbeat from the demoted session also reclaims).
 
 ## Out of scope (v1)
 
 - Gapless
 - Media keys / menu bar app / Now Playing integration beyond existing browser Media Session
-- Windows hog / Core Audio exclusive (WIP — companion still serves Downloads on Windows/Linux)
+- Windows hog / Core Audio exclusive (stub — companion still serves Downloads on Windows/Linux)
 - Bit-perfect “always store library originals” as the locker format
 - Electron / TypeScript / Vite / pnpm
 - Auth model change for exclusive tags

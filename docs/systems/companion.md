@@ -17,7 +17,7 @@ Two jobs share one process (`uv run musicweb companion`) and one `COMPANION_TOKE
 
 ## Behavior (intent)
 
-- Binds **127.0.0.1 only**. mpv is required to start.
+- Binds **127.0.0.1 only**. mpv is required on macOS. Windows/Linux hog is a no-op stub so Downloads still start.
 - Data files live in the OS app-support directory (printed on every launch). There is no env override.
 - Hello + token authenticates a session. Any authenticated session may command the blob store. Hog transport (`load`, device, volume) stays **controller-only**.
 - The companion fetches library stream URLs and writes jailed relative keys. The PWA plays those files over a token-gated loopback GET with Range. HTML and exclusive both consume that store.
@@ -30,4 +30,4 @@ Two jobs share one process (`uv run musicweb companion`) and one `COMPANION_TOKE
 - Do not take the library data-dir lock or open the server DB.
 - Do not log file URLs (they carry the token). Companion HTTP access logs are off so `?token=` does not hit stdout.
 - Do not give hog commands to a readonly session.
-- Windows hog is WIP; the process still runs there for Downloads. Feature exceptions stay on [exclusive-audio.md](exclusive-audio.md), not in the product platform table.
+- Windows/Linux hog is a no-op stub; the process still runs for Downloads. Feature exceptions stay on [exclusive-audio.md](exclusive-audio.md), not in the product platform table.
