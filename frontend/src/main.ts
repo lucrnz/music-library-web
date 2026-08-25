@@ -40,7 +40,10 @@ loadCodecs();
 void initExclusiveAudio().then(() => syncCompanionConnection());
 bindConnectivityToasts();
 // Wait for downloads catalog so restored tracks can use local OPFS covers.
-initDownloads().then(() => updateMediaSession());
+initDownloads().then(() => {
+  updateMediaSession();
+  syncCompanionConnection();
+});
 initArtistArtPending();
 registerServiceWorker();
 

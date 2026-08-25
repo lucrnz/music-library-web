@@ -11,6 +11,8 @@ import {
   setExclusiveLive,
   type ExclusiveDevice,
 } from "@/stores/exclusiveAudio";
+import { canUseCompanionDownloads } from "@/exclusive/capability";
+import { downloads } from "@/downloads/state";
 import {
   HEARTBEAT_INTERVAL_MS,
   MSG_DEVICES,
@@ -62,6 +64,14 @@ interface CompanionWireMessage {
   message?: string;
   code?: string;
   selected_device_id?: unknown;
+  requestId?: string;
+  key?: string;
+  loaded?: number;
+  data_dir?: string;
+  total?: number | null;
+  bytes?: number;
+  exists?: boolean;
+  free?: number;
 }
 
 let ws: WebSocket | null = null;
@@ -124,6 +134,10 @@ function clearReconnect(): void {
 
 function clearLiveDevice(): void {
   setCompanionDeviceId(null);
+}
+
+export function sendCompanion(msg: Record<string, unknown>): boolean {
+  return send(msg);
 }
 
 function send(msg: Record<string, unknown>): boolean {
@@ -225,6 +239,7 @@ function handleMessage(raw: unknown): void {
       connection: "connected",
       role: msg.role || null,
       lastError: null,
+      dataDir: typeof msg.data_dir === "string" ? msg.data_dir : exclusiveAudio.dataDir,
     });
     reconnectAttempt = 0;
     applyStatus(msg);
@@ -308,6 +323,14 @@ function handleMessage(raw: unknown): void {
       message: msg.message,
       code: msg.code,
     });
+    return;
+  }
+
+  if (type) {
+    if (typeof msg.data_dir === "string" && msg.data_dir) {
+      setExclusiveLive({ dataDir: msg.data_dir });
+    }
+    emit(msg as CompanionEvent);
   }
 }
 
@@ -415,12 +438,39 @@ export function disconnectCompanion(): void {
   clearLiveDevice();
 }
 
+/** Wait until hello_ok, hello_reject, or timeout. */
+export function waitForCompanionConnection(
+  timeoutMs = 4000,
+): Promise<boolean> {
+  if (exclusiveAudio.connection === "connected") return Promise.resolve(true);
+  if (exclusiveAudio.connection === "rejected") return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      unsub();
+      resolve(exclusiveAudio.connection === "connected");
+    }, timeoutMs);
+    const unsub = onCompanionEvent((evt) => {
+      if (evt.type === "hello_ok") {
+        clearTimeout(timer);
+        unsub();
+        resolve(true);
+      } else if (evt.type === "hello_reject") {
+        clearTimeout(timer);
+        unsub();
+        resolve(false);
+      }
+    });
+  });
+}
+
 /**
- * Connect when exclusive enabled + token; disconnect otherwise.
+ * Connect when exclusive or companion-downloads is enabled and a token is set.
  */
 export function syncCompanionConnection(): void {
-  const should =
-    exclusiveAudio.capable && exclusiveAudio.enabled && !!(exclusiveAudio.companionToken || "").trim();
+  const token = !!(exclusiveAudio.companionToken || "").trim();
+  const exclusiveOn = exclusiveAudio.capable && exclusiveAudio.enabled;
+  const downloadsOn = canUseCompanionDownloads() && downloads.enabled;
+  const should = token && (exclusiveOn || downloadsOn);
 
   if (!should) {
     disconnectCompanion();

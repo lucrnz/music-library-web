@@ -5,7 +5,9 @@
 import { reactive } from "vue";
 import { artistImageUrl } from "@/api";
 import type { Artist } from "@/models/artist";
-import { getOne } from "@/downloads/db";
+import { getOne, putOne } from "@/downloads/db";
+import { canUseCompanionDownloads } from "@/exclusive/capability";
+import { fileUrl, putFromUrl } from "@/downloads/companionBlob";
 import {
   albumCoverDirParts,
   albumCoverFileName,
@@ -38,6 +40,14 @@ export function wipeArtUrlCache() {
   for (const key of Object.keys(artUrlCache.urls)) revokeArtCached(key);
 }
 
+function absoluteLibraryUrl(url: string): string {
+  try {
+    return new URL(url, location.origin).href;
+  } catch {
+    return url;
+  }
+}
+
 async function blobUrlFor(
   cacheKey: string,
   dirParts: string[],
@@ -45,7 +55,16 @@ async function blobUrlFor(
 ): Promise<string | null> {
   const cached = artUrlCache.urls[cacheKey];
   if (cached) return cached;
-  const blob = await readBinary(dirParts, fileName);
+  let blob: Blob | null = null;
+  if (canUseCompanionDownloads()) {
+    try {
+      const res = await fetch(fileUrl([...dirParts, fileName].join("/")));
+      if (res.ok) blob = await res.blob();
+    } catch {
+      blob = null;
+    }
+  }
+  if (!blob) blob = await readBinary(dirParts, fileName);
   if (!blob) return null;
   const url = URL.createObjectURL(blob);
   artUrlCache.urls = { ...artUrlCache.urls, [cacheKey]: url };
@@ -63,15 +82,32 @@ export async function refreshArtistArtFile(
   try {
     const res = await fetch(artistImageUrl(artistDict, "thumb"));
     if (!res.ok) return;
-    await writeFromResponse(
-      artistCoverDirParts(),
-      artistCoverFileName(id, "thumb"),
-      res,
-    );
-    const blob = await readBinary(
-      artistCoverDirParts(),
-      artistCoverFileName(id, "thumb"),
-    );
+    let bytes = 0;
+    if (canUseCompanionDownloads()) {
+      const key = [...artistCoverDirParts(), artistCoverFileName(id, "thumb")].join("/");
+      const written = await putFromUrl({
+        requestId: `art-refresh-${id}`,
+        key,
+        url: absoluteLibraryUrl(artistImageUrl(artistDict, "thumb")),
+      });
+      bytes = written.bytes;
+    } else {
+      const written = await writeFromResponse(
+        artistCoverDirParts(),
+        artistCoverFileName(id, "thumb"),
+        res,
+      );
+      bytes = written.bytes;
+    }
+    existing.hasThumb = true;
+    existing.thumbBytes = bytes;
+    await putOne("artists", existing);
+    const blob = canUseCompanionDownloads()
+      ? await (await fetch(fileUrl([...artistCoverDirParts(), artistCoverFileName(id, "thumb")].join("/")))).blob()
+      : await readBinary(
+          artistCoverDirParts(),
+          artistCoverFileName(id, "thumb"),
+        );
     if (!blob) return;
     const key = `artist:${id}:thumb`;
     const prev = artUrlCache.urls[key];
@@ -121,43 +157,61 @@ async function fetchArtIfMissing(
   dirParts: string[],
   fileName: string,
   already: boolean,
-): Promise<boolean> {
-  if (already) return true;
+): Promise<{ ok: boolean; bytes?: number }> {
+  if (already) return { ok: true };
   try {
+    if (canUseCompanionDownloads()) {
+      const key = [...dirParts, fileName].join("/");
+      const written = await putFromUrl({
+        requestId: `art-${key}-${Date.now()}`,
+        key,
+        url: absoluteLibraryUrl(url),
+      });
+      return { ok: true, bytes: written.bytes };
+    }
     const res = await fetch(url);
-    if (!res.ok) return false;
-    await writeFromResponse(dirParts, fileName, res);
-    return true;
+    if (!res.ok) return { ok: false };
+    const written = await writeFromResponse(dirParts, fileName, res);
+    return { ok: true, bytes: written.bytes };
   } catch (err: unknown) {
     console.warn("Art download failed", err);
-    return false;
+    return { ok: false };
   }
 }
 
 /** Network + OPFS only — no IDB refcount. */
-export async function ensureAlbumArtFiles(albumId: string) {
+export async function ensureAlbumArtFiles(albumId: string): Promise<{
+  hasThumb: boolean;
+  hasFull: boolean;
+  thumbBytes?: number;
+  fullBytes?: number;
+}> {
   if (!albumId) return { hasThumb: false, hasFull: false };
   const existing = await getOne<CatalogAlbumRecord>("albums", albumId);
-  const hasThumb = await fetchArtIfMissing(
+  const thumb = await fetchArtIfMissing(
     `/api/cover?album_id=${encodeURIComponent(albumId)}&size=thumb`,
     albumCoverDirParts(),
     albumCoverFileName(albumId, "thumb"),
     !!existing?.hasThumb
   );
-  const hasFull = await fetchArtIfMissing(
+  const full = await fetchArtIfMissing(
     `/api/cover?album_id=${encodeURIComponent(albumId)}&size=full`,
     albumCoverDirParts(),
     albumCoverFileName(albumId, "full"),
     !!existing?.hasFull
   );
   return {
-    hasThumb: hasThumb || !!existing?.hasThumb,
-    hasFull: hasFull || !!existing?.hasFull,
+    hasThumb: thumb.ok || !!existing?.hasThumb,
+    hasFull: full.ok || !!existing?.hasFull,
+    thumbBytes: thumb.bytes ?? existing?.thumbBytes,
+    fullBytes: full.bytes ?? existing?.fullBytes,
   };
 }
 
-export async function ensureArtistArtFile(artistId: string) {
-  if (!artistId || artistId === "_unknown") return false;
+export async function ensureArtistArtFile(
+  artistId: string,
+): Promise<{ ok: boolean; bytes?: number }> {
+  if (!artistId || artistId === "_unknown") return { ok: false };
   const existing = await getOne<CatalogArtistRecord>("artists", artistId);
   return fetchArtIfMissing(
     `/api/artist-image?artist_id=${encodeURIComponent(artistId)}&size=thumb`,

@@ -12,17 +12,37 @@ function nav(): NavigatorWithExclusiveHints | null {
   return navigator as NavigatorWithExclusiveHints;
 }
 
-export function isMacPlatform(): boolean {
+function platformHint(): { ua: string; platform: string; uaData?: string } {
   const n = nav();
-  if (!n) return false;
-  const ua = n.userAgent || "";
-  const platform = n.platform || "";
-  // navigator.userAgentData may be more accurate when present
-  const uaData = n.userAgentData;
-  if (uaData?.platform) {
-    return /mac/i.test(uaData.platform);
-  }
+  if (!n) return { ua: "", platform: "" };
+  return {
+    ua: n.userAgent || "",
+    platform: n.platform || "",
+    uaData: n.userAgentData?.platform,
+  };
+}
+
+export function isMacPlatform(): boolean {
+  const { ua, platform, uaData } = platformHint();
+  if (uaData) return /mac/i.test(uaData);
   return /Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(ua);
+}
+
+export function isWindowsPlatform(): boolean {
+  const { ua, platform, uaData } = platformHint();
+  if (uaData) return /win/i.test(uaData);
+  return /Win/i.test(platform) || /Windows/i.test(ua);
+}
+
+export function isLinuxPlatform(): boolean {
+  const { ua, platform, uaData } = platformHint();
+  if (/android/i.test(uaData || "") || /android/i.test(ua)) return false;
+  if (uaData) return /linux/i.test(uaData);
+  return /Linux/i.test(platform) || /Linux/i.test(ua);
+}
+
+export function isDesktopPlatform(): boolean {
+  return isMacPlatform() || isWindowsPlatform() || isLinuxPlatform();
 }
 
 /** Installed PWA: standalone or minimal-ui display mode. */
@@ -40,7 +60,12 @@ export function isInstalledPwa(): boolean {
   return false;
 }
 
-/** Whether exclusive settings / companion UI may appear. */
+/** Whether exclusive settings / hog UI may appear. */
 export function canShowExclusiveUi(): boolean {
   return isMacPlatform() && isInstalledPwa();
+}
+
+/** Installed desktop PWA may use companion-disk Downloads. */
+export function canUseCompanionDownloads(): boolean {
+  return isDesktopPlatform() && isInstalledPwa();
 }

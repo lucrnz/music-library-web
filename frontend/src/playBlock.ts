@@ -44,7 +44,7 @@ export const PLAY_BLOCK_MESSAGES: Record<PlayBlockReason, string> = {
     "Exclusive audio is controlled in another tab or window.",
   exclusive_failed: "Exclusive playback stopped.",
   exclusive_no_format: "No supported exclusive format for this device.",
-  exclusive_lossy: "Exclusive playback does not support lossy sources yet.",
+  exclusive_lossy: "Exclusive playback cannot load this lossy file.",
   codec_unsupported: "This browser cannot decode this file.",
 };
 

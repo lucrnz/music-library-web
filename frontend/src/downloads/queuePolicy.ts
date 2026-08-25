@@ -11,8 +11,12 @@ import {
   requestHealthProbe,
   setHealthWork,
 } from "@/connectivity";
+import { onCompanionEvent } from "@/exclusive/companionClient";
+import { canUseCompanionDownloads } from "@/exclusive/capability";
+import { exclusiveAudio } from "@/stores/exclusiveAudio";
 import { codecExt } from "@/downloads/media";
 import { getOne, putOne, type MetaRecord } from "@/downloads/db";
+import { audioBlobKey, stat as blobStat } from "@/downloads/companionBlob";
 import {
   audioDirParts,
   audioFileName,
@@ -43,10 +47,19 @@ let downloadsEnabled = false;
  * Combined auto-pause: offline / server unreachable.
  * @returns {null | 'offline' | 'server'}
  */
-export type DownloadAutoPauseReason = "offline" | "server";
+export type DownloadAutoPauseReason = "offline" | "server" | "companion";
 
 export function downloadAutoPauseReason(): DownloadAutoPauseReason | null {
-  return autoPauseReason();
+  const net = autoPauseReason();
+  if (net) return net;
+  if (
+    canUseCompanionDownloads() &&
+    downloadsEnabled &&
+    exclusiveAudio.connection !== "connected"
+  ) {
+    return "companion";
+  }
+  return null;
 }
 
 export async function syncHealthFromPolicy() {
@@ -84,6 +97,16 @@ export function initPolicy(hooks: {
 
   onConnectivityRecovered(() => {
     reapplyNetworkPolicy().catch(console.error);
+  });
+
+  onCompanionEvent((evt) => {
+    if (
+      evt.type === "hello_ok" ||
+      evt.type === "disconnect" ||
+      evt.type === "hello_reject"
+    ) {
+      reapplyNetworkPolicy().catch(console.error);
+    }
   });
 }
 
@@ -156,6 +179,9 @@ export function getPauseBanner() {
   if (reason === "server") {
     return "Paused — waiting for the library server. Retrying automatically…";
   }
+  if (reason === "companion") {
+    return "Paused — waiting for the Desktop companion. Retrying automatically…";
+  }
   return "";
 }
 
@@ -193,8 +219,14 @@ export async function resumeQueue() {
       markPaused(it, "interrupted");
       try {
         const ext = codecExt(it.codec, it.snapshot?.sourceCodec);
-        const fileName = audioFileName(it.trackId, it.codec, ext);
-        const size = await partialByteSize(audioDirParts(), fileName);
+        let size = 0;
+        if (canUseCompanionDownloads()) {
+          const st = await blobStat(audioBlobKey(it.trackId, it.codec, ext));
+          size = st.bytes || 0;
+        } else {
+          const fileName = audioFileName(it.trackId, it.codec, ext);
+          size = await partialByteSize(audioDirParts(), fileName);
+        }
         if (size > 0 && it.id != null) {
           it.loaded = size;
           updateLiveProgress(it.id, size, it.total ?? null, {

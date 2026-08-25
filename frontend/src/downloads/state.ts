@@ -6,7 +6,7 @@ import { DEFAULT_DOWNLOAD_CONCURRENCY } from "@/downloads/concurrency";
 import { QueueState, type QueueRecord } from "@/downloads/queue";
 import { reactive } from "vue";
 
-export type AutoPausedReason = "offline" | "server";
+export type AutoPausedReason = "offline" | "server" | "companion";
 
 export interface DownloadsState {
   enabled: boolean;
@@ -18,8 +18,16 @@ export interface DownloadsState {
   downloadedBytes: number;
   storageUsage: number;
   storageQuota: number;
+  storageFree: number;
   storageSupported: boolean;
   nearQuota: boolean;
+  hasOpfsLeftovers: boolean;
+  migrate: {
+    active: boolean;
+    done: number;
+    total: number;
+    error: string;
+  };
   persistent: boolean;
   error: string;
   userPaused: boolean;
@@ -47,8 +55,11 @@ export const downloads = reactive<DownloadsState>({
   downloadedBytes: 0,
   storageUsage: 0,
   storageQuota: 0,
+  storageFree: 0,
   storageSupported: false,
   nearQuota: false,
+  hasOpfsLeftovers: false,
+  migrate: { active: false, done: 0, total: 0, error: "" },
   persistent: false,
   error: "",
   userPaused: false,

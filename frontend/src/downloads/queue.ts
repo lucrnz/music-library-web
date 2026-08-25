@@ -16,11 +16,13 @@ import {
   withStore,
   withStores,
 } from "@/downloads/db";
+import { audioBlobKey, deleteKey } from "@/downloads/companionBlob";
 import {
   audioDirParts,
   audioFileName,
   removePartial,
 } from "@/downloads/opfs";
+import { canUseCompanionDownloads } from "@/exclusive/capability";
 import { getTrackRecord } from "@/downloads/catalog";
 
 // ---------------------------------------------------------------------------
@@ -282,6 +284,10 @@ function trackCodecKey(trackId: string, codec: string) {
 export async function discardPartialForItem(item: QueueRecord) {
   try {
     const ext = codecExt(item.codec, item.snapshot?.sourceCodec);
+    if (canUseCompanionDownloads()) {
+      deleteKey(audioBlobKey(item.trackId, item.codec, ext));
+      return;
+    }
     const fileName = audioFileName(item.trackId, item.codec, ext);
     await removePartial(audioDirParts(), fileName);
   } catch {

@@ -8,18 +8,14 @@ import {
   exclusiveAudio,
   exclusiveStatusSnapshot,
   setExclusiveEnabled,
-  setExclusivePort,
   setFormatMode,
-  setCompanionToken,
   setSelectedDeviceId,
 } from "@/stores/exclusiveAudio";
 import {
-  disconnectCompanion,
   requestListDevices,
   syncCompanionConnection,
   syncPreferredDevice,
 } from "@/exclusive/companionClient";
-import { DEFAULT_PORT } from "@/exclusive/protocol";
 import SettingsSelect from "@/components/settings/SettingsSelect.vue";
 
 const FORMAT_OPTIONS = [
@@ -80,24 +76,6 @@ function onEnable(e: Event) {
   syncCompanionConnection();
 }
 
-function onToken(e: Event) {
-  const target = e.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  setCompanionToken(target.value);
-}
-
-function onTokenCommit() {
-  if (!(exclusiveAudio.companionToken || "").trim()) disconnectCompanion();
-  else syncCompanionConnection();
-}
-
-function onPort(e: Event) {
-  const target = e.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  setExclusivePort(target.value);
-  syncCompanionConnection();
-}
-
 function onMenuToggle(id: string) {
   emit("toggle", id);
 }
@@ -120,9 +98,8 @@ function onRefreshDevices() {
     <div class="modal-section">
       <div class="modal-section-title">Exclusive audio (macOS)</div>
       <p class="modal-hint">
-        Hog Core Audio via a local companion. Run
-        <code>COMPANION_TOKEN=… uv run musicweb companion</code>
-        on this Mac, paste the same token below, then enable.
+        Hog Core Audio through the Desktop companion on this Mac. Set the token
+        in Desktop companion, then enable exclusive and pick a device.
       </p>
 
       <label class="toggle-row">
@@ -134,40 +111,6 @@ function onRefreshDevices() {
           @change="onEnable"
         />
       </label>
-
-      <div class="settings-field">
-        <label class="settings-field-label" id="exclusive-token-label" for="exclusive-token">
-          COMPANION_TOKEN
-        </label>
-        <input
-          id="exclusive-token"
-          type="password"
-          autocomplete="off"
-          spellcheck="false"
-          class="text-input text-input-block"
-          :value="exclusiveAudio.companionToken"
-          @input="onToken"
-          @change="onTokenCommit"
-          placeholder="Same value as companion env"
-          aria-labelledby="exclusive-token-label"
-        />
-      </div>
-
-      <div class="settings-field">
-        <label class="settings-field-label" id="exclusive-port-label" for="exclusive-port">
-          Companion port (default {{ DEFAULT_PORT }})
-        </label>
-        <input
-          id="exclusive-port"
-          type="number"
-          min="1"
-          max="65535"
-          class="text-input text-input-narrow"
-          :value="exclusiveAudio.port"
-          @change="onPort"
-          aria-labelledby="exclusive-port-label"
-        />
-      </div>
 
       <p class="modal-hint" style="margin-top:10px">
         Status: {{ face.text }}

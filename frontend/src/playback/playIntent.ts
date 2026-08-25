@@ -4,6 +4,7 @@
  */
 import { streamUrl } from "@/api";
 import { catalogIndex, isLocallyPlayableDownload } from "@/downloads/catalog";
+import { isCompanionFileUrl } from "@/downloads/companionBlob";
 import { SOURCE_TAG, deliveryCodec } from "@/lossyKind";
 import type { Track } from "@/models/track";
 import {
@@ -73,12 +74,40 @@ export function hrefForStream(
   }
 }
 
-function exclusiveIntent(
+async function exclusiveIntent(
   track: Track | null | undefined,
   ctx: PlayIntentCtx,
-): PlayIntent {
+): Promise<PlayIntent> {
+  if (ctx.enabled && track?.id) {
+    const local = await resolvePlaySource(track, {
+      enabled: true,
+      offline: ctx.offline,
+      activeStreamCodec: track.isLossy
+        ? SOURCE_TAG
+        : ctx.exclusiveTag || ctx.activeStreamCodec,
+      playbackPolicy: ctx.playbackPolicy,
+      catalog: ctx.catalog,
+    });
+    if (local.source === "downloaded" && isCompanionFileUrl(local.url)) {
+      return {
+        sink: "companion",
+        source: "downloaded",
+        profile: local.profile,
+        url: local.url,
+      };
+    }
+  }
   if (track?.isLossy) {
-    return blocked("exclusive_lossy");
+    const url = hrefForStream(track, SOURCE_TAG, true);
+    if (!url) {
+      return blocked("exclusive_lossy");
+    }
+    return {
+      sink: "companion",
+      source: "streaming",
+      profile: SOURCE_TAG,
+      url,
+    };
   }
   const tag = ctx.exclusiveTag;
   if (!tag) {

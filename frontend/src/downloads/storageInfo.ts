@@ -99,48 +99,29 @@ export function formatIdleDownloadsSummary(d: {
 
 /**
  * Shared storage line for Settings + Downloads manager.
- * @param {{
- *   storageSupported?: boolean,
- *   storageUsage?: number,
- *   storageQuota?: number,
- *   trackCount?: number,
- *   downloadedBytes?: number,
- * }} d
- * @param {'short'|'long'} [style]
+ * Catalog used only (ready audio + owned art). `style` is kept for callers
+ * but short and long are the same string.
  */
 export function formatDownloadsStorageLine(
   d: {
     storageSupported?: boolean;
     storageUsage?: number;
     storageQuota?: number;
+    storageFree?: number;
     trackCount?: number;
     downloadedBytes?: number;
   },
-  style: "short" | "long" = "long",
+  _style: "short" | "long" = "long",
 ) {
-  if (!d.storageSupported) {
-    if (!d.trackCount) {
-      return style === "short" ? "Ready — no downloads yet" : "No downloads yet";
-    }
-    return `${d.trackCount} tracks · ~${formatBytes(d.downloadedBytes || 0)}${
-      style === "long" ? " audio" : ""
-    }`;
+  const n = d.trackCount || 0;
+  if (!n) {
+    return _style === "short" ? "Ready — no downloads yet" : "No downloads yet";
   }
-  const free = Math.max(0, (d.storageQuota || 0) - (d.storageUsage || 0));
-  if (style === "short") {
-    return (
-      `${formatBytes(d.storageUsage || 0)} used` +
-      (d.storageQuota ? ` / ${formatBytes(d.storageQuota)}` : "") +
-      (d.trackCount ? ` · ${d.trackCount} tracks` : "")
-    );
+  const label = n === 1 ? "1 track" : `${n} tracks`;
+  const used = formatBytes(d.downloadedBytes || 0);
+  const free = d.storageFree || 0;
+  if (free > 0) {
+    return `${label} · ${used} · ${formatBytes(free)} free`;
   }
-  return (
-    `${formatBytes(d.storageUsage || 0)} used` +
-    (d.storageQuota
-      ? ` · ${formatBytes(free)} free of ${formatBytes(d.storageQuota)}`
-      : "") +
-    (d.trackCount
-      ? ` · ${d.trackCount} tracks (~${formatBytes(d.downloadedBytes || 0)} audio)`
-      : "")
-  );
+  return `${label} · ${used}`;
 }

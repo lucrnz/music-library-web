@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { autoPauseReason } = vi.hoisted(() => ({
+const { autoPauseReason, canUseCompanionDownloads } = vi.hoisted(() => ({
   autoPauseReason: vi.fn(),
+  canUseCompanionDownloads: vi.fn(),
 }));
 
 vi.mock("@/connectivity", () => ({
@@ -41,8 +42,22 @@ vi.mock("@/api", () => ({
   apiGet: vi.fn(),
 }));
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
+vi.mock("@/exclusive/capability", () => ({
+  canUseCompanionDownloads,
+}));
+vi.mock("@/exclusive/companionClient", () => ({
+  onCompanionEvent: vi.fn(),
+}));
+vi.mock("@/downloads/companionBlob", () => ({
+  audioBlobKey: vi.fn(() => "audio/t1.flac.flac"),
+  stat: vi.fn(),
+}));
+vi.mock("@/stores/exclusiveAudio", () => ({
+  exclusiveAudio: { connection: "disconnected" },
+}));
 
-import { downloadAutoPauseReason } from "@/downloads/queuePolicy";
+import { downloadAutoPauseReason, setDownloadsEnabled } from "@/downloads/queuePolicy";
+import { exclusiveAudio } from "@/stores/exclusiveAudio";
 
 describe("downloadAutoPauseReason", () => {
   beforeEach(() => {
@@ -56,8 +71,20 @@ describe("downloadAutoPauseReason", () => {
     expect(downloadAutoPauseReason()).toBe("server");
   });
 
-  it("returns null when connectivity is clear", () => {
+  it("returns null when connectivity is clear", async () => {
     autoPauseReason.mockReturnValue(null);
+    canUseCompanionDownloads.mockReturnValue(false);
+    await setDownloadsEnabled(false);
+    expect(downloadAutoPauseReason()).toBeNull();
+  });
+
+  it("returns companion when capable, enabled, and disconnected", async () => {
+    autoPauseReason.mockReturnValue(null);
+    canUseCompanionDownloads.mockReturnValue(true);
+    await setDownloadsEnabled(true);
+    exclusiveAudio.connection = "disconnected";
+    expect(downloadAutoPauseReason()).toBe("companion");
+    exclusiveAudio.connection = "connected";
     expect(downloadAutoPauseReason()).toBeNull();
   });
 });

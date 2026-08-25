@@ -59,7 +59,7 @@ export async function hasOpfs() {
 export async function requireOpfs() {
   if (!(await hasOpfs())) {
     throw new Error(
-      "Downloads require Origin Private File System (OPFS). Use a recent Chromium, Safari, or Firefox build."
+      "Downloads require Origin Private File System (OPFS). Use a recent Chromium browser."
     );
   }
 }
@@ -488,6 +488,30 @@ export function albumCoverFileName(albumId: string, size: string) {
 
 export function artistCoverFileName(artistId: string, size: string) {
   return `${artistId}.${size}.webp`;
+}
+
+export interface ArtFileSpec {
+  dirParts: string[];
+  fileName: string;
+}
+
+/** Sum sizes of existing OPFS files; missing handles count as 0. */
+export async function sumExistingFileSizes(
+  specs: ArtFileSpec[],
+): Promise<number> {
+  if (!(await hasOpfs())) return 0;
+  let total = 0;
+  for (const spec of specs) {
+    try {
+      const dir = await getDir(spec.dirParts, { create: false });
+      const handle = await dir.getFileHandle(spec.fileName, { create: false });
+      const file = await handle.getFile();
+      total += file.size || 0;
+    } catch {
+      /* missing */
+    }
+  }
+  return total;
 }
 
 export async function wipeOpfsDownloads() {

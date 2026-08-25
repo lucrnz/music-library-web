@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION, envelope } from "@/exclusive/protocol";
+import {
+  MSG_BLOB_PUT,
+  MSG_DISK_INFO_OK,
+  PROTOCOL_VERSION,
+  envelope,
+} from "@/exclusive/protocol";
 
 describe("exclusive protocol envelope", () => {
   it("includes type and version", () => {
@@ -7,5 +12,11 @@ describe("exclusive protocol envelope", () => {
     expect(body.type).toBe("hello");
     expect(body.v).toBe(PROTOCOL_VERSION);
     expect(body.token).toBe("t");
+  });
+
+  it("blob types are non-empty and version stays 1", () => {
+    expect(MSG_BLOB_PUT).toBe("blob_put");
+    expect(MSG_DISK_INFO_OK).toBe("disk_info_ok");
+    expect(PROTOCOL_VERSION).toBe(1);
   });
 });

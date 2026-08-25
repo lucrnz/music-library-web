@@ -36,6 +36,13 @@ import {
 } from "@/downloads/queue";
 import type { Track } from "@/models/track";
 import { DEMOTE_ABORT_REASON } from "@/downloads/concurrency";
+import { canUseCompanionDownloads } from "@/exclusive/capability";
+import {
+  abortPut,
+  audioBlobKey,
+  putFromUrl,
+  stat as blobStat,
+} from "@/downloads/companionBlob";
 import { canPump, onJobNetworkFailure } from "@/downloads/queuePolicy";
 
 function errorNumericField(err: unknown, key: string): number | undefined {
@@ -272,6 +279,97 @@ export async function applyJobOutcome(
  * @param {object} item
  * @returns {Promise<void>}
  */
+async function executeCompanionJob(
+  item: QueueRecord,
+  ac: AbortController,
+  track: Track | undefined,
+  ext: string,
+  fileCtx: { dirParts: string[]; fileName: string },
+  id: number,
+): Promise<{ outcome: JobOutcome; ctx?: JobCtx }> {
+  const key = audioBlobKey(item.trackId, item.codec, ext);
+  const requestId = `q-${id}-${Date.now()}`;
+  let offset = 0;
+  try {
+    const st = await blobStat(key);
+    if (st.exists) {
+      return {
+        outcome: { kind: "done" },
+        ctx: {
+          ...fileCtx,
+          track,
+          codec: item.codec,
+          mediaType: codecMediaType(item.codec, track?.sourceCodec),
+          ext,
+          bytes: st.bytes,
+        },
+      };
+    }
+    offset = st.bytes || 0;
+  } catch {
+    offset = 0;
+  }
+  if (offset > 0) {
+    updateLiveProgress(id, offset, item.total ?? null, { forceUi: true });
+  }
+  const rel = streamUrl({ id: item.trackId }, item.codec);
+  if (!rel) return { outcome: { kind: "failed", error: "No stream URL" } };
+  let abs = rel;
+  try {
+    abs = new URL(rel, location.origin).href;
+  } catch {
+    /* keep relative — companion cannot fetch it */
+  }
+  const onAbort = () => abortPut(requestId);
+  ac.signal.addEventListener("abort", onAbort);
+  try {
+    const done = await putFromUrl({
+      requestId,
+      key,
+      url: abs,
+      offset,
+      onProgress: (loaded, total) => updateLiveProgress(id, loaded, total),
+    });
+    const current = await getOne<QueueRecord>("queue", id);
+    if (!current || current.state === QueueState.CANCELED) {
+      return { outcome: { kind: "canceled" } };
+    }
+    return {
+      outcome: { kind: "done" },
+      ctx: {
+        ...fileCtx,
+        track,
+        codec: current.codec,
+        mediaType: codecMediaType(
+          current.codec,
+          track?.sourceCodec || current.snapshot?.sourceCodec,
+        ),
+        ext,
+        bytes: done.bytes,
+      },
+    };
+  } catch (err: unknown) {
+    if (ac.signal.aborted) {
+      const cur = await getOne<QueueRecord>("queue", id);
+      return { outcome: abortOutcome(cur, ac), ctx: fileCtx };
+    }
+    const code = err && typeof err === "object" ? Reflect.get(err, "code") : "";
+    const msg = err instanceof Error ? err.message : String(err);
+    if (code === "enospc" || /no space|ENOSPC|quota/i.test(msg)) {
+      return {
+        outcome: { kind: "failed", error: "Storage full — free space and retry" },
+      };
+    }
+    if (isNetworkClassError(err)) {
+      reportFailure(err);
+      return { outcome: { kind: "network" } };
+    }
+    return { outcome: { kind: "failed", error: msg } };
+  } finally {
+    ac.signal.removeEventListener("abort", onAbort);
+  }
+}
+
 export async function executeDownloadJob(
   item: QueueRecord,
   ac: AbortController,
@@ -305,6 +403,10 @@ export async function executeDownloadJob(
   if (ac.signal.aborted) {
     const cur = await getOne<QueueRecord>("queue", id);
     return { outcome: abortOutcome(cur, ac), ctx: fileCtx };
+  }
+
+  if (canUseCompanionDownloads()) {
+    return executeCompanionJob(item, ac, track, ext, fileCtx, id);
   }
 
   let offset = await partialByteSize(dirParts, fileName);

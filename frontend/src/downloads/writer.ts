@@ -21,6 +21,14 @@ import {
 import { invalidateDownloadsCatalogView } from "@/downloads/snapshot";
 import { deleteLyricsRecord } from "@/downloads/lyricsStore";
 import { codecExt, codecMediaType } from "@/downloads/media";
+import { canUseCompanionDownloads } from "@/exclusive/capability";
+import {
+  albumArtBlobKey,
+  artistArtBlobKey,
+  audioBlobKey,
+  deleteKey,
+  fileUrl,
+} from "@/downloads/companionBlob";
 import {
   albumCoverDirParts,
   albumCoverFileName,
@@ -30,7 +38,9 @@ import {
   audioFileName,
   deleteBinary,
   readBinary,
+  sumExistingFileSizes,
   wipeOpfsDownloads,
+  type ArtFileSpec,
 } from "@/downloads/opfs";
 import {
   ensureAlbumArtFiles,
@@ -52,6 +62,8 @@ export interface CatalogAlbumRecord {
   refCount: number;
   hasThumb: boolean;
   hasFull: boolean;
+  thumbBytes?: number;
+  fullBytes?: number;
 }
 
 export interface CatalogArtistRecord {
@@ -59,6 +71,7 @@ export interface CatalogArtistRecord {
   name: string;
   refCount: number;
   hasThumb: boolean;
+  thumbBytes?: number;
 }
 
 export interface CatalogTrackAudioMeta {
@@ -107,11 +120,17 @@ export async function getLocalAudioUrlForRecord(
   rec: CatalogTrackRecord,
 ): Promise<string | null> {
   if (!rec || !rec.codec || rec.status === "broken") return null;
-  const name = audioFileName(
-    rec.trackId,
-    rec.codec,
-    rec.ext || codecExt(rec.codec, rec.sourceCodec)
-  );
+  const ext = rec.ext || codecExt(rec.codec, rec.sourceCodec);
+  const name = audioFileName(rec.trackId, rec.codec, ext);
+  if (canUseCompanionDownloads()) {
+    const key = audioBlobKey(rec.trackId, rec.codec, ext);
+    try {
+      const res = await fetch(fileUrl(key), { method: "HEAD" });
+      if (res.ok) return fileUrl(key);
+    } catch {
+      /* leftover OPFS may still play in HTML until migrate Yes */
+    }
+  }
   const blob = await readBinary(audioDirParts(), name);
   if (!blob) return null;
   return URL.createObjectURL(blob);
@@ -245,14 +264,18 @@ async function persistCatalogTrack(
   });
 
   if (replaced.audio) {
-    const name = audioFileName(
-      n.id,
-      replaced.audio.codec,
+    const ext =
       replaced.audio.ext ||
-        codecExt(replaced.audio.codec, replaced.audio.sourceCodec),
-    );
+      codecExt(replaced.audio.codec, replaced.audio.sourceCodec);
     try {
-      await deleteBinary(audioDirParts(), name);
+      if (canUseCompanionDownloads()) {
+        deleteKey(audioBlobKey(n.id, replaced.audio.codec, ext));
+      } else {
+        await deleteBinary(
+          audioDirParts(),
+          audioFileName(n.id, replaced.audio.codec, ext),
+        );
+      }
     } catch {
       /* best-effort unlink of replaced codec */
     }
@@ -265,10 +288,10 @@ async function refreshCatalogArt(n: Track) {
   const albumArt = n.albumId
     ? await ensureAlbumArtFiles(n.albumId)
     : { hasThumb: false, hasFull: false };
-  const artistArt: Record<string, boolean> = {};
+  const artistArt: Record<string, { ok: boolean; bytes?: number }> = {};
   for (const aid of pinArtists) {
     if (aid === "_unknown") {
-      artistArt[aid] = false;
+      artistArt[aid] = { ok: false };
       continue;
     }
     artistArt[aid] = await ensureArtistArtFile(aid);
@@ -282,16 +305,20 @@ async function refreshCatalogArt(n: Track) {
         if (album) {
           album.hasThumb = album.hasThumb || albumArt.hasThumb;
           album.hasFull = album.hasFull || albumArt.hasFull;
+          if (albumArt.thumbBytes != null) album.thumbBytes = albumArt.thumbBytes;
+          if (albumArt.fullBytes != null) album.fullBytes = albumArt.fullBytes;
           stores.albums.put(album);
         }
       }
       for (const aid of pinArtists) {
-        if (aid === "_unknown" || !artistArt[aid]) continue;
+        const got = artistArt[aid];
+        if (aid === "_unknown" || !got?.ok) continue;
         const artist = await reqToPromise<CatalogArtistRecord | undefined>(
           stores.artists.get(aid),
         );
-        if (artist && !artist.hasThumb) {
+        if (artist) {
           artist.hasThumb = true;
+          if (got.bytes != null) artist.thumbBytes = got.bytes;
           stores.artists.put(artist);
         }
       }
@@ -392,7 +419,11 @@ export async function deleteTrackDownload(trackId: string) {
     rec.ext || codecExt(rec.codec!, rec.sourceCodec),
   );
   try {
-    await deleteBinary(audioDirParts(), name);
+    if (canUseCompanionDownloads()) {
+      deleteKey(audioBlobKey(trackId, rec.codec!, rec.ext || codecExt(rec.codec!, rec.sourceCodec)));
+    } else {
+      await deleteBinary(audioDirParts(), name);
+    }
   } catch {
     /* catalog row is already gone */
   }
@@ -406,26 +437,38 @@ export async function deleteTrackDownload(trackId: string) {
   if (cleanup.dropAlbum && cleanup.albumId) {
     if (cleanup.albumHadThumb) {
       revokeArtCached(`cover:${cleanup.albumId}:thumb`);
-      await deleteBinary(
-        albumCoverDirParts(),
-        albumCoverFileName(cleanup.albumId, "thumb")
-      );
+      if (canUseCompanionDownloads()) {
+        deleteKey(albumArtBlobKey(cleanup.albumId, "thumb"));
+      } else {
+        await deleteBinary(
+          albumCoverDirParts(),
+          albumCoverFileName(cleanup.albumId, "thumb")
+        );
+      }
     }
     if (cleanup.albumHadFull) {
       revokeArtCached(`cover:${cleanup.albumId}:full`);
-      await deleteBinary(
-        albumCoverDirParts(),
-        albumCoverFileName(cleanup.albumId, "full")
-      );
+      if (canUseCompanionDownloads()) {
+        deleteKey(albumArtBlobKey(cleanup.albumId, "full"));
+      } else {
+        await deleteBinary(
+          albumCoverDirParts(),
+          albumCoverFileName(cleanup.albumId, "full")
+        );
+      }
     }
   }
   for (const aid of cleanup.dropArtists) {
     if (cleanup.artistHadThumb[aid]) {
       revokeArtCached(`artist:${aid}:thumb`);
-      await deleteBinary(
-        artistCoverDirParts(),
-        artistCoverFileName(aid, "thumb")
-      );
+      if (canUseCompanionDownloads()) {
+        deleteKey(artistArtBlobKey(aid, "thumb"));
+      } else {
+        await deleteBinary(
+          artistCoverDirParts(),
+          artistCoverFileName(aid, "thumb")
+        );
+      }
     }
   }
   invalidateDownloadsCatalogView();
@@ -452,13 +495,87 @@ export async function deleteArtistDownloads(artistId: string) {
 
 export async function wipeAllDownloads() {
   wipeArtUrlCache();
+  if (canUseCompanionDownloads()) {
+    const tracks = await listTrackRecords();
+    const albums = await listAlbumRecords();
+    const artists = await listArtistRecords();
+    for (const t of tracks) {
+      if (!t.codec) continue;
+      deleteKey(
+        audioBlobKey(
+          t.trackId,
+          t.codec,
+          t.ext || codecExt(t.codec, t.sourceCodec),
+        ),
+      );
+    }
+    for (const al of albums) {
+      if (al.hasThumb) deleteKey(albumArtBlobKey(al.albumId, "thumb"));
+      if (al.hasFull) deleteKey(albumArtBlobKey(al.albumId, "full"));
+    }
+    for (const ar of artists) {
+      if (ar.hasThumb) deleteKey(artistArtBlobKey(ar.artistId, "thumb"));
+    }
+  }
   await wipeOpfsDownloads();
   await wipeDownloadsDb();
   clearCatalogProjection();
   invalidateDownloadsCatalogView();
 }
 
+export function artFileSpecsFromRecords(
+  albums: {
+    albumId: string;
+    hasThumb?: boolean;
+    hasFull?: boolean;
+    thumbBytes?: number;
+    fullBytes?: number;
+  }[],
+  artists: { artistId: string; hasThumb?: boolean; thumbBytes?: number }[],
+): ArtFileSpec[] {
+  const specs: ArtFileSpec[] = [];
+  for (const al of albums) {
+    if (al.hasThumb && al.thumbBytes == null) {
+      specs.push({
+        dirParts: albumCoverDirParts(),
+        fileName: albumCoverFileName(al.albumId, "thumb"),
+      });
+    }
+    if (al.hasFull && al.fullBytes == null) {
+      specs.push({
+        dirParts: albumCoverDirParts(),
+        fileName: albumCoverFileName(al.albumId, "full"),
+      });
+    }
+  }
+  for (const ar of artists) {
+    if (ar.hasThumb && ar.thumbBytes == null) {
+      specs.push({
+        dirParts: artistCoverDirParts(),
+        fileName: artistCoverFileName(ar.artistId, "thumb"),
+      });
+    }
+  }
+  return specs;
+}
+
 export async function sumDownloadedBytes() {
   const tracks = await listTrackRecords();
-  return tracks.reduce((s, t) => s + (t.bytes || 0), 0);
+  let total = 0;
+  for (const t of tracks) {
+    if (t.status === "ready") total += t.bytes || 0;
+  }
+  const albums = await listAlbumRecords();
+  const artists = await listArtistRecords();
+  for (const al of albums) {
+    if (al.hasThumb && al.thumbBytes != null) total += al.thumbBytes;
+    if (al.hasFull && al.fullBytes != null) total += al.fullBytes;
+  }
+  for (const ar of artists) {
+    if (ar.hasThumb && ar.thumbBytes != null) total += ar.thumbBytes;
+  }
+  if (!canUseCompanionDownloads()) {
+    total += await sumExistingFileSizes(artFileSpecsFromRecords(albums, artists));
+  }
+  return total;
 }

@@ -25,6 +25,8 @@ import {
   refreshStorageInfo,
   setDownloadConcurrency,
 } from "@/downloads/index";
+import { cancelMigrate } from "@/downloads/migrate";
+import { confirmMigrateDownloads } from "@/downloads/ui";
 import { downloads } from "@/downloads/state";
 import { confirmDialog } from "@/stores/dialog";
 import { copyText } from "@/clipboard";
@@ -36,9 +38,11 @@ import {
 } from "@/diag/log";
 import {
   exclusiveAudio,
-  shouldHideBrowserQualityControls,
+  shouldHideStreamQualityControls,
 } from "@/stores/exclusiveAudio";
 import Icon from "@/components/icons/Icon.vue";
+import { canUseCompanionDownloads } from "@/exclusive/capability";
+import CompanionPanel from "@/components/settings/CompanionPanel.vue";
 import ExclusiveAudioPanel from "@/components/settings/ExclusiveAudioPanel.vue";
 import LibraryScanPanel from "@/components/settings/LibraryScanPanel.vue";
 import SettingsSelect from "@/components/settings/SettingsSelect.vue";
@@ -53,11 +57,12 @@ const playbackPolicies = PLAYBACK_POLICIES;
       return canReachServer();
     });
 
-    const hideBrowserQuality = computed(() =>
-      shouldHideBrowserQualityControls()
+    const hideStreamQuality = computed(() =>
+      shouldHideStreamQualityControls()
     );
 
     const showExclusivePanel = computed(() => exclusiveAudio.capable);
+    const showCompanionPanel = computed(() => canUseCompanionDownloads());
 
     const scanPanelActive = computed(
       () => settings.open && libraryReachable.value
@@ -249,14 +254,21 @@ const playbackPolicies = PLAYBACK_POLICIES;
           </button>
         </div>
 
-        <div v-if="!hideBrowserQuality" class="modal-section">
+        <div class="modal-section">
           <div class="modal-section-title">Quality</div>
           <p class="modal-hint">
-            Choose streaming quality.
-            <template v-if="downloads.enabled"> Downloads use their own quality setting.</template>
+            <template v-if="!hideStreamQuality">
+              Choose streaming quality.
+              <template v-if="downloads.enabled"> Downloads use their own quality setting.</template>
+            </template>
+            <template v-else>
+              Exclusive streams use the best lossless quality your output device allows.
+              Downloads quality and the download policy still apply.
+            </template>
           </p>
 
           <SettingsSelect
+            v-if="!hideStreamQuality"
             menu-id="stream"
             label-id="stream-codec-label"
             field-label="Streaming"
@@ -296,12 +308,8 @@ const playbackPolicies = PLAYBACK_POLICIES;
             <p class="modal-hint" style="margin-top:8px;margin-bottom:0">{{ policyHint }}</p>
           </SettingsSelect>
         </div>
-        <div v-else class="modal-section">
-          <div class="modal-section-title">Quality</div>
-          <p class="modal-hint">
-            While exclusive audio is on, streams use the best lossless quality your output device allows.
-          </p>
-        </div>
+
+        <CompanionPanel v-if="showCompanionPanel" />
 
         <ExclusiveAudioPanel
           v-if="showExclusivePanel"
@@ -327,9 +335,29 @@ const playbackPolicies = PLAYBACK_POLICIES;
           <p v-if="downloads.enabled && downloadsStorageLine" class="modal-hint" style="margin-top:8px">
             {{ downloadsStorageLine }}
           </p>
-          <p v-if="downloads.enabled && downloads.nearQuota" class="modal-hint warn">
-            Storage almost full — free space or delete downloads.
-          </p>
+          <template v-if="downloads.hasOpfsLeftovers">
+            <p class="modal-hint warn" style="margin-top:8px">
+              Leftover browser downloads should be moved to the Desktop companion.
+              <template v-if="downloads.migrate.active">
+                {{ downloads.migrate.done }} / {{ downloads.migrate.total }}
+              </template>
+            </p>
+            <div class="scan-actions" style="margin-top:8px">
+              <button
+                v-if="!downloads.migrate.active"
+                type="button"
+                class="pill"
+                @click="confirmMigrateDownloads()"
+              >Migrate leftover downloads</button>
+              <button
+                v-else
+                type="button"
+                class="pill"
+                @click="cancelMigrate()"
+              >Cancel migrate</button>
+            </div>
+          </template>
+
           <SettingsSelect
             v-if="downloads.enabled"
             menu-id="dl-concurrency"

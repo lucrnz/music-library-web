@@ -19,7 +19,8 @@ export function activeDelivery(): DeliveryPolicy {
   if (isExclusiveEnabled()) {
     return {
       sink: "companion",
-      profileFor: (track) => getExclusiveProfileTag(track),
+      profileFor: (track) =>
+        track?.isLossy ? "source" : getExclusiveProfileTag(track),
     };
   }
   return {

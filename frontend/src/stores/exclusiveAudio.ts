@@ -41,6 +41,8 @@ export interface ExclusiveAudioState {
   sessionId: string;
   devices: ExclusiveDevice[];
   lastError: string | null;
+  /** Companion app-support path from hello / disk_info. Not persisted. */
+  dataDir: string;
 }
 
 const KEY_ENABLED = "musicweb.exclusive.enabled";
@@ -71,6 +73,7 @@ export const exclusiveAudio = reactive<ExclusiveAudioState>({
   sessionId: "",
   devices: [],
   lastError: null,
+  dataDir: "",
 });
 
 /** Track ids toasted for missing tech this session */
@@ -148,10 +151,16 @@ export function isExclusiveArmed() {
 }
 
 /**
- * Gate for stream/download/playback-policy UI.
+ * Hide the Streaming picker while exclusive is on.
+ * Downloads quality and “When a download exists” stay visible.
  */
-export function shouldHideBrowserQualityControls() {
+export function shouldHideStreamQualityControls() {
   return isExclusiveEnabled();
+}
+
+/** @deprecated use shouldHideStreamQualityControls */
+export function shouldHideBrowserQualityControls() {
+  return false;
 }
 
 /** Device row used for formatPolicy caps: preference if still listed, else live. */
@@ -224,6 +233,7 @@ export function setExclusiveLive(partial: {
   devices?: ExclusiveDevice[];
   companionDeviceId?: string | null;
   lastError?: string | null;
+  dataDir?: string | null;
 }) {
   if (partial.connection != null) exclusiveAudio.connection = partial.connection;
   if ("role" in partial) exclusiveAudio.role = partial.role ?? null;
@@ -232,6 +242,7 @@ export function setExclusiveLive(partial: {
     exclusiveAudio.companionDeviceId = partial.companionDeviceId ?? null;
   }
   if ("lastError" in partial) exclusiveAudio.lastError = partial.lastError ?? null;
+  if ("dataDir" in partial) exclusiveAudio.dataDir = partial.dataDir || "";
 }
 
 export function setExclusiveEnabled(on: boolean) {

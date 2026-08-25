@@ -23,6 +23,16 @@ import {
   onConnectivityChange,
   reportFailure,
 } from "@/connectivity";
+import {
+  syncCompanionConnection,
+  waitForCompanionConnection,
+} from "@/exclusive/companionClient";
+import {
+  canUseCompanionDownloads,
+  isDesktopPlatform,
+  isInstalledPwa,
+} from "@/exclusive/capability";
+import { exclusiveAudio } from "@/stores/exclusiveAudio";
 import { settings } from "@/stores/settings";
 import { acquireModalLock, releaseModalLock } from "@/stores/modalLock";
 import {
@@ -35,6 +45,8 @@ import {
   sumDownloadedBytes,
   wipeAllDownloads,
 } from "@/downloads/catalog";
+import { diskFree } from "@/downloads/companionBlob";
+import { refreshLeftoverFlag } from "@/downloads/migrate";
 import { openDownloadsDb } from "@/downloads/db";
 import { requireOpfs } from "@/downloads/opfs";
 import {
@@ -71,11 +83,8 @@ import {
   stopAll,
 } from "@/downloads/queueRuntime";
 import {
-  formatBytes,
   formatDownloadsStorageLine,
   formatIdleDownloadsSummary,
-  getStorageEstimate,
-  isNearQuota,
   requestPersistentStorage,
 } from "@/downloads/storageInfo";
 const DOWNLOADS_STORAGE_KEY = "musicweb.downloadsEnabled";
@@ -183,24 +192,23 @@ export function bindConnectivityListeners() {
  * @returns {Promise<{ near: boolean, message?: string }>}
  */
 export async function getNearQuotaWarning(
-  trackCount = 1,
+  _trackCount = 1,
 ): Promise<{ near: boolean; message?: string }> {
-  await refreshStorageInfo();
-  if (!downloads.nearQuota) return { near: false };
-  const n = Math.max(1, Number(trackCount) || 1);
-  const message =
-    n > 1
-      ? `Storage almost full (${formatBytes(downloads.storageUsage)} used). Download ${n} tracks anyway?`
-      : `Storage almost full (${formatBytes(downloads.storageUsage)} used). Download anyway?`;
-  return { near: true, message };
+  return { near: false };
 }
 
 export async function refreshStorageInfo() {
-  const est = await getStorageEstimate();
-  downloads.storageUsage = est.usage;
-  downloads.storageQuota = est.quota;
-  downloads.storageSupported = est.supported;
-  downloads.nearQuota = isNearQuota(est);
+  downloads.nearQuota = false;
+  downloads.storageQuota = 0;
+  if (canUseCompanionDownloads()) {
+    try {
+      downloads.storageFree = await diskFree();
+    } catch {
+      downloads.storageFree = 0;
+    }
+  } else {
+    downloads.storageFree = 0;
+  }
   try {
     downloads.downloadedBytes = await sumDownloadedBytes();
     downloads.trackCount = (await listTrackRecords()).length;
@@ -232,7 +240,9 @@ export async function refreshQueue(opts: { includeStorage?: boolean } = {}) {
  * Safe to call when already booted (idempotent open/bind guards).
  */
 async function bootDownloadsRuntime() {
-  await requireOpfs();
+  if (!canUseCompanionDownloads()) {
+    await requireOpfs();
+  }
   await openDownloadsDb();
   downloads.persistent = await requestPersistentStorage();
   await setDownloadsEnabled(true);
@@ -249,9 +259,22 @@ export async function initDownloads() {
   downloads.concurrency = loadDownloadConcurrency();
   const on = loadEnabledFlag();
   downloads.enabled = on;
+  if (isDesktopPlatform() && !isInstalledPwa()) {
+    downloads.enabled = false;
+    try {
+      await openDownloadsDb();
+      await refreshStorageInfo();
+    } catch {
+      /* leftover catalog optional */
+    }
+    downloads.ready = true;
+    syncControlFlags();
+    return;
+  }
   if (!on) {
     try {
       await refreshStorageInfo();
+      if (canUseCompanionDownloads()) await refreshLeftoverFlag();
     } catch {
       /* ignore */
     }
@@ -260,9 +283,20 @@ export async function initDownloads() {
     return;
   }
   try {
+    if (canUseCompanionDownloads()) {
+      syncCompanionConnection();
+      await waitForCompanionConnection();
+    }
     await bootDownloadsRuntime();
     downloads.enabled = true;
     downloads.ready = true;
+    if (canUseCompanionDownloads()) {
+      await refreshLeftoverFlag();
+      if (downloads.hasOpfsLeftovers) {
+        const { confirmMigrateDownloads } = await import("@/downloads/ui");
+        await confirmMigrateDownloads();
+      }
+    }
   } catch (err: unknown) {
     console.error("Downloads init failed", err);
     downloads.error = err instanceof Error ? err.message : String(err);
@@ -281,21 +315,59 @@ export function setDownloadConcurrency(v: number): boolean {
   return true;
 }
 
+function assertDesktopTabDownloads(): void {
+  if (isDesktopPlatform() && !isInstalledPwa()) {
+    throw new Error("Use the installed app to download.");
+  }
+}
+
+async function connectCompanionForDownloads(): Promise<void> {
+  if (!canUseCompanionDownloads()) return;
+  if (!(exclusiveAudio.companionToken || "").trim()) {
+    throw new Error("Paste COMPANION_TOKEN in Desktop companion settings.");
+  }
+  syncCompanionConnection();
+  const ok = await waitForCompanionConnection();
+  if (!ok || exclusiveAudio.connection !== "connected") {
+    throw new Error("Start the Desktop companion to enable downloads.");
+  }
+}
+
 export async function enableDownloads() {
+  assertDesktopTabDownloads();
   saveEnabledFlag(true);
   downloads.enabled = true;
+  if (canUseCompanionDownloads()) {
+    try {
+      await connectCompanionForDownloads();
+    } catch (err: unknown) {
+      downloads.enabled = false;
+      saveEnabledFlag(false);
+      syncCompanionConnection();
+      throw err;
+    }
+  }
   try {
     await bootDownloadsRuntime();
     downloads.ready = true;
+    if (canUseCompanionDownloads()) {
+      await refreshLeftoverFlag();
+      if (downloads.hasOpfsLeftovers) {
+        const { confirmMigrateDownloads } = await import("@/downloads/ui");
+        await confirmMigrateDownloads();
+      }
+    }
   } catch (err: unknown) {
     console.error("Downloads enable failed", err);
     downloads.error = err instanceof Error ? err.message : String(err);
     downloads.enabled = false;
     saveEnabledFlag(false);
     downloads.ready = true;
+    syncCompanionConnection();
     throw err;
   }
   syncControlFlags();
+  syncCompanionConnection();
 }
 
 /**
@@ -305,6 +377,7 @@ export async function enableDownloads() {
  */
 async function wipeCatalogStorage() {
   await wipeAllDownloads();
+  downloads.hasOpfsLeftovers = false;
   downloads.trackCount = 0;
   downloads.downloadedBytes = 0;
   try {
@@ -349,6 +422,7 @@ export async function disableDownloads({ wipe }: { wipe: boolean }) {
     }
   }
   syncControlFlags();
+  syncCompanionConnection();
 }
 
 export function openDownloadsManager() {

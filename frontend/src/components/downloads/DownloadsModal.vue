@@ -16,7 +16,8 @@ import {
 } from "@/downloads/index";
 import { downloads } from "@/downloads/state";
 import { formatBytes } from "@/downloads/storageInfo";
-import { confirmRemoveDownloadedTrack } from "@/downloads/ui";
+import { cancelMigrate } from "@/downloads/migrate";
+import { confirmMigrateDownloads, confirmRemoveDownloadedTrack } from "@/downloads/ui";
 import { confirmDialog } from "@/stores/dialog";
 import { settings } from "@/stores/settings";
 import Icon from "@/components/icons/Icon.vue";
@@ -301,9 +302,29 @@ const roots = ref<TreeNode[]>([]);
 
         <div class="modal-section">
           <p class="modal-hint">{{ storageLine }}</p>
-          <p v-if="downloads.nearQuota" class="modal-hint warn">
-            Storage almost full — free space or delete downloads.
-          </p>
+          <template v-if="downloads.hasOpfsLeftovers">
+            <p class="modal-hint warn">
+              Leftover browser downloads should be moved to the Desktop companion.
+              <template v-if="downloads.migrate.active">
+                {{ downloads.migrate.done }} / {{ downloads.migrate.total }}
+              </template>
+            </p>
+            <div class="scan-actions" style="margin-top:8px">
+              <button
+                v-if="!downloads.migrate.active"
+                type="button"
+                class="pill"
+                @click="confirmMigrateDownloads()"
+              >Migrate leftover downloads</button>
+              <button
+                v-else
+                type="button"
+                class="pill"
+                @click="cancelMigrate()"
+              >Cancel migrate</button>
+            </div>
+          </template>
+
         </div>
 
         <div v-if="queueItems.length" class="modal-section">
