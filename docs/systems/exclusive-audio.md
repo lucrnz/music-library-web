@@ -158,6 +158,8 @@ Digital **mpv** volume is required and must not block playback. Hog bypasses the
 
 When a hardware volume write succeeds, that write is the slider and mpv stays at unity. Otherwise the slider is digital mpv. Each apply picks the path independently. The companion re-applies after exclusive output is up, not only when the slider moves.
 
+When exclusive is enabled and a device is selected, the companion reads that device’s current (pre-hog) hardware volume, uses it as the slider, and status `volume` updates the in-app face. Re-selecting the same live device does not re-read. If the level could not be read, the slider is left alone.
+
 Pre-hog hardware volume is restored when exclusive is released, the output device changes, or the companion process stops. If that level could not be read, it is left alone. A crash or SIGKILL without a clean stop cannot restore.
 
 Mac volume keys usually do nothing while hogged. The in-app slider is exclusive volume.

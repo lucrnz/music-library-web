@@ -12,7 +12,10 @@ import {
   type ExclusiveDevice,
 } from "@/stores/exclusiveAudio";
 import { canUseCompanionDownloads } from "@/exclusive/capability";
+import { companionVolumeToFace } from "@/exclusive/companionVolume";
 import { downloads } from "@/downloads/state";
+import { setOutputVolume } from "@/stores/playerPrefs";
+import { player } from "@/stores/playerState";
 import {
   HEARTBEAT_INTERVAL_MS,
   MSG_DEVICES,
@@ -64,6 +67,7 @@ interface CompanionWireMessage {
   message?: string;
   code?: string;
   selected_device_id?: unknown;
+  volume?: unknown;
   requestId?: string;
   key?: string;
   loaded?: number;
@@ -343,6 +347,14 @@ function applyStatus(msg: CompanionWireMessage): void {
     } else {
       clearLiveDevice();
     }
+  }
+
+  const face = companionVolumeToFace(msg.volume, {
+    exclusiveEnabled: isExclusiveEnabled(),
+    deviceSelected: !!exclusiveAudio.companionDeviceId,
+  });
+  if (face != null && Math.abs(player.volume - face) > 1e-4) {
+    setOutputVolume(face);
   }
 
   // TTL demotion: socket stays open so disconnect does not fire — hard-stop via error.
