@@ -32,8 +32,7 @@ def banner_lines(port: int, mpv_path: str, data_dir: Path) -> str:
         f"  health     http://127.0.0.1:{port}/health\n"
         f"  files      {data_dir}\n"
         f"  mpv        {mpv_path}\n"
-        f"  COMPANION_TOKEN  set — paste the same value into PWA settings\n"
-        f"  note       no data-dir lock; not the library server"
+        f"  COMPANION_TOKEN  set — paste the same value into PWA settings"
     )
 
 

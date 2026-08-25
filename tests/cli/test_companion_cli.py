@@ -45,6 +45,7 @@ def test_banner_includes_data_dir():
     text = banner_lines(18765, "/opt/mpv", Path("/tmp/musicweb-companion"))
     assert "files      /tmp/musicweb-companion" in text
     assert "ws://127.0.0.1:18765/ws" in text
+    assert "data-dir lock" not in text
 
 
 def test_port_out_of_range():
