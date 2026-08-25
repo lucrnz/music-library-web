@@ -5,12 +5,14 @@ from __future__ import annotations
 from musicweb.exclusive.coreaudio import (
     MUTE_SELECTORS,
     VOLUME_SELECTORS,
+    AudioDevice,
     VolumeSelector,
     apply_hardware_volume,
     coreaudio_device_key,
     get_device_volume,
     hardware_set_succeeded,
     match_device_key,
+    merge_output_devices,
     read_hardware_volume,
     set_device_volume,
 )
@@ -62,6 +64,61 @@ class FakeVolumeIO:
             return False
         self.mutes[k] = muted
         return True
+
+
+def test_merge_output_devices_prefers_uid_then_name():
+    ca = [
+        AudioDevice(
+            id="coreaudio/uid-a",
+            name="Speakers",
+            sample_rates=[44100],
+            bit_depths=[16],
+            mpv_device="coreaudio/uid-a",
+        ),
+        AudioDevice(
+            id="coreaudio/uid-b",
+            name="DAC",
+            sample_rates=[96000],
+            bit_depths=[24],
+            mpv_device="coreaudio/uid-b",
+        ),
+    ]
+    mpv = [
+        AudioDevice(
+            id="coreaudio/uid-a",
+            name="Mac Speakers",
+            sample_rates=[44100, 48000],
+            bit_depths=[16, 24],
+            mpv_device="coreaudio/uid-a",
+        ),
+        AudioDevice(
+            id="coreaudio/other",
+            name="dac",
+            sample_rates=[48000],
+            bit_depths=[16],
+            mpv_device="coreaudio/other",
+        ),
+    ]
+    merged = merge_output_devices(ca, mpv)
+    assert merged[0].id == "coreaudio/uid-a"
+    assert merged[0].sample_rates == [44100]
+    assert merged[0].bit_depths == [16]
+    assert merged[1].id == "coreaudio/other"
+    assert merged[1].sample_rates == [96000]
+    assert merged[1].bit_depths == [24]
+
+
+def test_merge_output_devices_empty_mpv_keeps_coreaudio():
+    ca = [
+        AudioDevice(
+            id="coreaudio/uid-a",
+            name="Speakers",
+            sample_rates=[44100],
+            bit_depths=[16],
+            mpv_device="coreaudio/uid-a",
+        )
+    ]
+    assert merge_output_devices(ca, []) == ca
 
 
 def test_coreaudio_device_key_strips_prefix_only():

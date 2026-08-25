@@ -159,6 +159,29 @@ def match_device_key(
     return False
 
 
+def merge_output_devices(
+    coreaudio: list[AudioDevice], mpv: list[AudioDevice]
+) -> list[AudioDevice]:
+    """Prefer mpv ids; attach Core Audio caps by UID, then name."""
+    if not mpv:
+        return list(coreaudio)
+    ca_by_id = {d.id.lower(): d for d in coreaudio}
+    ca_by_name = {d.name.lower(): d for d in coreaudio}
+    merged: list[AudioDevice] = []
+    for md in mpv:
+        ca_hit = ca_by_id.get(md.id.lower()) or ca_by_name.get(md.name.lower())
+        merged.append(
+            AudioDevice(
+                id=md.id,
+                name=md.name,
+                sample_rates=ca_hit.sample_rates if ca_hit else md.sample_rates,
+                bit_depths=ca_hit.bit_depths if ca_hit else md.bit_depths,
+                mpv_device=md.id,
+            )
+        )
+    return merged
+
+
 def hardware_set_succeeded(
     scalar_ok: bool,
     mute_ok: bool,
@@ -546,9 +569,11 @@ def _list_devices_coreaudio() -> list[AudioDevice]:
         if not _device_has_output(hal, dev_id):
             continue
 
+        uid = _cfstring_from_prop(hal, dev_id, SEL_UID, SCOPE_GLOBAL) or ""
         name = _cfstring_from_prop(hal, dev_id, SEL_NAME, SCOPE_GLOBAL)
         if not name:
             name = f"Device {dev_id}"
+        stable_id = f"coreaudio/{uid}" if uid else str(dev_id)
 
         rates: set[int] = set()
         rraw = _hal_get_bytes(hal, dev_id, SEL_RATE_RANGES, SCOPE_OUTPUT)
@@ -584,38 +609,12 @@ def _list_devices_coreaudio() -> list[AudioDevice]:
         depths = list(EXCLUSIVE_DEPTHS)
         devices.append(
             AudioDevice(
-                id=str(dev_id),
+                id=stable_id,
                 name=name,
                 sample_rates=sorted(rates),
                 bit_depths=depths,
-                mpv_device="",
+                mpv_device=stable_id if uid else f"coreaudio/{dev_id}",
             )
         )
 
-    mpv_devs = _list_devices_mpv_fallback()
-    if not mpv_devs:
-        return [
-            AudioDevice(
-                id=d.id,
-                name=d.name,
-                sample_rates=d.sample_rates,
-                bit_depths=d.bit_depths,
-                mpv_device=f"coreaudio/{d.id}",
-            )
-            for d in devices
-        ]
-
-    ca_by_name = {d.name.lower(): d for d in devices}
-    merged: list[AudioDevice] = []
-    for md in mpv_devs:
-        ca_hit = ca_by_name.get(md.name.lower())
-        merged.append(
-            AudioDevice(
-                id=md.id,
-                name=md.name,
-                sample_rates=ca_hit.sample_rates if ca_hit else md.sample_rates,
-                bit_depths=ca_hit.bit_depths if ca_hit else md.bit_depths,
-                mpv_device=md.id,
-            )
-        )
-    return merged
+    return merge_output_devices(devices, _list_devices_mpv_fallback())
