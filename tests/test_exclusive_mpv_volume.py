@@ -34,6 +34,20 @@ def _bind(
     return player, cmds, gets, sets
 
 
+def test_start_is_stub_off_macos(monkeypatch):
+    monkeypatch.setattr(mpv_mod, "is_macos", lambda: False)
+    player = MpvPlayer(mpv_path="not-a-real-mpv")
+    player.start()
+    assert player._stub is True
+    player.set_device("coreaudio/x")
+    player.load("http://127.0.0.1/stream")
+    player.pause()
+    player.release_device()
+    player.close()
+    assert player._proc is None
+    assert player.device is None
+
+
 def test_set_device_then_volume_hardware_path(monkeypatch):
     player, cmds, _gets, sets = _bind(monkeypatch)
     player.set_device("A")

@@ -15,6 +15,15 @@ from musicweb.transcode.profiles import EXCLUSIVE_DEPTHS, EXCLUSIVE_RATES_HZ
 
 logger = logging.getLogger(__name__)
 
+_stub_logged: set[str] = set()
+
+
+def _log_stub(action: str) -> None:
+    if action in _stub_logged:
+        return
+    _stub_logged.add(action)
+    logger.info("%s stub: no-op on this platform", action)
+
 
 def fourcc(code: str) -> int:
     if len(code) != 4:
@@ -92,7 +101,7 @@ def is_macos() -> bool:
 def list_output_devices() -> list[AudioDevice]:
     """Enumerate output devices with rate/depth caps ∩ allowlist."""
     if not is_macos():
-        logger.warning("Core Audio device probe only available on macOS")
+        _log_stub("Core Audio device list")
         return []
     try:
         return _list_devices_coreaudio()
@@ -104,6 +113,7 @@ def list_output_devices() -> list[AudioDevice]:
 def set_device_volume(device_id: str, volume_0_100: float) -> bool:
     """Best-effort hardware volume. Returns True if applied."""
     if not is_macos():
+        _log_stub("Core Audio set volume")
         return False
     try:
         return _set_hardware_volume(device_id, volume_0_100)
@@ -115,6 +125,7 @@ def set_device_volume(device_id: str, volume_0_100: float) -> bool:
 def get_device_volume(device_id: str) -> float | None:
     """Best-effort hardware volume 0–100. None if unreadable."""
     if not is_macos():
+        _log_stub("Core Audio get volume")
         return None
     try:
         return _get_hardware_volume(device_id)

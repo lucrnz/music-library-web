@@ -15,7 +15,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from musicweb.exclusive.coreaudio import get_device_volume, set_device_volume
+from musicweb.exclusive.coreaudio import (
+    get_device_volume,
+    is_macos,
+    set_device_volume,
+)
 from musicweb.exclusive.volume import ExclusiveVolume, Restore
 
 logger = logging.getLogger(__name__)
@@ -44,6 +48,10 @@ class MpvPlayer:
         self._pending: dict[int, threading.Event] = {}
         self._results: dict[int, Any] = {}
         self._closed = False
+        self._stub = False
+        self._stub_logged: set[str] = set()
+        self._stderr_buf: list[bytes] = []
+        self._stderr_thread: threading.Thread | None = None
         self._device: str | None = None
         self._vol = ExclusiveVolume(
             get_hw=lambda d: get_device_volume(d),
@@ -79,8 +87,20 @@ class MpvPlayer:
     def url(self) -> str | None:
         return self._url
 
+    def _stub_out(self, action: str) -> bool:
+        if not self._stub:
+            return False
+        if action not in self._stub_logged:
+            self._stub_logged.add(action)
+            logger.info("exclusive %s stub: no-op on this platform", action)
+        return True
+
     def start(self) -> None:
-        if self._proc is not None:
+        if self._proc is not None or self._stub:
+            return
+        if not is_macos():
+            logger.info("exclusive mpv hog stub: no-op on this platform")
+            self._stub = True
             return
         if not shutil.which(self._mpv_path) and not Path(self._mpv_path).is_file():
             raise RuntimeError(f"mpv not found: {self._mpv_path}")
@@ -108,6 +128,11 @@ class MpvPlayer:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
+        self._stderr_buf = []
+        self._stderr_thread = threading.Thread(
+            target=self._drain_stderr, name="mpv-stderr", daemon=True
+        )
+        self._stderr_thread.start()
         self._connect_ipc(timeout=5.0)
         self._reader = threading.Thread(
             target=self._read_loop, name="mpv-ipc-reader", daemon=True
@@ -120,6 +145,9 @@ class MpvPlayer:
     def close(self) -> None:
         with self._lock:
             self._closed = True
+            if self._stub:
+                self._device = None
+                return
             self._unhog_unlocked()
             restore = self._vol.on_release()
             self._device = None
@@ -144,6 +172,9 @@ class MpvPlayer:
                     except Exception:
                         pass
                 self._proc = None
+            if self._stderr_thread is not None:
+                self._stderr_thread.join(timeout=0.5)
+                self._stderr_thread = None
             if self._tmpdir is not None:
                 try:
                     self._tmpdir.cleanup()
@@ -153,6 +184,8 @@ class MpvPlayer:
 
     def set_device(self, mpv_device: str) -> None:
         """Select output and arm exclusive mode for that device."""
+        if self._stub_out("set_device"):
+            return
         with self._lock:
             leaving = self._device is not None and self._device != mpv_device
             restore = self._vol.on_device(mpv_device)
@@ -166,6 +199,8 @@ class MpvPlayer:
 
     def load(self, url: str) -> None:
         """Load and play an absolute HTTP(S) stream URL."""
+        if self._stub_out("load"):
+            return
         with self._lock:
             self._url = url
             self._position = 0.0
@@ -177,22 +212,30 @@ class MpvPlayer:
             self._vol.apply()
 
     def pause(self) -> None:
+        if self._stub_out("pause"):
+            return
         with self._lock:
             self._command_unlocked("set_property", "pause", True)
             self._paused = True
 
     def resume(self) -> None:
+        if self._stub_out("resume"):
+            return
         with self._lock:
             self._command_unlocked("set_property", "pause", False)
             self._paused = False
 
     def stop(self) -> None:
         """Stop playback; keep selected device and exclusive arming."""
+        if self._stub_out("stop"):
+            return
         with self._lock:
             self._clear_transport_unlocked()
 
     def release_device(self) -> None:
         """Stop playback and drop exclusive Core Audio hold (idle process stays up)."""
+        if self._stub_out("release_device"):
+            return
         with self._lock:
             self._clear_transport_unlocked()
             self._unhog_unlocked()
@@ -214,10 +257,14 @@ class MpvPlayer:
         self._paused = True
 
     def seek(self, seconds: float) -> None:
+        if self._stub_out("seek"):
+            return
         with self._lock:
             self._command_unlocked("set_property", "time-pos", float(seconds))
 
     def set_volume(self, volume_0_100: float) -> None:
+        if self._stub_out("set_volume"):
+            return
         with self._lock:
             self._vol.set_user(volume_0_100)
 
@@ -256,15 +303,28 @@ class MpvPlayer:
         self._req_id += 1
         return self._req_id
 
+    def _drain_stderr(self) -> None:
+        err = self._proc.stderr if self._proc is not None else None
+        if err is None:
+            return
+        try:
+            for line in err:
+                self._stderr_buf.append(line)
+                text = line.decode("utf-8", errors="replace").rstrip()
+                if text:
+                    logger.warning("mpv: %s", text)
+        except Exception:
+            return
+
     def _connect_ipc(self, timeout: float) -> None:
         assert self._ipc_path is not None
         deadline = time.monotonic() + timeout
         last_err: Exception | None = None
         while time.monotonic() < deadline:
             if self._proc is not None and self._proc.poll() is not None:
-                err = b""
-                if self._proc.stderr:
-                    err = self._proc.stderr.read() or b""
+                if self._stderr_thread is not None:
+                    self._stderr_thread.join(timeout=0.5)
+                err = b"".join(self._stderr_buf)
                 raise RuntimeError(
                     f"mpv exited early: {err.decode('utf-8', errors='replace')}"
                 )
