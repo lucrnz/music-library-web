@@ -271,7 +271,7 @@ class MpvPlayer:
     def status_snapshot(self) -> dict[str, Any]:
         return {
             "device": self._device,
-            "volume": self._vol.user,
+            "volume": self._vol.user if self._vol.known else None,
             "paused": self._paused,
             "position": self._position,
             "duration": self._duration,

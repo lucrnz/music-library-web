@@ -40,6 +40,7 @@ def test_exclusive_volume_defaults():
     assert ev.user == 100.0
     assert ev.path == VOLUME_DIGITAL
     assert ev.device_id is None
+    assert ev.known is False
 
 
 def test_tenure_reads_once_same_id_does_not_reread():
@@ -124,6 +125,53 @@ def test_exclusive_volume_path_flips_on_later_failed_write():
     ev.apply()
     assert ev.path == VOLUME_DIGITAL
     assert hw.digital[-1] == 80.0
+
+
+def test_on_device_adopts_pre_hog_volume():
+    hw = _FakeHw()
+    hw.levels["A"] = 25.0
+    ev = ExclusiveVolume(get_hw=hw.get, set_hw=hw.set, set_digital=hw.set_digital)
+    ev.on_device("A")
+    ev.apply()
+    assert ev.user == 25.0
+    assert ev.known is True
+    assert ev.path == VOLUME_HARDWARE
+    assert hw.sets == [("A", 25.0)]
+    assert hw.digital[-1] == 100.0
+
+
+def test_on_device_same_id_keeps_user_after_slider():
+    hw = _FakeHw()
+    hw.levels["A"] = 25.0
+    ev = ExclusiveVolume(get_hw=hw.get, set_hw=hw.set, set_digital=hw.set_digital)
+    ev.on_device("A")
+    ev.set_user(80)
+    ev.on_device("A")
+    assert ev.user == 80.0
+    assert hw.reads == ["A"]
+
+
+def test_on_device_unread_keeps_user():
+    hw = _FakeHw()
+    hw.levels["A"] = None
+    ev = ExclusiveVolume(get_hw=hw.get, set_hw=hw.set, set_digital=hw.set_digital)
+    ev.on_device("A")
+    assert ev.user == 100.0
+    assert ev.known is False
+
+
+def test_on_device_switch_adopts_new_pre_hog():
+    hw = _FakeHw()
+    hw.levels["A"] = 25.0
+    hw.levels["B"] = 40.0
+    ev = ExclusiveVolume(get_hw=hw.get, set_hw=hw.set, set_digital=hw.set_digital)
+    ev.on_device("A")
+    ev.set_user(80)
+    restore = ev.on_device("B")
+    assert restore == Restore("A", 25.0)
+    assert ev.user == 40.0
+    ev.apply()
+    assert hw.sets[-1] == ("B", 40.0)
 
 
 def test_on_release_clears_live_id_later_apply_skips_hw():

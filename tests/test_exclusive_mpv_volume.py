@@ -48,6 +48,18 @@ def test_start_is_stub_off_macos(monkeypatch):
     assert player.device is None
 
 
+def test_set_device_adopts_pre_hog_volume(monkeypatch):
+    player, cmds, gets, sets = _bind(monkeypatch)
+    player.set_device("A")
+    assert gets == ["A"]
+    assert player.volume == 25.0
+    snap = player.status_snapshot()
+    assert snap["volume"] == 25.0
+    assert snap["volume_path"] == VOLUME_HARDWARE
+    assert ("A", 25.0) in sets
+    assert ("set_property", "volume", 100.0) in cmds
+
+
 def test_set_device_then_volume_hardware_path(monkeypatch):
     player, cmds, _gets, sets = _bind(monkeypatch)
     player.set_device("A")
@@ -93,12 +105,14 @@ def test_device_change_unhog_restore_arm_snapshot_once(monkeypatch):
     arm = cmds.index(("set_property", "audio-exclusive", True))
     assert off < arm
     assert sets[0] == ("A", 25.0)
-    assert ("B", 100.0) in sets  # apply user default 100 to new device
+    assert player.volume == 40.0
+    assert ("B", 40.0) in sets  # adopt B's pre-hog volume
 
 
 def test_no_restore_when_snapshot_missing(monkeypatch):
     player, _cmds, _gets, sets = _bind(monkeypatch, levels={"A": None})
     player.set_device("A")
+    assert player.status_snapshot()["volume"] is None
     sets.clear()
     player.release_device()
     assert sets == []

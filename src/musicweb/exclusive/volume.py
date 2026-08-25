@@ -44,6 +44,10 @@ class VolumeTenure:
     def device_id(self) -> str | None:
         return self._device_id
 
+    @property
+    def saved(self) -> float | None:
+        return self._saved
+
     def prepare(
         self, device_id: str, *, read_volume: ReadVolume
     ) -> Restore | None:
@@ -88,6 +92,7 @@ class ExclusiveVolume:
         self._tenure = VolumeTenure()
         self.user = 100.0
         self.path = VOLUME_DIGITAL
+        self.known = False
 
     @property
     def device_id(self) -> str | None:
@@ -95,10 +100,18 @@ class ExclusiveVolume:
 
     def set_user(self, volume_0_100: float) -> None:
         self.user = clamp_volume(volume_0_100)
+        self.known = True
         self.apply()
 
     def on_device(self, device_id: str) -> Restore | None:
-        return self._tenure.prepare(device_id, read_volume=self._get_hw)
+        prev = self._tenure.device_id
+        restore = self._tenure.prepare(device_id, read_volume=self._get_hw)
+        if device_id != prev:
+            snap = self._tenure.saved
+            if snap is not None:
+                self.user = clamp_volume(snap)
+                self.known = True
+        return restore
 
     def on_release(self) -> Restore | None:
         return self._tenure.release()
