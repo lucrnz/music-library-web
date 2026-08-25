@@ -30,7 +30,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `main.py` | FastAPI app factory, lifespan, dist mounts, SPA shell wiring |
 | `cli/` | Typer entry (`serve`, `scan`, regen, `stats`, `doctor`, `companion`, `logs`, `radio`); argv only |
 | `diag/` | Diagnostic JSONL store, emit, join-key reader |
-| `exclusive/` | Exclusive-audio feature (Desktop companion: loopback WS + mpv); no DB/lock |
+| `exclusive/` | Desktop companion (loopback WS + mpv hog + blob store); no library DB/lock |
 | `runtime/` | Data-dir flock, bootstrap, exclusive maintenance, `run_library_job` |
 | `jobs/` | Single-flight library job runner (`ScanState`, `_begin`, `_begin_phase`; scan finish stamps radio watermark). Kind dispatch calls `scan/jobs.py` (`run_scan` / `regen_*`) |
 | `control/` | Private UDS JSON control plane (health, job RPC, live radio debug RPC) for live CLI |

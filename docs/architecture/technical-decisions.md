@@ -26,7 +26,7 @@ Track primary keys are derived from content fingerprints (FLAC STREAMINFO MD5; o
 
 ### Packed lossless default; marked MP3/AAC exception
 
-Indexed formats are FLAC and ALAC-in-MP4 by default. MP3 and AAC-in-M4A/MP4 may be indexed when `MUSICWEB_INDEX_LOSSY` is on: they are marked on every title, streamed and downloaded as stored (`source` passthrough), and never sent through the Opus/FLAC encode pipeline. Walk eligibility classifies a file once; an unreadable MP4 is not treated as AAC. Same-folder lossless siblings win (the MP3 is skipped). Exclusive playback and prepare follow `source` delivery — refuse (`exclusive_lossy`), do not pick a companion FLAC tag. WAV/AIFF, Vorbis, WMA, and Opus-as-source stay out of the index.
+Indexed formats are FLAC and ALAC-in-MP4 by default. MP3 and AAC-in-M4A/MP4 may be indexed when `MUSICWEB_INDEX_LOSSY` is on: they are marked on every title, streamed and downloaded as stored (`source` passthrough), and never sent through the Opus/FLAC encode pipeline. Walk eligibility classifies a file once; an unreadable MP4 is not treated as AAC. Same-folder lossless siblings win (the MP3 is skipped). Exclusive plays a local download when policy says so, otherwise streams `source` into mpv — do not invent a companion FLAC tag for lossy. WAV/AIFF, Vorbis, WMA, and Opus-as-source stay out of the index.
 
 ### ffmpeg + libsoxr for all stream conversion
 
@@ -42,11 +42,11 @@ The SPA is Vue 3 SFC (`<script setup lang="ts">`) plus TypeScript modules under 
 
 ### Exclusive audio via optional companion (not Electron)
 
-Browser engines cannot hog Core Audio. Exclusive playback is an **optional** feature on the Mac **Desktop companion** (`musicweb companion` + mpv), not an Electron rewrite. The SPA is Vue SFC + TypeScript; exclusive playback is still not an Electron rewrite. The companion does not take the library data-dir lock. See `docs/systems/exclusive-audio.md`.
+Browser engines cannot hog Core Audio. Exclusive playback is an **optional** feature on the Mac **Desktop companion** (`musicweb companion` + mpv), not an Electron rewrite. The same sidecar holds desktop Downloads on disk. The companion does not take the library data-dir lock. See `docs/systems/exclusive-audio.md` and `docs/systems/companion.md`.
 
 ### Shell-only PWA with configurable public origin
 
-The app can be installed as a standalone PWA when clients open a **secure-context** origin (`https` or loopback `http`). A **generated** service worker (`GET /sw.js` from `frontend/dist` inventory) caches the app shell only; offline audio stays in client Downloads (OPFS). Operators set `MUSICWEB_PUBLIC_ORIGIN` (parsed as `PublicOrigin`) so manifest/install identity matches their real entry URL — not hard-coded to one deployment recipe. Details: `docs/systems/pwa.md`, `docs/development/environment.md`.
+The app can be installed as a standalone PWA when clients open a **secure-context** origin (`https` or loopback `http`). A **generated** service worker (`GET /sw.js` from `frontend/dist` inventory) caches the app shell only; offline audio is Downloads (OPFS on Android / leftover; companion disk on an installed desktop PWA). Operators set `MUSICWEB_PUBLIC_ORIGIN` (parsed as `PublicOrigin`) so manifest/install identity matches their real entry URL — not hard-coded to one deployment recipe. Details: `docs/systems/pwa.md`, `docs/development/environment.md`.
 
 ### Alembic for schema evolution
 

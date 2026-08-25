@@ -6,11 +6,22 @@
 - Server encode policy implementation: `src/musicweb/transcode/`, `docs/systems/transcoding.md`
 - Client playback / quality: `docs/systems/playback.md`
 - Offline downloads: `docs/systems/downloads.md`
+- Desktop companion: `docs/systems/companion.md`
 - Connectivity: `docs/systems/connectivity.md`
 
 ## Product shape
 
 Musicweb is a **personal LAN library player**: browse and stream your own lossless-first collection from phones and desktops on the local network. It is not a multi-user service, not a public streaming platform, and not a tag editor for the on-disk library.
+
+## Platform support
+
+Clients are **installed Chromium PWAs** unless noted. Feature availability (for example exclusive hog) can be narrower than the tier.
+
+| Tier | Who | What we do |
+|------|-----|------------|
+| **First-party** | Windows, macOS, Android — any Chromium PWA (Chrome, Brave, Edge, unbranded Chromium) | The focus. Current developer testing is Chromium/Brave. |
+| **Second-party** | Linux Chromium PWA | Implement the same desktop features (do not skip Linux). Testing is best-effort when someone has a Linux box. Do not block a change on Linux testing if you are not on Linux. |
+| **Out of scope** | iOS, Safari, Firefox, and everything else | Best-effort if the engine happens to work. Agents do not implement, test, or prioritize those clients. |
 
 ## Experience principles
 
@@ -20,7 +31,7 @@ Musicweb is a **personal LAN library player**: browse and stream your own lossle
 - **Queue vs playlists:** Session queue lives in the browser (survives reload). Saved playlists live in SQLite and are shared across devices on the same server.
 - **Honest capability:** Codec profile pickers should list only formats the **current browser can actually decode** (runtime media probes), not optimistic `canPlayType` / UA guesses alone. See `docs/systems/playback.md`.
 - **Quality preferences (client):** One Streaming setting and an independent Download setting. Playback may prefer a local download when it is at least as good as the active stream profile (user-selectable policy). See `docs/systems/playback.md`.
-- **Offline downloads (client):** Optional download-to-device features use browser storage (OPFS); they must not corrupt the server index. The download queue auto-pauses when offline or the server is unreachable. See `docs/systems/downloads.md` and `docs/systems/connectivity.md`.
+- **Offline downloads (client):** Optional download-to-device locker. Android (and leftover browser files) use OPFS. An installed desktop PWA stores bytes on companion disk. They must not corrupt the server index. The download queue auto-pauses when offline, the server is unreachable, or the companion is down. See `docs/systems/downloads.md`, `docs/systems/companion.md`, and `docs/systems/connectivity.md`.
 - **Custom artist art:** an operator can set one library-wide preferred portrait from a device file (cropped square). It is a server-side display override, LAN-global and reversible, never written back into the music library tree. Scan still fills `covers/artists/` and must not delete the override.
 
 ## Audio quality principles

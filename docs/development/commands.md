@@ -138,13 +138,13 @@ uv run musicweb radio play <track-id>
 
 Exact flags: `uv run musicweb radio --help`.
 
-## Desktop companion (macOS)
+## Desktop companion
 
-Desktop companion: loopback sidecar for **hog / exclusive** Core Audio playback via **mpv**. This is **not** the library server: it does **not** take `musicweb.lock`, open the DB, or migrate.
+Desktop companion: loopback sidecar for **hog / exclusive** Core Audio (macOS) **and** the Downloads blob store. This is **not** the library server: it does **not** take `musicweb.lock`, open the DB, or migrate. Hog is Mac-only (Windows hog is WIP); the process still runs on Windows/Linux for Downloads. The locker directory is the OS app-support path and is **printed on every launch**.
 
 Requires:
 
-- `COMPANION_TOKEN` (non-empty) — from project `.env` (loaded like the server) or the process environment; paste the same value into Mac PWA → Settings → Exclusive audio
+- `COMPANION_TOKEN` (non-empty) — from project `.env` (loaded like the server) or the process environment; paste the same value into the installed desktop PWA → Settings → Desktop companion
 - `mpv` on `PATH` (or `--mpv /path/to/mpv`)
 - macOS for real exclusive/hog device behavior
 

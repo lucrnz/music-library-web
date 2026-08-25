@@ -26,7 +26,7 @@ Use this when Musicweb is already running on your network and you want exclusive
    ```
 
    Leave this process running. It listens on `127.0.0.1` only (default port **18765**).
-6. **PWA Settings → Exclusive audio** — enable exclusive, paste the same `COMPANION_TOKEN`, set the port if you changed it.
+6. **PWA Settings → Desktop companion** — paste the same `COMPANION_TOKEN`, set the port if you changed it. Then **Exclusive audio** — enable exclusive.
 7. **Pick an output device** — first choice is manual; nothing is selected for you.
 8. **Play a track** — status should show **Ready ·** your device name, and audio should come from the Mac via the companion, not the browser element.
 
@@ -39,24 +39,24 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#de
 - Profile tags + catalog: `src/musicweb/transcode/profiles.py`
 - HTTP: `GET /api/exclusive-formats`, existing `GET /api/stream` + `POST /api/transcode/prepare` with tags
 - Client: `frontend/src/exclusive/` (including `statusFace.ts`, `companionClient.ts`), `stores/exclusiveAudio.ts`, `playback/sinks/`, `stores/player.ts`, `playbackStatus.ts`
-- One-way imports: `exclusiveAudio.ts` persists prefs and accepts `setExclusiveLive`; it does not import `companionClient`. The client writes live fields through `setExclusiveLive`. `main.ts` and `ExclusiveAudioPanel` call `syncCompanionConnection` / `syncPreferredDevice` / `disconnectCompanion` directly.
+- One-way imports: `exclusiveAudio.ts` persists prefs and accepts `setExclusiveLive`; it does not import `companionClient`. The client writes live fields through `setExclusiveLive`. `main.ts`, `CompanionPanel`, and `ExclusiveAudioPanel` call `syncCompanionConnection` / `syncPreferredDevice` / `disconnectCompanion` directly. Token and port live on **Desktop companion** Settings.
 - Companion hub: `src/musicweb/exclusive/session.py` (module-level `COMMANDS` table + `_with_live`). Load is the only start command. Store has no companion playing/paused mirrors.
 - Device list items: `{ id, name, sample_rates, bit_depths }`
 - Commands: `docs/development/commands.md`
 
 ## Architecture (prose)
 
-1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks are **unavailable** in exclusive mode (`exclusive_lossy`) until a future remux plan — do not send MP3/AAC through companion FLAC encode. **Exclusive-mode radio is TODO.** Tune-in stops the hog; radio audio is HTML-only until a future exclusive-radio design. See `docs/systems/radio.md`.
+1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks play exclusive via a local download or an mpv `source` stream — do not remux MP3/AAC through a companion FLAC tag. **Exclusive-mode radio is TODO.** Tune-in stops the hog; radio audio is HTML-only until a future exclusive-radio design. See `docs/systems/radio.md`. **Windows hog is WIP**; the companion still runs on Windows/Linux for Downloads ([companion.md](companion.md)).
 2. **Mac PWA** (installed, standalone) enables exclusive mode, stores `COMPANION_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
 3. **Desktop companion** (`musicweb companion`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
 4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until the companion **accepts** a live device.
-5. On play, the PWA **ensures** the preferred device is live, then builds an **absolute** stream URL (`new URL(streamPath, location.origin).href`) so mpv hits the **same host the browser uses**, not localhost on the Mac. It loads that URL into mpv with a **per-track exclusive FLAC tag**.
+5. On play, the PWA **ensures** the preferred device is live, then applies the same **When a download exists** policy as HTML. A companion locker file is a loopback GET into mpv. Otherwise lossless uses an **absolute** exclusive FLAC tag URL (`new URL(streamPath, location.origin).href`) so mpv hits the **same host the browser uses**; lossy streams `source`. Leftover OPFS files stay HTML-only until migrate Yes.
 
 ```
-[ remote musicweb ] --HTTP FLAC stream tags--> [ mpv on Mac ]
-       ^                                         ^
-       | prepare / stream                        | IPC
-       |                                         |
+[ remote musicweb ] --HTTP stream (FLAC tag or source)--> [ mpv on Mac ]
+       ^                                                    ^
+       | prepare / stream                                   | IPC / loopback file
+       |                                                    |
 [ Mac PWA ] --ws://127.0.0.1:18765--> [ Desktop companion ]
 ```
 
@@ -99,13 +99,13 @@ Two distinct client fields (do not conflate):
 | No preference / ensure timeout / device gone | `exclusive_needs_device` toast + open Settings |
 | Companion offline / connecting / auth rejected | `exclusive_not_ready` |
 | This tab read-only | `exclusive_readonly` |
-| Armed | Companion sink only; absolute stream URL + exclusive tag |
+| Armed | Companion sink only; local locker URL when policy prefers a download, else exclusive FLAC tag or lossy `source` stream |
 | Mid-play companion death / TTL / live release | Immediate hard stop + toast; **no** browser fallback |
 | Second tab | Read-only (“controlled elsewhere”); no steal in v1 |
 
 Ensure/wait logic lives on the **companion client**, not as a timeout loop inside `playIndex`.
 
-When exclusive is **enabled** (not only when armed), normal stream quality, download quality, and playback-policy controls are hidden/disabled.
+When exclusive is **enabled**, the Streaming picker is hidden (exclusive lossless uses device-capped FLAC tags). Downloads quality and **When a download exists** stay visible: exclusive applies the same policy and may load a companion (or leftover) local file into mpv.
 
 ### Client sync entry points
 
@@ -182,8 +182,8 @@ Mac volume keys usually do nothing while hogged. The in-app slider is exclusive 
 
 - Gapless
 - Media keys / menu bar app / Now Playing integration beyond existing browser Media Session
-- Windows or Linux companion binary (protocol stays OS-agnostic)
-- Bit-perfect play of on-disk library originals via companion
+- Windows hog / Core Audio exclusive (WIP — companion still serves Downloads on Windows/Linux)
+- Bit-perfect “always store library originals” as the locker format
 - Electron / TypeScript / Vite / pnpm
 - Auth model change for exclusive tags
 - Listing exclusive-only tags on the normal browser codec marketing list
@@ -193,7 +193,9 @@ Mac volume keys usually do nothing while hogged. The in-app slider is exclusive 
 
 - `docs/setup.md` — operator on-ramp (server + PWA)
 - `docs/development/commands.md` — companion CLI
+- `docs/systems/companion.md` — sidecar process (blob store + hog)
 - `docs/systems/playback.md` — browser delivery source and prepare
 - `docs/systems/transcoding.md` — encode policy
 - `docs/systems/pwa.md` — install / public origin
+- `docs/product/core-guidelines.md` — platform support tiers
 - `docs/architecture/technical-decisions.md` — stack choices

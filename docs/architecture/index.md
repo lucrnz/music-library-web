@@ -17,7 +17,7 @@ Musicweb is a single-process LAN server:
 2. **SQLite index** — artists, albums, tracks, playlists, FTS5 search; durable under the data directory.
 3. **HTTP API + SPA** — FastAPI JSON API and a Vue 3 SFC + TypeScript client built by Vite; FastAPI serves `frontend/dist`.
 4. **On-demand transcoder** — ffmpeg worker produces Opus/FLAC stream profiles into a process-temp cache.
-5. **Client offline path** — optional OPFS downloads, connectivity, and play-source resolution in the browser.
+5. **Client offline path** — optional Downloads (OPFS on Android / leftover, companion disk on an installed desktop PWA), connectivity, and play-source resolution.
 6. **Listen log** — household play events in SQLite for Stats rankings; not stream HTTP and not diagnostic JSONL. See `docs/systems/playback-stats.md`.
 7. **Household radio** — one process-lifetime station clock; tuners drive `Transcoder` prepare of the current track (not a second encoder). See `docs/systems/radio.md`.
 8. **Diagnostics** — structured client/server events as JSONL under the data dir; Settings cutoff + `musicweb logs`. See `docs/systems/diagnostics.md`.
@@ -25,7 +25,7 @@ Musicweb is a single-process LAN server:
 ```text
 Browser (Vue SFC + TypeScript SPA)
     │  REST + media GETs
-    ├── Offline: OPFS + IndexedDB downloads (optional)
+    ├── Offline: Downloads (OPFS or companion disk + IndexedDB)
     └── Connectivity + quality prefs (client)
     ▼
 FastAPI (routes → services)
@@ -46,7 +46,8 @@ FastAPI (routes → services)
 - `docs/systems/library-scan.md`: indexing pipeline and identity.
 - `docs/systems/transcoding.md`: profiles, encode policy, cache.
 - `docs/systems/pwa.md`: installable shell and service worker scope.
-- `docs/systems/downloads.md`: client offline catalog (OPFS).
+- `docs/systems/downloads.md`: client offline catalog (OPFS or companion disk).
+- `docs/systems/companion.md`: loopback sidecar (hog + blob store).
 - `docs/systems/playback.md`: play source, quality prefs, prepare.
 - `docs/systems/radio.md`: household station (encode + seek).
 - `docs/systems/playback-stats.md`: household listen log and Stats browse mode.
@@ -65,7 +66,7 @@ FastAPI (routes → services)
 | `db/` | Models, sessions, FTS, migrations, repositories | Filesystem media I/O |
 | `transcode/` | Profiles, probe, worker, dependency checks, shared enqueue | Persistent media storage |
 | `radio/` | Station clock, picker, tuner-driven prepare | Live encode pipe, listen stats, stream-cache forget (retain hook only) |
-| `frontend/src/` | UI state, playback, connectivity, offline downloads (OPFS) | Server-side index writes |
+| `frontend/src/` | UI state, playback, connectivity, offline downloads (OPFS or companion disk) | Server-side index writes |
 
 Composition root is `main.create_app`: settings, database, library, stores, jobs, process cache, and transcoder are attached to `app.state` for route deps.
 

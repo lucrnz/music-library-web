@@ -2,7 +2,7 @@
 
 ## Overview
 
-Installable app shell and offline **bootstrap** for the Vue SPA. Offline **audio** remains the existing Downloads feature (OPFS + IndexedDB), not the service worker.
+Installable app shell and offline **bootstrap** for the Vue SPA. Offline **audio** remains Downloads (OPFS on Android / leftover, companion disk on an installed desktop PWA), not the service worker.
 
 ## Source of truth
 
@@ -37,7 +37,7 @@ A new service worker activates without an in-app “reload” banner. Cache vers
 
 ### Complements Downloads, does not replace it
 
-Connectivity UX is quiet: transition toasts via the shell binder (`connectivityUi.js` at boot), plus a guidance banner only when Downloads are disabled. Offline **audio** is the Downloads system (OPFS + IndexedDB) — see `docs/systems/downloads.md`. Reachability and network-cost signals: `docs/systems/connectivity.md`. The SW’s job is: **the app can open** when the host or tunnel is down.
+Connectivity UX is quiet: transition toasts via the shell binder (`connectivityUi.js` at boot), plus a guidance banner only when Downloads are disabled. Offline **audio** is Downloads — see `docs/systems/downloads.md`. Reachability and network-cost signals: `docs/systems/connectivity.md`. The SW’s job is: **the app can open** when the host or tunnel is down.
 
 ## Request handling (intent)
 
