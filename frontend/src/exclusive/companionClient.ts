@@ -354,6 +354,15 @@ function applyStatus(msg: CompanionWireMessage): void {
       code: "controller_lost",
       message: "Exclusive controller timed out",
     });
+    // Socket stays open after TTL; close so onclose reconnects and hello
+    // can reclaim the free lock. Do not set intentionalClose.
+    if (wantConnected && ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.close();
+      } catch {
+        /* onclose schedules reconnect */
+      }
+    }
   }
 }
 
