@@ -15,7 +15,7 @@ from musicweb.exclusive import blob_store
 from musicweb.exclusive import protocol as p
 from musicweb.exclusive.session import ExclusiveHub
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("musicweb.companion.app")
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -131,7 +131,7 @@ def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
         hub.bind_loop(asyncio.get_running_loop())
         hub.start_player()
         hub.ensure_ttl_watch()
-        logger.info("Exclusive companion ready")
+        logger.info("Companion ready")
         try:
             yield
         finally:
