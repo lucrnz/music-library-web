@@ -29,6 +29,11 @@ MSG_RESUME: Final[str] = "resume"
 MSG_SEEK: Final[str] = "seek"
 MSG_STOP: Final[str] = "stop"
 MSG_SET_VOLUME: Final[str] = "set_volume"
+MSG_BLOB_PUT: Final[str] = "blob_put"
+MSG_BLOB_ABORT: Final[str] = "blob_abort"
+MSG_BLOB_DELETE: Final[str] = "blob_delete"
+MSG_BLOB_STAT: Final[str] = "blob_stat"
+MSG_DISK_INFO: Final[str] = "disk_info"
 
 # --- Server → client ---
 MSG_HELLO_OK: Final[str] = "hello_ok"
@@ -39,6 +44,21 @@ MSG_TIME: Final[str] = "time"
 MSG_PAUSE_EVENT: Final[str] = "pause"  # { paused: bool }
 MSG_EOF: Final[str] = "eof"
 MSG_ERROR: Final[str] = "error"
+MSG_BLOB_PROGRESS: Final[str] = "blob_progress"
+MSG_BLOB_DONE: Final[str] = "blob_done"
+MSG_BLOB_ERROR: Final[str] = "blob_error"
+MSG_BLOB_STAT_OK: Final[str] = "blob_stat_ok"
+MSG_DISK_INFO_OK: Final[str] = "disk_info_ok"
+
+BLOB_CLIENT_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        MSG_BLOB_PUT,
+        MSG_BLOB_ABORT,
+        MSG_BLOB_DELETE,
+        MSG_BLOB_STAT,
+        MSG_DISK_INFO,
+    }
+)
 
 ROLE_CONTROLLER: Final[str] = "controller"
 ROLE_READONLY: Final[str] = "readonly"

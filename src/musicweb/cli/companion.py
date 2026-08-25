@@ -6,16 +6,30 @@ import logging
 import os
 import shutil
 import sys
+from pathlib import Path
 
 import typer
 import uvicorn
 
 from musicweb.config import load_env_file
 from musicweb.exclusive.app import create_exclusive_app
+from musicweb.exclusive.paths import companion_data_dir
 from musicweb.exclusive.protocol import DEFAULT_PORT, PROTOCOL_VERSION
 from musicweb.exclusive.session import ExclusiveHub
 
 logger = logging.getLogger(__name__)
+
+
+def banner_lines(port: int, mpv_path: str, data_dir: Path) -> str:
+    return (
+        f"musicweb companion  protocol v{PROTOCOL_VERSION}\n"
+        f"  listening  ws://127.0.0.1:{port}/ws\n"
+        f"  health     http://127.0.0.1:{port}/health\n"
+        f"  files      {data_dir}\n"
+        f"  mpv        {mpv_path}\n"
+        f"  COMPANION_TOKEN  set — paste the same value into PWA settings\n"
+        f"  note       no data-dir lock; not the library server"
+    )
 
 
 def run_companion(
@@ -33,7 +47,7 @@ def run_companion(
             "COMPANION_TOKEN is required (non-empty).\n"
             "  Put COMPANION_TOKEN=… in project .env, or:\n"
             "  export COMPANION_TOKEN='$(openssl rand -hex 16)'\n"
-            "  # paste the same value into Mac PWA → Settings → Exclusive audio",
+            "  # paste the same value into the PWA → Settings → Desktop companion",
             file=sys.stderr,
         )
         raise SystemExit(1)
@@ -62,16 +76,14 @@ def run_companion(
             file=sys.stderr,
         )
 
-    hub = ExclusiveHub(companion_token=token, mpv_path=mpv_path)
+    data_dir = companion_data_dir()
+    hub = ExclusiveHub(
+        companion_token=token, mpv_path=mpv_path, data_dir=data_dir
+    )
     app = create_exclusive_app(hub)
 
     print(
-        f"musicweb companion  protocol v{PROTOCOL_VERSION}\n"
-        f"  listening  ws://127.0.0.1:{port}/ws\n"
-        f"  health     http://127.0.0.1:{port}/health\n"
-        f"  mpv        {mpv_path}\n"
-        f"  COMPANION_TOKEN  set ({len(token)} chars) — paste the same value into Mac PWA settings\n"
-        f"  note       no data-dir lock; not the library server",
+        banner_lines(port, mpv_path, data_dir),
         flush=True,
     )
 
@@ -83,6 +95,7 @@ def run_companion(
         host="127.0.0.1",
         port=port,
         log_level="info",
+        access_log=False,
         ws="websockets-sansio",
     )
 
@@ -99,5 +112,5 @@ def companion(
         help="Path to mpv binary (default: PATH lookup)",
     ),
 ) -> None:
-    """Desktop companion (macOS): exclusive audio via mpv hog + WebSocket on loopback."""
+    """Desktop companion: loopback hog (macOS) and Downloads blob store."""
     run_companion(port=port, mpv=mpv)

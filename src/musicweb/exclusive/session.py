@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import logging
+import threading
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
+from musicweb.exclusive import blob_store
 from musicweb.exclusive import protocol as p
 from musicweb.exclusive.coreaudio import AudioDevice, list_output_devices
 from musicweb.exclusive.mpv_player import MpvPlayer
+from musicweb.exclusive.paths import companion_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +35,15 @@ class ClientSession:
 class ExclusiveHub:
     """Process-wide companion state (one hub per companion process)."""
 
-    def __init__(self, *, companion_token: str, mpv_path: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        companion_token: str,
+        mpv_path: str | None = None,
+        data_dir: Path | None = None,
+    ) -> None:
         self.companion_token = companion_token
+        self.data_dir = Path(data_dir) if data_dir is not None else companion_data_dir()
         self._clients: dict[str, ClientSession] = {}
         self._controller_id: str | None = None
         self._device_id: str | None = None
@@ -38,6 +52,7 @@ class ExclusiveHub:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._ttl_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
+        self._blob_aborts: dict[str, threading.Event] = {}
 
     @property
     def player(self) -> MpvPlayer:
@@ -152,6 +167,7 @@ class ExclusiveHub:
             "controller_session_id": self._controller_id,
             "selected_device_id": self._device_id,
             "playing": bool(snap.get("url")) and not snap.get("paused"),
+            "data_dir": str(self.data_dir),
             **snap,
         }
 
@@ -256,6 +272,17 @@ class ExclusiveHub:
                 return
             live = self._is_live_controller(sess)
 
+        if mtype in p.BLOB_CLIENT_TYPES:
+            try:
+                await self._handle_blob(sess, mtype, msg)
+            except Exception as exc:
+                logger.exception("blob command failed: %s", exc)
+                await self._send(
+                    sess,
+                    p.envelope(p.MSG_ERROR, message=str(exc)),
+                )
+            return
+
         if mtype == p.MSG_LIST_DEVICES:
             async with self._lock:
                 if not self._is_current(sess):
@@ -344,6 +371,179 @@ class ExclusiveHub:
         if vol is None:
             raise ValueError("volume required")
         await asyncio.to_thread(self._player.set_volume, float(vol))
+
+    async def _handle_blob(
+        self, sess: ClientSession, mtype: str, msg: dict[str, Any]
+    ) -> None:
+        if mtype == p.MSG_DISK_INFO:
+            free = await asyncio.to_thread(blob_store.disk_free, self.data_dir)
+            await self._send(
+                sess,
+                p.envelope(
+                    p.MSG_DISK_INFO_OK,
+                    free=free,
+                    data_dir=str(self.data_dir),
+                ),
+            )
+            return
+        if mtype == p.MSG_BLOB_STAT:
+            key = str(msg.get("key") or "")
+            exists, nbytes = await asyncio.to_thread(
+                blob_store.stat, self.data_dir, key
+            )
+            await self._send(
+                sess,
+                p.envelope(p.MSG_BLOB_STAT_OK, key=key, exists=exists, bytes=nbytes),
+            )
+            return
+        if mtype == p.MSG_BLOB_DELETE:
+            key = str(msg.get("key") or "")
+            await asyncio.to_thread(blob_store.delete, self.data_dir, key)
+            await self._send(
+                sess, p.envelope(p.MSG_BLOB_STAT_OK, key=key, exists=False, bytes=0)
+            )
+            return
+        if mtype == p.MSG_BLOB_ABORT:
+            rid = str(msg.get("requestId") or "")
+            ev = self._blob_aborts.get(rid)
+            if ev is not None:
+                ev.set()
+            return
+        if mtype == p.MSG_BLOB_PUT:
+            await self._blob_put(sess, msg)
+
+    async def _blob_put(self, sess: ClientSession, msg: dict[str, Any]) -> None:
+        request_id = str(msg.get("requestId") or "")
+        key = str(msg.get("key") or "")
+        url = str(msg.get("url") or "")
+        offset = int(msg.get("offset") or 0)
+        if not request_id or not key or not url:
+            raise ValueError("requestId, key, and url required")
+        abort = threading.Event()
+        self._blob_aborts[request_id] = abort
+        loop = asyncio.get_running_loop()
+
+        def progress(loaded: int, total: int | None) -> None:
+            loop.call_soon_threadsafe(
+                asyncio.create_task,
+                self._send(
+                    sess,
+                    p.envelope(
+                        p.MSG_BLOB_PROGRESS,
+                        requestId=request_id,
+                        key=key,
+                        loaded=loaded,
+                        total=total,
+                    ),
+                ),
+            )
+
+        try:
+            nbytes = await asyncio.to_thread(
+                self._fetch_url_to_blob, url, key, offset, abort, progress
+            )
+            await self._send(
+                sess,
+                p.envelope(
+                    p.MSG_BLOB_DONE, requestId=request_id, key=key, bytes=nbytes
+                ),
+            )
+        except InterruptedError:
+            await self._send(
+                sess,
+                p.envelope(
+                    p.MSG_BLOB_ERROR,
+                    requestId=request_id,
+                    key=key,
+                    code="abort",
+                    message="aborted",
+                ),
+            )
+        except OSError as exc:
+            code = "enospc" if exc.errno == errno.ENOSPC else "http"
+            await self._send(
+                sess,
+                p.envelope(
+                    p.MSG_BLOB_ERROR,
+                    requestId=request_id,
+                    key=key,
+                    code=code,
+                    message=str(exc),
+                ),
+            )
+        except (urllib.error.URLError, urllib.error.HTTPError, ValueError) as exc:
+            await self._send(
+                sess,
+                p.envelope(
+                    p.MSG_BLOB_ERROR,
+                    requestId=request_id,
+                    key=key,
+                    code="http",
+                    message=str(exc),
+                ),
+            )
+        finally:
+            self._blob_aborts.pop(request_id, None)
+
+    def _fetch_url_to_blob(
+        self,
+        url: str,
+        key: str,
+        offset: int,
+        abort: threading.Event,
+        progress: Callable[[int, int | None], None],
+    ) -> int:
+        blob_store.safe_key(key)
+        dest = blob_store.resolve(self.data_dir, key)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if offset <= 0:
+            blob_store.partial_path(dest).unlink(missing_ok=True)
+            dest.unlink(missing_ok=True)
+            offset = 0
+        req = urllib.request.Request(url)
+        if offset > 0:
+            req.add_header("Range", f"bytes={offset}-")
+        try:
+            resp = urllib.request.urlopen(req, timeout=120)
+        except urllib.error.HTTPError as exc:
+            if offset > 0 and exc.code == 416:
+                dest = blob_store.resolve(self.data_dir, key)
+                blob_store.partial_path(dest).unlink(missing_ok=True)
+                return self._fetch_url_to_blob(url, key, 0, abort, progress)
+            raise
+        try:
+            loaded = offset
+            status = getattr(resp, "status", 200)
+            if offset > 0 and status != 206:
+                dest = blob_store.resolve(self.data_dir, key)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                blob_store.partial_path(dest).write_bytes(b"")
+                loaded = 0
+            total: int | None = None
+            cr = resp.headers.get("Content-Range")
+            if cr and "/" in cr:
+                try:
+                    total = int(cr.rsplit("/", 1)[1])
+                except ValueError:
+                    total = None
+            elif resp.headers.get("Content-Length"):
+                try:
+                    total = loaded + int(resp.headers["Content-Length"])
+                except ValueError:
+                    total = None
+            while True:
+                if abort.is_set():
+                    raise InterruptedError("abort")
+                chunk = resp.read(64 * 1024)
+                if not chunk:
+                    break
+                loaded = blob_store.append_chunk(
+                    self.data_dir, key, chunk, offset=loaded
+                )
+                progress(loaded, total)
+        finally:
+            resp.close()
+        return blob_store.promote_partial(self.data_dir, key)
 
     async def _handle_controller(
         self, sess: ClientSession, mtype: str, msg: dict[str, Any]

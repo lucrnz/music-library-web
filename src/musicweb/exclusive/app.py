@@ -4,14 +4,109 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
+from musicweb.exclusive import blob_store
 from musicweb.exclusive import protocol as p
 from musicweb.exclusive.session import ExclusiveHub
 
 logger = logging.getLogger(__name__)
+
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, PUT, OPTIONS",
+    "Access-Control-Allow-Headers": "Range, Content-Type, Authorization",
+    "Access-Control-Expose-Headers": "Accept-Ranges, Content-Range, Content-Length",
+    "Access-Control-Allow-Private-Network": "true",
+}
+
+
+def file_token_ok(provided: str, expected: str) -> bool:
+    return bool(expected) and provided == expected
+
+
+def parse_byte_range(rng: str | None, size: int) -> tuple[int, int] | None:
+    """Inclusive start/end, or None for the full file. ValueError → 416."""
+    if not rng or not rng.startswith("bytes="):
+        return None
+    spec = rng[6:].split("-", 1)
+    try:
+        start = int(spec[0]) if spec[0] else 0
+        end = int(spec[1]) if spec[1] else size - 1
+    except ValueError:
+        return None
+    start = max(0, start)
+    end = min(size - 1, end)
+    if start > end:
+        raise ValueError("unsatisfiable")
+    return start, end
+
+
+def read_file_span(path: object, start: int, end: int) -> bytes:
+    return b"".join(blob_store.iter_file_span(Path(str(path)), start, end))
+
+
+def slice_bytes(
+    data: bytes, rng: str | None
+) -> tuple[int, bytes, dict[str, str]]:
+    """Kept for tests; prefer parse_byte_range + read_file_span on disk."""
+    size = len(data)
+    headers = {"Accept-Ranges": "bytes"}
+    try:
+        span = parse_byte_range(rng, size)
+    except ValueError:
+        return 416, b"", headers
+    if span is None:
+        headers["Content-Length"] = str(size)
+        return 200, data, headers
+    start, end = span
+    chunk = data[start : end + 1]
+    headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    headers["Content-Length"] = str(len(chunk))
+    return 206, chunk, headers
+
+
+class _LoopbackCors:
+    """ASGI CORS wrapper — BaseHTTPMiddleware buffers StreamingResponse."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        if scope.get("method") == "OPTIONS":
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 204,
+                    "headers": [
+                        (key.lower().encode(), value.encode())
+                        for key, value in CORS_HEADERS.items()
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": b""})
+            return
+
+        async def send_with_cors(message: dict[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers") or [])
+                have = {key.lower() for key, _ in headers}
+                for key, value in CORS_HEADERS.items():
+                    low = key.lower().encode()
+                    if low not in have:
+                        headers.append((low, value.encode()))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
 
 
 def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
@@ -36,10 +131,80 @@ def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.hub = hub
+    app.add_middleware(_LoopbackCors)
+
+    def _require_file_token(request: Request) -> None:
+        token = str(request.query_params.get("token") or "")
+        if not file_token_ok(token, hub.companion_token):
+            raise HTTPException(status_code=401, detail="unauthorized")
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
         return {"ok": True, "v": p.PROTOCOL_VERSION}
+
+    @app.api_route("/files/{key:path}", methods=["GET", "HEAD"])
+    async def get_file(key: str, request: Request) -> Response:
+        _require_file_token(request)
+        try:
+            path = blob_store.open_read(hub.data_dir, key)
+        except blob_store.BlobJailError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="missing") from None
+        size = path.stat().st_size
+        rng = request.headers.get("range") or request.headers.get("Range")
+        try:
+            span = parse_byte_range(rng, size)
+        except ValueError:
+            raise HTTPException(status_code=416, detail="unsatisfiable") from None
+        if span is None:
+            if request.method == "HEAD":
+                return Response(
+                    status_code=200,
+                    media_type="application/octet-stream",
+                    headers={
+                        "Accept-Ranges": "bytes",
+                        "Content-Length": str(size),
+                    },
+                )
+            return FileResponse(
+                path,
+                media_type="application/octet-stream",
+                headers={"Accept-Ranges": "bytes"},
+            )
+        start, end = span
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Content-Length": str(end - start + 1),
+        }
+        if request.method == "HEAD":
+            return Response(
+                status_code=206,
+                media_type="application/octet-stream",
+                headers=headers,
+            )
+        return StreamingResponse(
+            blob_store.iter_file_span(path, start, end),
+            status_code=206,
+            media_type="application/octet-stream",
+            headers=headers,
+        )
+
+    @app.put("/files/{key:path}")
+    async def put_file(key: str, request: Request) -> dict[str, Any]:
+        _require_file_token(request)
+
+        async def chunks() -> AsyncIterator[bytes]:
+            async for piece in request.stream():
+                if piece:
+                    yield piece
+
+        try:
+            nbytes = await blob_store.put_async_chunks(hub.data_dir, key, chunks())
+        except blob_store.BlobJailError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True, "bytes": nbytes}
 
     @app.websocket("/ws")
     async def ws_endpoint(websocket: WebSocket) -> None:

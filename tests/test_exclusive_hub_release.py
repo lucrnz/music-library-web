@@ -10,6 +10,9 @@ from typing import Any
 import pytest
 
 from musicweb.exclusive import protocol as p
+from pathlib import Path
+import tempfile
+
 from musicweb.exclusive.session import ClientSession, ExclusiveHub
 
 
@@ -72,7 +75,10 @@ class FakeWebSocket:
 
 
 def _hub_with_fake() -> tuple[ExclusiveHub, FakePlayer]:
-    hub = ExclusiveHub(companion_token="test-token")
+    hub = ExclusiveHub(
+        companion_token="test-token",
+        data_dir=Path(tempfile.mkdtemp()),
+    )
     fake = FakePlayer()
     hub._player = fake  # type: ignore[assignment]
     return hub, fake
@@ -358,3 +364,44 @@ def test_missing_controller_session_releases():
     assert hub._controller_id is None
     assert hub._device_id is None
     assert fake.release_calls == 1
+
+
+def test_readonly_may_blob_stat_but_not_load():
+    hub, _fake = _hub_with_fake()
+    _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    ws = FakeWebSocket()
+    ro = _add_session(hub, "ro", role=p.ROLE_READONLY, ws=ws)
+    asyncio.run(
+        hub.handle_message(
+            ro, p.envelope(p.MSG_BLOB_STAT, key="audio/x.bin")
+        )
+    )
+    types = [m.get("type") for m in ws.sent]
+    assert p.MSG_BLOB_STAT_OK in types
+    ws.sent.clear()
+    asyncio.run(
+        hub.handle_message(ro, p.envelope(p.MSG_LOAD, url="http://127.0.0.1/x"))
+    )
+    assert any(m.get("code") == "readonly" for m in ws.sent)
+
+
+def test_blob_put_jail_does_not_escape():
+    hub, _fake = _hub_with_fake()
+    ws = FakeWebSocket()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER, ws=ws)
+    asyncio.run(
+        hub.handle_message(
+            sess,
+            p.envelope(
+                p.MSG_BLOB_PUT,
+                requestId="r1",
+                key="../escape",
+                url="http://127.0.0.1/nope",
+            ),
+        )
+    )
+    types = [m.get("type") for m in ws.sent]
+    assert p.MSG_BLOB_ERROR in types or p.MSG_ERROR in types
+    assert not (hub.data_dir.parent / "escape").exists()
+    for child in hub.data_dir.rglob("*"):
+        assert "escape" not in child.name
