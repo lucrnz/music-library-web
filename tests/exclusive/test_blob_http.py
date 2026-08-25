@@ -45,8 +45,21 @@ def test_parse_range_and_span_read(tmp_path: Path):
     path.write_bytes(b"abcdefgh")
     assert parse_byte_range(None, 8) is None
     assert parse_byte_range("bytes=0-0", 8) == (0, 0)
+    assert parse_byte_range("bytes=2-", 8) == (2, 7)
+    assert parse_byte_range("bytes=-3", 8) == (5, 7)
     assert read_file_span(path, 0, 0) == b"a"
     assert read_file_span(path, 2, 4) == b"cde"
+
+
+def test_parse_range_rejects_invalid():
+    import pytest
+
+    with pytest.raises(ValueError):
+        parse_byte_range("bytes=foo", 8)
+    with pytest.raises(ValueError):
+        parse_byte_range("bytes=0-1,2-3", 8)
+    with pytest.raises(ValueError):
+        parse_byte_range("bytes=-3", 0)
 
 
 def _asgi(
@@ -176,6 +189,19 @@ def test_asgi_range_open_end_and_chunked_put(tmp_path: Path):
     assert code == 206
     assert body == b"abcdefgh"
     assert "bytes 0-7/8" in headers.get("content-range", "")
+
+
+def test_asgi_invalid_range_416(tmp_path: Path):
+    app = _file_app(tmp_path)
+    _asgi(app, "PUT", "/files/audio/c.bin", "token=secret", body=b"abcd")
+    code, _, _ = _asgi(
+        app,
+        "GET",
+        "/files/audio/c.bin",
+        "token=secret",
+        headers={"range": "bytes=foo"},
+    )
+    assert code == 416
 
 
 def test_cors_header_table():

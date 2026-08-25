@@ -1,11 +1,15 @@
 """Exclusive companion protocol helpers."""
 
+import pytest
+
 from musicweb.exclusive.protocol import (
     MSG_BLOB_PUT,
     MSG_DISK_INFO_OK,
     PROTOCOL_VERSION,
     envelope,
     parse_message,
+    require_http_url,
+    token_ok,
 )
 
 
@@ -19,6 +23,21 @@ def test_envelope_version_and_type():
 def test_blob_type_constants():
     assert MSG_BLOB_PUT == "blob_put"
     assert MSG_DISK_INFO_OK == "disk_info_ok"
+
+
+def test_token_ok():
+    assert token_ok("secret", "secret") is True
+    assert token_ok("nope", "secret") is False
+    assert token_ok("", "secret") is False
+    assert token_ok("secret", "") is False
+
+
+def test_require_http_url():
+    assert require_http_url("https://nas.local/a") == "https://nas.local/a"
+    with pytest.raises(ValueError):
+        require_http_url("file:///etc/passwd")
+    with pytest.raises(ValueError):
+        require_http_url("/api/stream")
 
 
 def test_parse_rejects_bad_version():

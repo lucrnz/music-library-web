@@ -53,6 +53,7 @@ class ExclusiveHub:
         self._ttl_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._blob_aborts: dict[str, threading.Event] = {}
+        self._reclaim_id: str | None = None
 
     @property
     def player(self) -> MpvPlayer:
@@ -69,6 +70,8 @@ class ExclusiveHub:
         if self._ttl_task is not None:
             self._ttl_task.cancel()
             self._ttl_task = None
+        for ev in list(self._blob_aborts.values()):
+            ev.set()
         self._player.close()
 
     def ensure_ttl_watch(self) -> None:
@@ -99,12 +102,14 @@ class ExclusiveHub:
             sess = self._clients.get(cid)
             if sess is None:
                 self._controller_id = None
+                self._reclaim_id = None
                 await self._ensure_no_controller_exclusive()
                 await self._broadcast_status_unlocked()
                 return
             if time.monotonic() - sess.last_heartbeat > p.CONTROLLER_TTL_S:
                 logger.info("Controller %s TTL expired", cid)
                 sess.role = p.ROLE_READONLY
+                self._reclaim_id = cid
                 self._controller_id = None
                 await self._ensure_no_controller_exclusive()
                 await self._broadcast_status_unlocked()
@@ -188,7 +193,7 @@ class ExclusiveHub:
         token: str,
         session_id: str,
     ) -> ClientSession | None:
-        if not token or token != self.companion_token:
+        if not p.token_ok(token, self.companion_token):
             await websocket.send_json(
                 p.envelope(p.MSG_HELLO_REJECT, reason="invalid_token")
             )
@@ -205,6 +210,7 @@ class ExclusiveHub:
             if self._controller_id is None or self._controller_id == session_id:
                 role = p.ROLE_CONTROLLER
                 self._controller_id = session_id
+                self._reclaim_id = None
             else:
                 role = p.ROLE_READONLY
 
@@ -252,8 +258,11 @@ class ExclusiveHub:
             if not self._is_current(sess):
                 return
             self._clients.pop(sess.session_id, None)
+            if self._reclaim_id == sess.session_id:
+                self._reclaim_id = None
             if self._controller_id == sess.session_id:
                 self._controller_id = None
+                self._reclaim_id = None
                 logger.info(
                     "Controller %s disconnected; lock free", sess.session_id
                 )
@@ -269,6 +278,14 @@ class ExclusiveHub:
             mtype = msg["type"]
             if mtype == p.MSG_HEARTBEAT:
                 sess.last_heartbeat = time.monotonic()
+                if (
+                    self._controller_id is None
+                    and self._reclaim_id == sess.session_id
+                ):
+                    sess.role = p.ROLE_CONTROLLER
+                    self._controller_id = sess.session_id
+                    self._reclaim_id = None
+                    await self._broadcast_status_unlocked()
                 return
             live = self._is_live_controller(sess)
 
@@ -321,6 +338,11 @@ class ExclusiveHub:
         async with self._lock:
             return self._is_live_controller(sess)
 
+    async def _should_undo_player(self) -> bool:
+        """Undo in-flight hog only when no session owns the lock."""
+        async with self._lock:
+            return self._controller_id is None
+
     async def _cmd_set_device(
         self, sess: ClientSession, msg: dict[str, Any]
     ) -> None:
@@ -334,6 +356,8 @@ class ExclusiveHub:
                 break
         await asyncio.to_thread(self._player.set_device, mpv_dev)
         if not await self._with_live(sess):
+            if await self._should_undo_player():
+                await asyncio.to_thread(self._player.release_device)
             return
         async with self._lock:
             self._device_id = device_id
@@ -342,10 +366,12 @@ class ExclusiveHub:
         async with self._lock:
             if not self._device_id:
                 raise ValueError("select a device first")
-        url = str(msg.get("url") or "")
-        if not url.startswith(("http://", "https://")):
-            raise ValueError("absolute http(s) url required")
+        url = p.require_http_url(str(msg.get("url") or ""))
         await asyncio.to_thread(self._player.load, url)
+        if not await self._with_live(sess):
+            if await self._should_undo_player():
+                await asyncio.to_thread(self._player.release_device)
+            return
 
     async def _cmd_pause(self, _sess: ClientSession, _msg: dict[str, Any]) -> None:
         await asyncio.to_thread(self._player.pause)
@@ -419,24 +445,49 @@ class ExclusiveHub:
         offset = int(msg.get("offset") or 0)
         if not request_id or not key or not url:
             raise ValueError("requestId, key, and url required")
+        try:
+            p.require_http_url(url)
+        except ValueError as exc:
+            await self._send(
+                sess,
+                p.envelope(
+                    p.MSG_BLOB_ERROR,
+                    requestId=request_id,
+                    key=key,
+                    code="http",
+                    message=str(exc),
+                ),
+            )
+            return
         abort = threading.Event()
         self._blob_aborts[request_id] = abort
         loop = asyncio.get_running_loop()
 
         def progress(loaded: int, total: int | None) -> None:
-            loop.call_soon_threadsafe(
-                asyncio.create_task,
-                self._send(
-                    sess,
-                    p.envelope(
-                        p.MSG_BLOB_PROGRESS,
-                        requestId=request_id,
-                        key=key,
-                        loaded=loaded,
-                        total=total,
+            try:
+                fut = asyncio.run_coroutine_threadsafe(
+                    self._send(
+                        sess,
+                        p.envelope(
+                            p.MSG_BLOB_PROGRESS,
+                            requestId=request_id,
+                            key=key,
+                            loaded=loaded,
+                            total=total,
+                        ),
                     ),
-                ),
-            )
+                    loop,
+                )
+            except RuntimeError:
+                return
+
+            def _done(done: object) -> None:
+                try:
+                    done.result()  # type: ignore[attr-defined]
+                except Exception:
+                    logger.debug("blob progress send failed", exc_info=True)
+
+            fut.add_done_callback(_done)
 
         try:
             nbytes = await asyncio.to_thread(
@@ -493,6 +544,7 @@ class ExclusiveHub:
         abort: threading.Event,
         progress: Callable[[int, int | None], None],
     ) -> int:
+        p.require_http_url(url)
         blob_store.safe_key(key)
         dest = blob_store.resolve(self.data_dir, key)
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -543,7 +595,7 @@ class ExclusiveHub:
                 progress(loaded, total)
         finally:
             resp.close()
-        return blob_store.promote_partial(self.data_dir, key)
+        return blob_store.promote_partial(self.data_dir, key, size=loaded)
 
     async def _handle_controller(
         self, sess: ClientSession, mtype: str, msg: dict[str, Any]

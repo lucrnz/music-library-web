@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
@@ -78,20 +79,23 @@ def put_chunks(root: Path, key: str, chunks: Iterable[bytes]) -> int:
 
 async def put_async_chunks(root: Path, key: str, chunks) -> int:
     dest = resolve(root, key)
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(dest.parent.mkdir, parents=True, exist_ok=True)
     part = partial_path(dest)
     written = 0
+    fh = await asyncio.to_thread(part.open, "wb")
     try:
-        with part.open("wb") as fh:
+        try:
             async for chunk in chunks:
                 if not chunk:
                     continue
-                fh.write(chunk)
+                await asyncio.to_thread(fh.write, chunk)
                 written += len(chunk)
-        part.replace(dest)
+        finally:
+            await asyncio.to_thread(fh.close)
+        await asyncio.to_thread(part.replace, dest)
         return written
     except Exception:
-        part.unlink(missing_ok=True)
+        await asyncio.to_thread(part.unlink, missing_ok=True)
         raise
 
 
@@ -133,11 +137,18 @@ def append_chunk(root: Path, key: str, data: bytes, *, offset: int) -> int:
         return fh.tell()
 
 
-def promote_partial(root: Path, key: str) -> int:
+def promote_partial(root: Path, key: str, size: int | None = None) -> int:
     dest = resolve(root, key)
     part = partial_path(dest)
     if not part.is_file():
         raise FileNotFoundError(key)
-    size = part.stat().st_size
+    if size is not None:
+        if size < 0:
+            raise ValueError("negative size")
+        with part.open("r+b") as fh:
+            fh.truncate(size)
+        nbytes = size
+    else:
+        nbytes = part.stat().st_size
     part.replace(dest)
-    return size
+    return nbytes

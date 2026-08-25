@@ -49,6 +49,14 @@ def test_disk_free(tmp_path: Path):
     assert not missing.exists()
 
 
+def test_promote_truncates_to_size(tmp_path: Path):
+    blob_store.append_chunk(tmp_path, "audio/a.bin", b"0123456789", offset=0)
+    blob_store.append_chunk(tmp_path, "audio/a.bin", b"ABCD", offset=0)
+    n = blob_store.promote_partial(tmp_path, "audio/a.bin", size=4)
+    assert n == 4
+    assert blob_store.open_read(tmp_path, "audio/a.bin").read_bytes() == b"ABCD"
+
+
 def test_put_chunks_and_iter_span(tmp_path: Path):
     n = blob_store.put_chunks(tmp_path, "audio/a.bin", (b"ab", b"cd", b"ef"))
     assert n == 6

@@ -385,6 +385,105 @@ def test_readonly_may_blob_stat_but_not_load():
     assert any(m.get("code") == "readonly" for m in ws.sent)
 
 
+def test_midflight_set_device_ttl_releases():
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    hub._device_id = "dev-1"
+    fake.gate = threading.Event()
+    sess.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
+
+    async def run() -> None:
+        task = asyncio.create_task(
+            hub.handle_message(
+                sess, {"type": p.MSG_SET_DEVICE, "deviceId": "dev-2"}
+            )
+        )
+        entered = await asyncio.to_thread(fake.entered_set_device.wait, 2.0)
+        assert entered
+        await hub._check_ttl()
+        fake.gate.set()
+        await task
+
+    asyncio.run(run())
+    assert hub._controller_id is None
+    assert fake.release_calls >= 1
+    assert fake._device is None
+
+
+def test_midflight_load_ttl_releases():
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    hub._device_id = "dev-1"
+    fake._device = "coreaudio/Dev1"
+    fake.gate = threading.Event()
+    sess.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
+
+    async def run() -> None:
+        task = asyncio.create_task(
+            hub.handle_message(
+                sess,
+                {"type": p.MSG_LOAD, "url": "http://127.0.0.1/stream"},
+            )
+        )
+        entered = await asyncio.to_thread(fake.entered_load.wait, 2.0)
+        assert entered
+        await hub._check_ttl()
+        fake.gate.set()
+        await task
+
+    asyncio.run(run())
+    assert hub._controller_id is None
+    assert fake.release_calls >= 1
+    assert fake._url is None
+
+
+def test_ttl_heartbeat_reclaims_same_session():
+    hub, _fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    hub._device_id = "dev-1"
+    sess.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
+    asyncio.run(hub._check_ttl())
+    assert sess.role == p.ROLE_READONLY
+    assert hub._controller_id is None
+    asyncio.run(hub.handle_message(sess, {"type": p.MSG_HEARTBEAT}))
+    assert sess.role == p.ROLE_CONTROLLER
+    assert hub._controller_id == "c1"
+
+
+def test_ttl_heartbeat_does_not_promote_other_session():
+    hub, _fake = _hub_with_fake()
+    c1 = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    ws = FakeWebSocket()
+    ro = _add_session(hub, "ro", role=p.ROLE_READONLY, ws=ws)
+    c1.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
+    asyncio.run(hub._check_ttl())
+    asyncio.run(hub.handle_message(ro, {"type": p.MSG_HEARTBEAT}))
+    assert hub._controller_id is None
+    assert ro.role == p.ROLE_READONLY
+    asyncio.run(hub.handle_message(c1, {"type": p.MSG_HEARTBEAT}))
+    assert hub._controller_id == "c1"
+    assert c1.role == p.ROLE_CONTROLLER
+
+
+def test_blob_put_rejects_file_url():
+    hub, _fake = _hub_with_fake()
+    ws = FakeWebSocket()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER, ws=ws)
+    asyncio.run(
+        hub.handle_message(
+            sess,
+            p.envelope(
+                p.MSG_BLOB_PUT,
+                requestId="r1",
+                key="audio/a.bin",
+                url="file:///etc/passwd",
+            ),
+        )
+    )
+    assert any(m.get("type") == p.MSG_BLOB_ERROR for m in ws.sent)
+    assert not (hub.data_dir / "audio" / "a.bin").exists()
+
+
 def test_blob_put_jail_does_not_escape():
     hub, _fake = _hub_with_fake()
     ws = FakeWebSocket()

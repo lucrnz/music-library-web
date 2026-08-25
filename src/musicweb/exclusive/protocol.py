@@ -7,6 +7,7 @@ Client and PWA must mirror these type strings and ``PROTOCOL_VERSION``.
 
 from __future__ import annotations
 
+import hmac
 from typing import Any, Final
 
 PROTOCOL_VERSION: Final[int] = 1
@@ -66,6 +67,19 @@ ROLE_READONLY: Final[str] = "readonly"
 # Volume path labels for status.
 VOLUME_DIGITAL: Final[str] = "digital"
 VOLUME_HARDWARE: Final[str] = "hardware"
+
+
+def token_ok(provided: str, expected: str) -> bool:
+    """Constant-time compare; empty sides never match."""
+    if not provided or not expected:
+        return False
+    return hmac.compare_digest(provided, expected)
+
+
+def require_http_url(url: str) -> str:
+    if not url.startswith(("http://", "https://")):
+        raise ValueError("absolute http(s) url required")
+    return url
 
 
 def envelope(msg_type: str, **fields: Any) -> dict[str, Any]:

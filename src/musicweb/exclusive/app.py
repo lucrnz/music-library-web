@@ -27,19 +27,33 @@ CORS_HEADERS = {
 
 
 def file_token_ok(provided: str, expected: str) -> bool:
-    return bool(expected) and provided == expected
+    return p.token_ok(provided, expected)
 
 
 def parse_byte_range(rng: str | None, size: int) -> tuple[int, int] | None:
     """Inclusive start/end, or None for the full file. ValueError → 416."""
     if not rng or not rng.startswith("bytes="):
         return None
-    spec = rng[6:].split("-", 1)
+    spec = rng[6:].strip()
+    if not spec or "," in spec or "-" not in spec:
+        raise ValueError("unsatisfiable")
+    start_s, end_s = spec.split("-", 1)
     try:
-        start = int(spec[0]) if spec[0] else 0
-        end = int(spec[1]) if spec[1] else size - 1
-    except ValueError:
-        return None
+        if start_s == "":
+            suffix = int(end_s)
+        else:
+            start = int(start_s)
+            end: int | None = int(end_s) if end_s else None
+    except ValueError as exc:
+        raise ValueError("unsatisfiable") from exc
+    if start_s == "":
+        if suffix <= 0 or size <= 0:
+            raise ValueError("unsatisfiable")
+        return max(0, size - suffix), size - 1
+    if size <= 0:
+        raise ValueError("unsatisfiable")
+    if end is None:
+        end = size - 1
     start = max(0, start)
     end = min(size - 1, end)
     if start > end:

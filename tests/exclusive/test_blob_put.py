@@ -6,6 +6,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
+import pytest
+
 from musicweb.exclusive import blob_store
 from musicweb.exclusive.session import ExclusiveHub
 
@@ -92,6 +94,37 @@ def test_offset_zero_truncates_longer_partial(tmp_path: Path):
         assert blob_store.open_read(tmp_path, "audio/a.bin").read_bytes() == b"abcdefgh"
     finally:
         httpd.shutdown()
+
+
+def test_resume_206_shorter_source_truncates(tmp_path: Path):
+    httpd = _serve(_HonorRange)
+    try:
+        port = httpd.server_address[1]
+        hub = ExclusiveHub(companion_token="x", data_dir=tmp_path)
+        blob_store.append_chunk(tmp_path, "audio/a.bin", b"abcdefghXY", offset=0)
+        n = hub._fetch_url_to_blob(
+            f"http://127.0.0.1:{port}/f",
+            "audio/a.bin",
+            2,
+            threading.Event(),
+            lambda *_args: None,
+        )
+        assert n == 8
+        assert blob_store.open_read(tmp_path, "audio/a.bin").read_bytes() == b"abcdefgh"
+    finally:
+        httpd.shutdown()
+
+
+def test_file_url_is_rejected(tmp_path: Path):
+    hub = ExclusiveHub(companion_token="x", data_dir=tmp_path)
+    with pytest.raises(ValueError, match="http"):
+        hub._fetch_url_to_blob(
+            "file:///etc/passwd",
+            "audio/a.bin",
+            0,
+            threading.Event(),
+            lambda *_args: None,
+        )
 
 
 def test_resume_206_appends(tmp_path: Path):
