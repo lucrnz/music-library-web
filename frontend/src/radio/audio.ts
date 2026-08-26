@@ -160,6 +160,8 @@ export function createRadioAudio(): RadioAudio {
       if (shouldIgnoreTransport(loadInFlight, seekInFlight)) return;
       onEndedFn?.();
       handlers.onEnded?.();
+    } else if (evt.type === "released") {
+      resetCompanionState();
     } else if (evt.type === "error" || evt.type === "disconnect") {
       if (shouldIgnoreTransport(loadInFlight, seekInFlight)) return;
       onErrorFn?.();

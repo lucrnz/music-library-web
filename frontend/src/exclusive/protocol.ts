@@ -14,6 +14,7 @@ export const MSG_HELLO = "hello";
 export const MSG_HEARTBEAT = "heartbeat";
 export const MSG_LIST_DEVICES = "list_devices";
 export const MSG_SET_DEVICE = "set_device";
+export const MSG_RELEASE_DEVICE = "release_device";
 export const MSG_LOAD = "load";
 export const MSG_PAUSE = "pause";
 export const MSG_RESUME = "resume";

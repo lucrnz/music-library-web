@@ -166,6 +166,21 @@ describe("radio audio latch", () => {
     expect(companionLoad).not.toHaveBeenCalled();
   });
 
+  it("released clears companion transport without ending", async () => {
+    const radio = createRadioAudio();
+    radio.setBackend("companion");
+    const pending = radio.load("https://lib.example/api/stream?id=t1");
+    await Promise.resolve();
+    emitCompanion({ type: "time", t: 8, d: 200 });
+    await pending;
+    const ended = vi.fn();
+    radio.onEnded(ended);
+    emitCompanion({ type: "released" });
+    expect(ended).not.toHaveBeenCalled();
+    expect(radio.currentTime).toBe(0);
+    expect(radio.paused).toBe(true);
+  });
+
   it("companion seek after duration calls companionSeek", async () => {
     const radio = createRadioAudio();
     radio.setBackend("companion");

@@ -43,6 +43,7 @@ import {
   updateMediaSession,
 } from "@/stores/playerSession";
 import { player, setPlayNotice } from "@/stores/playerState";
+import { exclusiveAudio } from "@/stores/exclusiveAudio";
 import { settings } from "@/stores/settings";
 import {
   discard as discardListen,
@@ -262,19 +263,26 @@ export async function playAllTracks(
   if (await replaceQueue(entries)) playIndex(0);
 }
 
-export async function playIndex(index: number) {
+export async function playIndex(
+  index: number,
+  opts?: { resumeAt?: number; resumePaused?: boolean },
+) {
   become("queue");
   if (index < 0 || index >= pl.length) return;
   const cold = player.playSource === "none";
   const nextTrack = pl.tracks[index];
-  const seekTo = cold
-    ? resumeSeconds({
-        trackId: nextTrack?.id,
-        saved: readPlaybackPosition(),
-        duration: nextTrack?.duration,
-      })
-    : null;
-  if (seekTo == null) clearPlaybackPosition();
+  const keepAt = opts?.resumeAt;
+  const seekTo =
+    keepAt != null && Number.isFinite(keepAt) && keepAt > 0
+      ? keepAt
+      : cold
+        ? resumeSeconds({
+            trackId: nextTrack?.id,
+            saved: readPlaybackPosition(),
+            duration: nextTrack?.duration,
+          })
+        : null;
+  if (seekTo == null && keepAt == null) clearPlaybackPosition();
   const gen = beginLoad();
   pendingResume = seekTo != null ? { gen, seconds: seekTo } : null;
   pl.index = index;
@@ -295,6 +303,13 @@ export async function playIndex(index: number) {
   setPlayNotice(null);
 
   await loadResolved(gen, track);
+  if (still(gen) && opts?.resumePaused) {
+    try {
+      getActiveSink().pause();
+    } catch {
+      /* ignore */
+    }
+  }
   if (still(gen)) flushPendingResume();
 }
 
@@ -421,6 +436,19 @@ export function initAudioListeners() {
     () => settings.playbackPolicy,
     () => {
       prepareTracks(pl.tracks, { replace: true });
+    },
+  );
+  watch(
+    () => exclusiveAudio.enabled,
+    () => {
+      prepareTracks(pl.tracks, { replace: true });
+      if (activeSession() !== "queue") return;
+      if (pl.index < 0) return;
+      persistCurrentPosition();
+      void playIndex(pl.index, {
+        resumeAt: player.currentTime,
+        resumePaused: getActiveSink().paused,
+      });
     },
   );
   wireSinkHandlers();

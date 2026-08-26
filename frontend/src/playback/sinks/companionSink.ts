@@ -49,6 +49,9 @@ export function createCompanionSink(): PlaybackSink {
       } else if (evt.type === "eof") {
         paused = true;
         if (hasLoad) handlers.onEnded?.();
+      } else if (evt.type === "released") {
+        hasLoad = false;
+        paused = true;
       } else if (evt.type === "error" || evt.type === "disconnect") {
         if (!hasLoad) return;
         handlers.onError?.(

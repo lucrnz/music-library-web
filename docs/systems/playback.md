@@ -14,7 +14,7 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 - Shared HTML element: `frontend/src/playback/sinks/htmlElement.ts`
 - Companion-stop decision: `needsCompanionStop` in `playback/playIntent.ts`
 - Quality prefs: `frontend/src/stores/settings.ts` (maps `/api/codecs` to camelCase once at hydrate; `setStreamCodec` / `setPlaybackPolicy` persist only)
-- Prepare-on-change: `frontend/src/stores/player.ts` watches `settings.streamCodec` and `settings.playbackPolicy`
+- Prepare-on-change: `frontend/src/stores/player.ts` watches `settings.streamCodec`, `settings.playbackPolicy`, and `exclusiveAudio.enabled` (queue reload keeps the current track and position; exclusive off hands off to the HTML sink)
 - Session queue: `frontend/src/stores/playlist.ts`
 - Delivery tag / lossy kind: `frontend/src/lossyKind.ts`
 - HTML play-source resolution: `frontend/src/downloads/resolve.ts` (`resolvePlaySource` → delivery only; queue via `playIntent.ts`, radio via `radio/session.ts`)

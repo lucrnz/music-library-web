@@ -139,6 +139,44 @@ def test_ttl_demotion_releases_idle_device():
     assert ttl_msgs
 
 
+def test_release_device_unhogs_while_stream_loaded():
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    hub._device_id = "dev-1"
+    hub._rearm_device_id = "dev-1"
+    fake._device = "coreaudio/Dev1"
+    fake._url = "http://127.0.0.1/stream"
+    fake._paused = False
+
+    asyncio.run(hub.handle_message(sess, {"type": p.MSG_RELEASE_DEVICE}))
+
+    assert fake.release_calls == 1
+    assert fake._url is None
+    assert fake._device is None
+    assert hub._device_id is None
+    assert hub._rearm_device_id is None
+    assert hub._controller_id == "c1"
+    assert sess.role == p.ROLE_CONTROLLER
+    assert "c1" in hub._clients
+
+
+def test_readonly_cannot_release_device():
+    hub, fake = _hub_with_fake()
+    _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    ws = FakeWebSocket()
+    ro = _add_session(hub, "ro", role=p.ROLE_READONLY, ws=ws)
+    hub._device_id = "dev-1"
+    fake._device = "coreaudio/Dev1"
+    fake._url = "http://127.0.0.1/stream"
+
+    asyncio.run(hub.handle_message(ro, {"type": p.MSG_RELEASE_DEVICE}))
+
+    assert fake.release_calls == 0
+    assert hub._device_id == "dev-1"
+    assert fake._url == "http://127.0.0.1/stream"
+    assert any(m.get("code") == "readonly" for m in ws.sent)
+
+
 def test_ttl_skips_while_stream_loaded():
     hub, fake = _hub_with_fake()
     sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)

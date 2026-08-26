@@ -391,6 +391,20 @@ class ExclusiveHub:
         async with self._lock:
             return self._controller_id is None
 
+    async def _cmd_release_device(
+        self, sess: ClientSession, _msg: dict[str, Any]
+    ) -> None:
+        """Drop hog even if a stream is loaded. Controller claim stays."""
+        await asyncio.to_thread(self._player.release_device)
+        if not await self._with_live(sess):
+            return
+        async with self._lock:
+            self._device_id = None
+            self._rearm_device_id = None
+        logger.info(
+            "Controller %s released exclusive device", sess.session_id
+        )
+
     async def _cmd_set_device(
         self, sess: ClientSession, msg: dict[str, Any]
     ) -> None:
@@ -668,6 +682,7 @@ _Command = Callable[
 ]
 COMMANDS: dict[str, tuple[_Command, bool]] = {
     p.MSG_SET_DEVICE: (ExclusiveHub._cmd_set_device, True),
+    p.MSG_RELEASE_DEVICE: (ExclusiveHub._cmd_release_device, True),
     p.MSG_LOAD: (ExclusiveHub._cmd_load, True),
     p.MSG_PAUSE: (ExclusiveHub._cmd_pause, False),
     p.MSG_RESUME: (ExclusiveHub._cmd_resume, False),

@@ -34,6 +34,7 @@ import {
   MSG_LOAD,
   MSG_PAUSE,
   MSG_PAUSE_EVENT,
+  MSG_RELEASE_DEVICE,
   MSG_RESUME,
   MSG_SEEK,
   MSG_SET_DEVICE,
@@ -195,6 +196,7 @@ function scheduleReconnect(): void {
  * Single place for re-arm; no auto-pick.
  */
 export function syncPreferredDevice(): boolean {
+  if (!isExclusiveEnabled()) return false;
   if (exclusiveAudio.role !== ROLE_CONTROLLER) return false;
   const pref = exclusiveAudio.selectedDeviceId;
   if (!pref) return false;
@@ -629,6 +631,11 @@ export function syncCompanionConnection(): void {
   wantConnected = true;
   const desired = desiredConnectKey();
   if (isLiveSocket(ws) && desired === inFlightKey) {
+    if (isExclusiveEnabled()) {
+      syncPreferredDevice();
+    } else {
+      companionReleaseDevice();
+    }
     return;
   }
   if (isLiveSocket(ws)) {
@@ -652,6 +659,16 @@ export function requestListDevices(): boolean {
 export function requestSetDevice(deviceId: string): boolean {
   if (exclusiveAudio.role !== ROLE_CONTROLLER) return false;
   return send(envelope(MSG_SET_DEVICE, { deviceId }));
+}
+
+/** Unhog immediately. Socket and controller claim stay for Downloads. */
+export function companionReleaseDevice(): boolean {
+  const sent =
+    exclusiveAudio.role === ROLE_CONTROLLER &&
+    send(envelope(MSG_RELEASE_DEVICE));
+  clearLiveDevice();
+  emit({ type: "released" });
+  return sent;
 }
 
 /** @param url absolute http(s) */

@@ -109,12 +109,15 @@ When exclusive is **enabled**, the Streaming picker is hidden (exclusive lossles
 
 ### Client sync entry points
 
-Single **`syncPreferredDevice`** when controller ∧ preference set ∧ (live missing or ≠ preference):
+Single **`syncPreferredDevice`** when exclusive is **enabled** ∧ controller ∧ preference set ∧ (live missing or ≠ preference):
 
 - controller `hello_ok`
 - after devices list update (if preference still valid)
 - user chooses a device
 - ensure-before-play
+- exclusive turned on while the Downloads socket is already open
+
+`syncCompanionConnection` after exclusive **off** (socket still wanted for Downloads) sends `release_device` instead.
 
 ## Now-playing face and details
 
@@ -137,6 +140,7 @@ Implementation: pure `static/js/exclusive/statusFace.js` — Settings panel uses
 
 - First successful `hello` becomes **controller**; further sessions are **readonly**.
 - Client heartbeat ~5s (also on become-visible). After **60s** with no inbound traffic and nothing loaded in mpv, the companion **unhogs** (crash / half-open socket safety). A later message from the same session **reclaims** the lock and re-arms the last device. A loaded stream is not idle — hog stays.
+- Turning **exclusive off** sends `release_device` immediately (even if mpv still has a track). The hog drops so the headphones are free for other apps. The companion socket may stay open for Downloads. The queue/radio face keeps the same track and continues on the HTML sink.
 - Socket close also releases that session’s claim (the clean goodbye path).
 - Client always uses **`ws://127.0.0.1`** (not `localhost`) to avoid IPv6 mismatch.
 
@@ -148,6 +152,7 @@ Implementation: pure `static/js/exclusive/statusFace.js` — Settings panel uses
   2. Set `audio-exclusive=no`, clear `audio-device`
   3. Clear companion `selected_device_id` (only after successful release) → client clears live
 - Controller loss paths: **WebSocket disconnect**, or **60s idle TTL** (`role` → readonly, `reason=controller_ttl`) while nothing is loaded. TTL does not toast or close the socket; the same session reclaims on the next heartbeat / visibility / command and re-arms the last device.
+- User **disables exclusive** (`release_device`): unhog now, keep the controller claim and the Downloads socket. Re-enable re-sends `set_device`. `set_device` is not sent while exclusive is off.
 - Never release on hello replace of the same session (reconnect reclaim without thrashing).
 - User **preference** stays in PWA localStorage; on next controller `hello_ok` (or reclaim) the client re-sends `set_device` via `syncPreferredDevice`.
 

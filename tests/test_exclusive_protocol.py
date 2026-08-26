@@ -5,6 +5,7 @@ import pytest
 from musicweb.exclusive.protocol import (
     MSG_BLOB_PUT,
     MSG_DISK_INFO_OK,
+    MSG_RELEASE_DEVICE,
     PROTOCOL_VERSION,
     envelope,
     parse_message,
@@ -23,6 +24,7 @@ def test_envelope_version_and_type():
 def test_blob_type_constants():
     assert MSG_BLOB_PUT == "blob_put"
     assert MSG_DISK_INFO_OK == "disk_info_ok"
+    assert MSG_RELEASE_DEVICE == "release_device"
 
 
 def test_token_ok():
