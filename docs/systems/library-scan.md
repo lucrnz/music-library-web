@@ -6,6 +6,7 @@
 - Index walk + batch flush: `src/musicweb/scan/index_phase.py` (`run_index`)
 - Walk / formats: `src/musicweb/scan/walk.py`, `formats.py`
 - Album lossy-kind reduce: SQL in `finalize.recount_entities` (`mp3` / `aac` / `lossy` / `mixed`)
+- Album duration recount: same `recount_entities` pass (sum of present-track `duration_ms`; null if any present track lacks duration)
 - Fingerprints / identity: `src/musicweb/scan/fingerprint.py`, `identity.py`
 - Batch upsert: `src/musicweb/scan/batch.py` (one `read_metadata` per path; shared cache with `siblings.lossless_slots_in_dir`)
 - Enrichment loop: `src/musicweb/scan/enrichment.py` (`iter_enrichment`)
@@ -19,7 +20,7 @@
 
 ## Purpose
 
-Build and refresh the SQLite index from the files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. The walk is **indexable** audio: packed lossless always, plus MP3/AAC when `MUSICWEB_INDEX_LOSSY` is on. Eligibility classifies a file once (lossless / lossy / not); an unreadable MP4 is not treated as AAC and is not indexed. A lossy file that shares a folder + disc/track (or stem) with a lossless sibling is skipped so leftover transcode copies do not become duplicate tracks. After finalize, albums cache a lossy kind (`mp3` / `aac` / `lossy` / `mixed` / none) using the same reduce the client uses for title marks. All library jobs (scan and regen) share a **single-flight** runner with cancel support and persisted `ScanState` progress. HTTP, CLI (local or via UDS), and startup use the same runner (`_begin` writes the running row once). Kind dispatch is `scan/jobs.py` (`run_scan` / `regen_*`). Lyrics still collects missing/non-ok, fingerprint-mismatch (pass1b), and sidecar upgrades. Radio catalog invalidation reads `last_scan_finished_at` (`ScanState` / `radio_repo.scan_finished_at`), not the last job kind.
+Build and refresh the SQLite index from the files under `MUSIC_LIBRARY_PATH` without blocking the HTTP server. The walk is **indexable** audio: packed lossless always, plus MP3/AAC when `MUSICWEB_INDEX_LOSSY` is on. Eligibility classifies a file once (lossless / lossy / not); an unreadable MP4 is not treated as AAC and is not indexed. A lossy file that shares a folder + disc/track (or stem) with a lossless sibling is skipped so leftover transcode copies do not become duplicate tracks. After finalize, albums cache a lossy kind (`mp3` / `aac` / `lossy` / `mixed` / none) using the same reduce the client uses for title marks, and a total duration that is null when any present track lacks `duration_ms`. All library jobs (scan and regen) share a **single-flight** runner with cancel support and persisted `ScanState` progress. HTTP, CLI (local or via UDS), and startup use the same runner (`_begin` writes the running row once). Kind dispatch is `scan/jobs.py` (`run_scan` / `regen_*`). Lyrics still collects missing/non-ok, fingerprint-mismatch (pass1b), and sidecar upgrades. Radio catalog invalidation reads `last_scan_finished_at` (`ScanState` / `radio_repo.scan_finished_at`), not the last job kind.
 
 ## Modes and kinds
 
@@ -43,7 +44,7 @@ Exact skip/rehash heuristics live in source; docs only state the product intent.
 4. Cover extraction to durable WebP under the data dir (missing art).
 5. Artist portrait fetch cascade for artists still missing images (local file → remote providers when configured).
 6. Lyrics fetch for tracks still missing lyrics (local sidecars → LRCLIB).
-7. Mark missing paths, recount entity aggregates, FTS maintenance as required by mode.
+7. Mark missing paths, recount entity aggregates (including album total duration from present tracks; store null when any present track lacks duration), FTS maintenance as required by mode.
 
 ## Enrichment policies
 
