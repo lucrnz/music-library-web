@@ -9,10 +9,12 @@ import {
   setCompanionToken,
 } from "@/stores/exclusiveAudio";
 import {
+  checkCompanionToken,
   disconnectCompanion,
   syncCompanionConnection,
 } from "@/exclusive/companionClient";
 import { DEFAULT_PORT } from "@/exclusive/protocol";
+import { tokenCheckReason, tokenCheckTone } from "@/exclusive/tokenCheck";
 
 const face = computed(() => {
   void exclusiveAudio.connection;
@@ -28,6 +30,29 @@ const face = computed(() => {
   return "Offline";
 });
 
+const tokenTone = computed(() => {
+  void exclusiveAudio.tokenCheck;
+  return tokenCheckTone(exclusiveAudio.tokenCheck);
+});
+
+const tokenReason = computed(() => {
+  void exclusiveAudio.tokenCheck;
+  return tokenCheckReason(exclusiveAudio.tokenCheck);
+});
+
+const showLastError = computed(() => {
+  void exclusiveAudio.lastError;
+  void exclusiveAudio.connection;
+  void exclusiveAudio.tokenCheck;
+  if (!exclusiveAudio.lastError) return false;
+  if (exclusiveAudio.connection === "connected") return false;
+  const check = exclusiveAudio.tokenCheck;
+  if (check === "checking" || check === "invalid" || check === "unreachable") {
+    return false;
+  }
+  return true;
+});
+
 function onToken(e: Event) {
   const target = e.target;
   if (!(target instanceof HTMLInputElement)) return;
@@ -35,8 +60,15 @@ function onToken(e: Event) {
 }
 
 function onTokenCommit() {
-  if (!(exclusiveAudio.companionToken || "").trim()) disconnectCompanion();
-  else syncCompanionConnection();
+  if (!(exclusiveAudio.companionToken || "").trim()) {
+    disconnectCompanion();
+    return;
+  }
+  checkCompanionToken();
+}
+
+function onTokenPaste() {
+  window.setTimeout(onTokenCommit, 0);
 }
 
 function onPort(e: Event) {
@@ -44,6 +76,7 @@ function onPort(e: Event) {
   if (!(target instanceof HTMLInputElement)) return;
   setExclusivePort(target.value);
   syncCompanionConnection();
+  if ((exclusiveAudio.companionToken || "").trim()) checkCompanionToken();
 }
 </script>
 
@@ -67,12 +100,27 @@ function onPort(e: Event) {
         autocomplete="off"
         spellcheck="false"
         class="text-input text-input-block"
+        :class="{
+          'text-input-ok': tokenTone === 'ok',
+          'text-input-bad': tokenTone === 'bad',
+        }"
         :value="exclusiveAudio.companionToken"
+        :aria-invalid="tokenTone === 'bad'"
+        :aria-describedby="tokenReason ? 'companion-token-check' : undefined"
         @input="onToken"
         @change="onTokenCommit"
+        @paste="onTokenPaste"
         placeholder="Same value as companion env"
         aria-labelledby="companion-token-label"
       />
+      <p
+        v-if="tokenReason"
+        id="companion-token-check"
+        class="modal-hint"
+        :class="{ ok: tokenTone === 'ok', warn: tokenTone === 'bad' }"
+      >
+        {{ tokenReason }}
+      </p>
     </div>
 
     <div class="settings-field">
@@ -97,10 +145,7 @@ function onPort(e: Event) {
     <p v-if="exclusiveAudio.dataDir" class="modal-hint">
       Files: <code>{{ exclusiveAudio.dataDir }}</code>
     </p>
-    <p
-      v-if="exclusiveAudio.lastError && exclusiveAudio.connection !== 'connected'"
-      class="modal-hint warn"
-    >
+    <p v-if="showLastError" class="modal-hint warn">
       {{ exclusiveAudio.lastError }}
     </p>
   </div>

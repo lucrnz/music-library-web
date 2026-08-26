@@ -9,6 +9,7 @@ import {
   isExclusiveEnabled,
   setCompanionDeviceId,
   setExclusiveLive,
+  setTokenCheck,
   type ExclusiveDevice,
 } from "@/stores/exclusiveAudio";
 import { canUseCompanionDownloads } from "@/exclusive/capability";
@@ -85,6 +86,9 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
 let wantConnected = false;
 let intentionalClose = false;
+let tokenCheckGen = 0;
+let probeWs: WebSocket | null = null;
+let probeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function desiredConnectKey(): string {
   const port = exclusiveAudio.port || 18765;
@@ -475,7 +479,7 @@ export function waitForCompanionConnection(
         clearTimeout(timer);
         unsub();
         resolve(true);
-      } else if (evt.type === "hello_reject") {
+      } else if (evt.type === "hello_reject" || evt.type === "disconnect") {
         clearTimeout(timer);
         unsub();
         resolve(false);
@@ -484,16 +488,128 @@ export function waitForCompanionConnection(
   });
 }
 
+function wantsCompanionSocket(): boolean {
+  const token = !!(exclusiveAudio.companionToken || "").trim();
+  const exclusiveOn = exclusiveAudio.capable && exclusiveAudio.enabled;
+  const downloadsOn = canUseCompanionDownloads() && downloads.enabled;
+  return token && (exclusiveOn || downloadsOn);
+}
+
+function clearTokenProbe(): void {
+  if (probeTimer != null) {
+    clearTimeout(probeTimer);
+    probeTimer = null;
+  }
+  if (!probeWs) return;
+  const socket = probeWs;
+  probeWs = null;
+  try {
+    socket.close();
+  } catch {
+    /* ignore */
+  }
+}
+
+function finishTokenProbe(gen: number, result: "accepted" | "invalid" | "unreachable") {
+  if (gen !== tokenCheckGen) return;
+  clearTokenProbe();
+  setTokenCheck(result);
+}
+
+function openTokenProbe(token: string, gen: number): void {
+  const port = exclusiveAudio.port || 18765;
+  const url = `ws://127.0.0.1:${port}/ws`;
+  let settled = false;
+  const finish = (result: "accepted" | "invalid" | "unreachable") => {
+    if (settled) return;
+    settled = true;
+    finishTokenProbe(gen, result);
+  };
+
+  let socket: WebSocket;
+  try {
+    socket = new WebSocket(url);
+  } catch {
+    finish("unreachable");
+    return;
+  }
+  probeWs = socket;
+  probeTimer = setTimeout(() => finish("unreachable"), 4000);
+
+  socket.onopen = () => {
+    try {
+      socket.send(
+        JSON.stringify(
+          envelope(MSG_HELLO, { token, sessionId: `probe-${gen}` }),
+        ),
+      );
+    } catch {
+      finish("unreachable");
+    }
+  };
+  socket.onmessage = (ev) => {
+    let msg: { type?: string; reason?: string };
+    try {
+      msg = JSON.parse(String(ev.data)) as { type?: string; reason?: string };
+    } catch {
+      return;
+    }
+    if (msg.type === MSG_HELLO_OK) {
+      finish("accepted");
+    } else if (msg.type === MSG_HELLO_REJECT) {
+      finish(msg.reason === "invalid_token" ? "invalid" : "unreachable");
+    }
+  };
+  socket.onclose = () => {
+    if (socket === probeWs) probeWs = null;
+    finish("unreachable");
+  };
+}
+
+/**
+ * Prove the saved token via hello. Keeps a socket only when Exclusive or
+ * Downloads already wants one; otherwise hello and hang up.
+ */
+export function checkCompanionToken(): void {
+  const token = (exclusiveAudio.companionToken || "").trim();
+  const gen = ++tokenCheckGen;
+  clearTokenProbe();
+  if (!token) {
+    setTokenCheck("idle");
+    return;
+  }
+  if (wantsCompanionSocket()) {
+    syncCompanionConnection();
+    if (exclusiveAudio.connection === "connected") {
+      setTokenCheck("accepted");
+      return;
+    }
+    if (exclusiveAudio.connection === "rejected") {
+      setTokenCheck("invalid");
+      return;
+    }
+    setTokenCheck("checking");
+    void waitForCompanionConnection().then((ok) => {
+      if (gen !== tokenCheckGen) return;
+      if (ok || exclusiveAudio.connection === "connected") {
+        setTokenCheck("accepted");
+      } else if (exclusiveAudio.connection === "rejected") {
+        setTokenCheck("invalid");
+      } else {
+        setTokenCheck("unreachable");
+      }
+    });
+    return;
+  }
+  setTokenCheck("checking");
+  openTokenProbe(token, gen);
+}
+
 /**
  * Connect when exclusive or companion-downloads is enabled and a token is set.
  */
 export function syncCompanionConnection(): void {
-  const token = !!(exclusiveAudio.companionToken || "").trim();
-  const exclusiveOn = exclusiveAudio.capable && exclusiveAudio.enabled;
-  const downloadsOn = canUseCompanionDownloads() && downloads.enabled;
-  const should = token && (exclusiveOn || downloadsOn);
-
-  if (!should) {
+  if (!wantsCompanionSocket()) {
     disconnectCompanion();
     return;
   }

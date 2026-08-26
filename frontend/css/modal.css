@@ -285,6 +285,26 @@ body.modal-open {
   outline-offset: 1px;
 }
 
+.text-input-ok {
+  border-color: var(--success);
+}
+
+.text-input-bad {
+  border-color: var(--danger);
+}
+
+.text-input-ok:focus {
+  outline-color: color-mix(in srgb, var(--success) 50%, transparent);
+}
+
+.text-input-bad:focus {
+  outline-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+
+.modal-hint.ok {
+  color: var(--success);
+}
+
 .modal-hint.warn {
   color: var(--danger);
 }

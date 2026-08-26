@@ -15,6 +15,7 @@ import {
 } from "@/exclusive/formatPolicy";
 import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
 import { DEFAULT_PORT, ROLE_CONTROLLER } from "@/exclusive/protocol";
+import type { TokenCheck } from "@/exclusive/tokenCheck";
 import type { Track } from "@/models/track";
 
 export type { FormatMode };
@@ -43,6 +44,8 @@ export interface ExclusiveAudioState {
   lastError: string | null;
   /** Companion app-support path from hello / disk_info. Not persisted. */
   dataDir: string;
+  /** Token probe result for this page lifetime. Not persisted. */
+  tokenCheck: TokenCheck;
 }
 
 const KEY_ENABLED = "musicweb.exclusive.enabled";
@@ -74,6 +77,7 @@ export const exclusiveAudio = reactive<ExclusiveAudioState>({
   devices: [],
   lastError: null,
   dataDir: "",
+  tokenCheck: "idle",
 });
 
 /** Track ids toasted for missing tech this session */
@@ -250,8 +254,16 @@ export function setExclusiveEnabled(on: boolean) {
   persist();
 }
 
+export function setTokenCheck(check: TokenCheck) {
+  exclusiveAudio.tokenCheck = check;
+}
+
 export function setCompanionToken(token: string | number | null | undefined) {
-  exclusiveAudio.companionToken = String(token || "");
+  const next = String(token || "");
+  if (next !== exclusiveAudio.companionToken) {
+    exclusiveAudio.tokenCheck = "idle";
+  }
+  exclusiveAudio.companionToken = next;
   persist();
 }
 
