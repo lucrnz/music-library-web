@@ -45,6 +45,7 @@ def _track(
     source_codec: str | None,
     is_lossy: bool,
     is_missing: bool = False,
+    duration_ms: int | None = None,
 ) -> Track:
     _album(session)
     track = Track(
@@ -60,6 +61,7 @@ def _track(
         album_artist_id="art",
         source_codec=source_codec,
         is_lossy=is_lossy,
+        duration_ms=duration_ms,
         size_bytes=1,
         mtime_ns=1,
         is_missing=is_missing,
@@ -230,3 +232,81 @@ def test_recount_mp3_plus_unknown_is_mixed(db):
         recount_entities(session)
         session.commit()
         assert session.get(Album, "alb").lossy_kind == "mixed"
+
+
+def test_recount_duration_sums_present_tracks(db):
+    with db.session() as session:
+        _track(
+            session,
+            track_id="t1",
+            rel_path="a.flac",
+            source_codec="flac",
+            is_lossy=False,
+            duration_ms=120_000,
+        )
+        _track(
+            session,
+            track_id="t2",
+            rel_path="b.flac",
+            source_codec="flac",
+            is_lossy=False,
+            duration_ms=180_000,
+        )
+        recount_entities(session)
+        session.commit()
+        assert session.get(Album, "alb").duration_ms == 300_000
+
+
+def test_recount_duration_null_if_any_present_lacks_ms(db):
+    with db.session() as session:
+        _track(
+            session,
+            track_id="t1",
+            rel_path="a.flac",
+            source_codec="flac",
+            is_lossy=False,
+            duration_ms=120_000,
+        )
+        _track(
+            session,
+            track_id="t2",
+            rel_path="b.flac",
+            source_codec="flac",
+            is_lossy=False,
+            duration_ms=None,
+        )
+        recount_entities(session)
+        session.commit()
+        assert session.get(Album, "alb").duration_ms is None
+
+
+def test_recount_duration_ignores_missing_tracks(db):
+    with db.session() as session:
+        _track(
+            session,
+            track_id="t1",
+            rel_path="a.flac",
+            source_codec="flac",
+            is_lossy=False,
+            duration_ms=120_000,
+        )
+        _track(
+            session,
+            track_id="t2",
+            rel_path=None,
+            source_codec="flac",
+            is_lossy=False,
+            is_missing=True,
+            duration_ms=None,
+        )
+        recount_entities(session)
+        session.commit()
+        assert session.get(Album, "alb").duration_ms == 120_000
+
+
+def test_recount_duration_null_when_no_present_tracks(db):
+    with db.session() as session:
+        _album(session)
+        recount_entities(session)
+        session.commit()
+        assert session.get(Album, "alb").duration_ms is None

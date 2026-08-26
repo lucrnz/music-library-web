@@ -56,6 +56,22 @@ def recount_entities(session: Session) -> None:
     session.execute(
         text(
             """
+            UPDATE albums SET duration_ms = (
+              SELECT CASE
+                WHEN COUNT(*) = 0 THEN NULL
+                WHEN SUM(CASE WHEN tracks.duration_ms IS NULL THEN 1 ELSE 0 END) > 0
+                  THEN NULL
+                ELSE SUM(tracks.duration_ms)
+              END
+              FROM tracks
+              WHERE tracks.album_id = albums.id AND tracks.is_missing = 0
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
             UPDATE artists SET album_count = (
               SELECT COUNT(*) FROM albums
               WHERE albums.artist_id = artists.id AND albums.track_count > 0

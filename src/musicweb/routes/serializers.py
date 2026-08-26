@@ -84,6 +84,10 @@ def album_dict(album: Album, *, artist_name: str | None = None) -> dict:
         "artist": name or "",
         "year": album.year,
         "track_count": album.track_count,
+        "duration_ms": album.duration_ms,
+        "duration": (
+            album.duration_ms / 1000.0 if album.duration_ms is not None else None
+        ),
         "has_cover": album.has_cover,
         "lossy_kind": album.lossy_kind,
     }

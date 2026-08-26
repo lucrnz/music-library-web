@@ -58,6 +58,8 @@ class Album(Base):
     title_norm: Mapped[str] = mapped_column(String, nullable=False)
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     track_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # NULL = no present tracks, or any present track lacks duration_ms.
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     has_cover: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # NULL = no present lossy tracks; else mp3 | aac | mixed
     lossy_kind: Mapped[Optional[str]] = mapped_column(String, nullable=True)

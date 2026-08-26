@@ -82,7 +82,34 @@ def test_album_dict_lossy_kind():
         lossy_kind="mixed",
     )
     album.album_artist = artist
-    assert album_dict(album)["lossy_kind"] == "mixed"
+    body = album_dict(album)
+    assert body["lossy_kind"] == "mixed"
+    assert body["duration_ms"] is None
+    assert body["duration"] is None
+
+
+def test_album_dict_includes_duration():
+    artist = Artist(
+        id="art",
+        name="Artist",
+        name_norm="artist",
+        sort_name="artist",
+        album_count=1,
+        track_count=1,
+    )
+    album = Album(
+        id="alb",
+        artist_id="art",
+        title="Album",
+        title_norm="album",
+        track_count=2,
+        duration_ms=2912000,
+        has_cover=False,
+    )
+    album.album_artist = artist
+    body = album_dict(album)
+    assert body["duration_ms"] == 2912000
+    assert body["duration"] == 2912.0
 
 
 def test_track_dict_includes_bitrate_mode():
