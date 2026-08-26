@@ -1,10 +1,8 @@
 /**
  * Single play decision: sink + source + profile + url + block.
- * Companion uses exclusiveTag. HTML uses resolvePlaySource.
+ * Companion uses exclusiveDelivery. HTML uses resolvePlaySource.
  */
-import { streamUrl } from "@/api";
 import { catalogIndex, isLocallyPlayableDownload } from "@/downloads/catalog";
-import { isCompanionFileUrl } from "@/downloads/companionBlob";
 import { SOURCE_TAG, deliveryCodec } from "@/lossyKind";
 import type { Track } from "@/models/track";
 import {
@@ -12,11 +10,17 @@ import {
   type PlayBlockReason,
 } from "@/playBlock";
 import {
+  exclusiveDelivery,
+  hrefForStream,
+} from "@/playback/exclusiveDelivery";
+import {
   resolvePlaySource,
   type PlaybackPolicy,
   willPreferLocal,
 } from "@/downloads/resolve";
 import { settings } from "@/stores/settings";
+
+export { hrefForStream };
 
 export type PlaySink = "htmlAudio" | "companion";
 
@@ -59,69 +63,19 @@ function blocked(
   };
 }
 
-export function hrefForStream(
-  track: { id?: string } | null | undefined,
-  tag: string,
-  absolute: boolean,
-): string | null {
-  const path = streamUrl(track, tag);
-  if (!path) return null;
-  if (!absolute) return path;
-  try {
-    return new URL(path, location.origin).href;
-  } catch {
-    return path;
-  }
-}
-
 async function exclusiveIntent(
   track: Track | null | undefined,
   ctx: PlayIntentCtx,
 ): Promise<PlayIntent> {
-  if (ctx.enabled && track?.id) {
-    const local = await resolvePlaySource(track, {
-      enabled: true,
-      offline: ctx.offline,
-      activeStreamCodec: track.isLossy
-        ? SOURCE_TAG
-        : ctx.exclusiveTag || ctx.activeStreamCodec,
-      playbackPolicy: ctx.playbackPolicy,
-      catalog: ctx.catalog,
-    });
-    if (local.source === "downloaded" && isCompanionFileUrl(local.url)) {
-      return {
-        sink: "companion",
-        source: "downloaded",
-        profile: local.profile,
-        url: local.url,
-      };
-    }
-  }
-  if (track?.isLossy) {
-    const url = hrefForStream(track, SOURCE_TAG, true);
-    if (!url) {
-      return blocked("exclusive_lossy");
-    }
-    return {
-      sink: "companion",
-      source: "streaming",
-      profile: SOURCE_TAG,
-      url,
-    };
-  }
-  const tag = ctx.exclusiveTag;
-  if (!tag) {
-    return blocked("exclusive_no_format");
-  }
-  const url = hrefForStream(track, tag, true);
-  if (!url) {
-    return blocked("play_failed", tag);
+  const d = await exclusiveDelivery(track, ctx);
+  if (d.source === "unavailable") {
+    return blocked(d.block, d.profile, d.message);
   }
   return {
     sink: "companion",
-    source: "streaming",
-    profile: tag,
-    url,
+    source: d.source,
+    profile: d.profile,
+    url: d.url,
   };
 }
 
