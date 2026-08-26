@@ -142,6 +142,22 @@ describe("output volume", () => {
     expect(fn).toHaveBeenCalledTimes(1);
     expect(fn).toHaveBeenCalledWith(0.4);
   });
+
+  it("setOutputVolume notifySinks false updates the face without notifying sinks", async () => {
+    initOutputVolume();
+    const fn = vi.fn();
+    unsubs.push(subscribeOutputVolume(fn));
+    fn.mockClear();
+    setOutputVolume(0.25, { notifySinks: false });
+    await nextTick();
+    expect(player.volume).toBe(0.25);
+    expect(localStorage.getItem(VOLUME_KEY)).toBe("0.25");
+    expect(fn).not.toHaveBeenCalled();
+    setOutputVolume(0.5);
+    await nextTick();
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith(0.5);
+  });
 });
 
 describe("now-playing rail", () => {

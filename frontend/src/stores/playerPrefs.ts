@@ -16,6 +16,7 @@ const RAIL_FACE_STORAGE_KEY = "musicweb.nowPlayingRail.v1";
 
 const volumeSubscribers = new Set<(v: number) => void>();
 let volumeWatchBound = false;
+let skipVolumeNotify = false;
 
 export function readVolume(): number | null {
   try {
@@ -38,8 +39,9 @@ export function writeVolume(v: number) {
 }
 
 /** Face + storage. The only writer of player.volume and musicweb.volume. */
-export function setOutputVolume(v: number) {
+export function setOutputVolume(v: number, opts?: { notifySinks?: boolean }) {
   const n = Math.min(1, Math.max(0, Number(v)));
+  skipVolumeNotify = opts?.notifySinks === false;
   player.volume = n;
   writeVolume(n);
 }
@@ -66,6 +68,10 @@ export function initOutputVolume(): void {
   watch(
     () => player.volume,
     (v) => {
+      if (skipVolumeNotify) {
+        skipVolumeNotify = false;
+        return;
+      }
       for (const fn of volumeSubscribers) fn(v);
     },
   );

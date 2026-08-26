@@ -13,7 +13,11 @@ import {
   type ExclusiveDevice,
 } from "@/stores/exclusiveAudio";
 import { canUseCompanionDownloads } from "@/exclusive/capability";
-import { companionVolumeToFace } from "@/exclusive/companionVolume";
+import {
+  INITIAL_VOLUME_ADOPT,
+  resolveCompanionStatusVolume,
+  type CompanionVolumeAdoptState,
+} from "@/exclusive/companionVolume";
 import { downloads } from "@/downloads/state";
 import { setOutputVolume } from "@/stores/playerPrefs";
 import { player } from "@/stores/playerState";
@@ -89,6 +93,7 @@ let intentionalClose = false;
 let tokenCheckGen = 0;
 let probeWs: WebSocket | null = null;
 let probeTimer: ReturnType<typeof setTimeout> | null = null;
+let volumeAdopt: CompanionVolumeAdoptState = INITIAL_VOLUME_ADOPT;
 
 function desiredConnectKey(): string {
   const port = exclusiveAudio.port || 18765;
@@ -142,6 +147,7 @@ function clearReconnect(): void {
 
 function clearLiveDevice(): void {
   setCompanionDeviceId(null);
+  volumeAdopt = INITIAL_VOLUME_ADOPT;
 }
 
 export function sendCompanion(msg: Record<string, unknown>): boolean {
@@ -353,12 +359,16 @@ function applyStatus(msg: CompanionWireMessage): void {
     }
   }
 
-  const face = companionVolumeToFace(msg.volume, {
+  const resolved = resolveCompanionStatusVolume(volumeAdopt, {
+    volume0to100: msg.volume,
     exclusiveEnabled: isExclusiveEnabled(),
-    deviceSelected: !!exclusiveAudio.companionDeviceId,
+    deviceId: exclusiveAudio.companionDeviceId,
+    followAll: exclusiveAudio.role === ROLE_READONLY,
   });
-  if (face != null && Math.abs(player.volume - face) > 1e-4) {
-    setOutputVolume(face);
+  volumeAdopt = resolved.state;
+  if (resolved.face != null && Math.abs(player.volume - resolved.face) > 1e-4) {
+    // Status already holds this level — do not echo set_volume via sinks.
+    setOutputVolume(resolved.face, { notifySinks: false });
   }
 
   // TTL demotion: socket stays open so disconnect does not fire — hard-stop via error.
