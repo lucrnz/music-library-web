@@ -26,7 +26,7 @@ Use this when Musicweb is already running on your network and you want exclusive
    ```
 
    Leave this process running. It listens on `127.0.0.1` only (default port **18765**).
-6. **PWA Settings → Desktop companion** — paste the same `COMPANION_TOKEN`, set the port if you changed it. Then **Exclusive audio** — enable exclusive.
+6. **PWA Settings → Desktop companion** — paste the same `COMPANION_TOKEN`, set the port if you changed it. The token field turns green when the companion accepts it (red if the secret is wrong or nothing is listening). Then **Exclusive audio** — enable exclusive.
 7. **Pick an output device** — first choice is manual; nothing is selected for you.
 8. **Play a track** — status should show **Ready ·** your device name, and audio should come from the Mac via the companion, not the browser element.
 
