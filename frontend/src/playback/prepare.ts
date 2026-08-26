@@ -2,6 +2,7 @@
  * Shared stream prepare for queue add, settings codec change, and near-end.
  */
 import { apiFetch, apiPost } from "@/api";
+import { SOURCE_TAG } from "@/lossyKind";
 import type { Track } from "@/models/track";
 import { activeDelivery } from "@/playback/deliveryPolicy";
 import { shouldPrepare } from "@/playback/playIntent";
@@ -103,7 +104,7 @@ export function prepareTracks(
     const byTag = new Map<string, Track[]>();
     for (const t of list) {
       const tag = profileFor(t);
-      if (!tag) continue;
+      if (!tag || tag === SOURCE_TAG) continue;
       let bucket = byTag.get(tag);
       if (!bucket) {
         bucket = [];

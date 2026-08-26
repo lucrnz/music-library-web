@@ -95,6 +95,19 @@ describe("prepareTracks", () => {
     expect(tags).not.toContain("opus_192_48000");
   });
 
+  it("exclusive does not prepare a source tag", () => {
+    vi.mocked(activeDelivery).mockReturnValue({
+      sink: "companion",
+      profileFor: (t) => (t?.isLossy ? "source" : "flac_16_44100"),
+    });
+    prepareTracks([track("lossy", { isLossy: true, sourceCodec: "mp3" }), track("a")]);
+    const bodies = prepareBodies();
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].codec).toBe("flac_16_44100");
+    expect(bodies[0].ids).toEqual(["a"]);
+    expect(bodies.map((b) => b.codec)).not.toContain("source");
+  });
+
   it("HTML skips a projected local-better id", () => {
     catalogIndex.byTrack = {
       a: { codec: "flac_16_44100", status: "ready" },

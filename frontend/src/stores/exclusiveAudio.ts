@@ -224,6 +224,21 @@ export function getExclusiveProfileTag(
   });
 }
 
+/** Lossless exclusive with unknown rate/depth; never lossy/source. */
+export function shouldWarnMissingExclusiveTech(
+  track:
+    | {
+        isLossy?: boolean;
+        sampleRateHz?: number | null;
+        bitDepth?: number | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  if (!track || track.isLossy) return false;
+  return track.sampleRateHz == null || track.bitDepth == null;
+}
+
 /** @returns true if this is the first toast for this id */
 export function consumeMissingTechToast(trackId: string): boolean {
   if (!trackId || missingTechToasted.has(trackId)) return false;

@@ -23,7 +23,10 @@ import {
   type PlaySink,
 } from "@/playback/playIntent";
 import { showToast } from "@/stores/ui";
-import { consumeMissingTechToast } from "@/stores/exclusiveAudio";
+import {
+  consumeMissingTechToast,
+  shouldWarnMissingExclusiveTech,
+} from "@/stores/exclusiveAudio";
 import { activeDelivery } from "@/playback/deliveryPolicy";
 import { pl } from "@/stores/playlist";
 import {
@@ -283,7 +286,7 @@ export async function loadResolved(
 
   if (
     intent.sink === "companion" &&
-    (track?.sampleRateHz == null || track?.bitDepth == null) &&
+    shouldWarnMissingExclusiveTech(track) &&
     track?.id &&
     consumeMissingTechToast(track.id)
   ) {
