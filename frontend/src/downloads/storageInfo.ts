@@ -115,7 +115,7 @@ export function formatDownloadsStorageLine(
 ) {
   const n = d.trackCount || 0;
   if (!n) {
-    return _style === "short" ? "Ready — no downloads yet" : "No downloads yet";
+    return _style === "short" ? "Ready - no downloads yet" : "No downloads yet";
   }
   const label = n === 1 ? "1 track" : `${n} tracks`;
   const used = formatBytes(d.downloadedBytes || 0);

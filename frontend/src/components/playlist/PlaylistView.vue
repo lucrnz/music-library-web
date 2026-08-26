@@ -256,7 +256,7 @@ const route = useRoute();
     }
 
     function trackSub(track: Track) {
-      return [track.artist, track.album].filter(Boolean).join(" — ");
+      return [track.artist, track.album].filter(Boolean).join(" - ");
     }
 
     onMounted(refreshSaved);
@@ -360,7 +360,7 @@ const route = useRoute();
         <div v-if="!pl.length" class="list-empty">
           {{ pl.editing
             ? 'Playlist is empty'
-            : 'Playlist empty — tap tracks in the Library to add them' }}
+            : 'Playlist empty - tap tracks in the Library to add them' }}
         </div>
         <div
           v-for="(track, index) in pl.tracks"

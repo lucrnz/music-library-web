@@ -28,8 +28,8 @@ describe("monthChipLabel", () => {
     expect(monthChipLabel("2026-08", 2026)).toBe("August");
   });
 
-  it("prefixes prior years with an en dash", () => {
-    expect(monthChipLabel("2025-12", 2026)).toBe("2025 — December");
+  it("prefixes prior years with a hyphen", () => {
+    expect(monthChipLabel("2025-12", 2026)).toBe("2025 - December");
   });
 });
 

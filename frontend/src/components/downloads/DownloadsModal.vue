@@ -422,7 +422,7 @@ const roots = ref<TreeNode[]>([]);
                     {{ codecLabel(leafCodec(node)) }}
                     <template v-if="leafBytes(node)"> · {{ formatBytes(leafBytes(node) || 0) }}</template>
                     <template v-if="leafStatus(node) === 'orphan'"> · removed from library</template>
-                    <template v-if="leafStatus(node) === 'broken'"> · file unreadable — re-download</template>
+                    <template v-if="leafStatus(node) === 'broken'"> · file unreadable - re-download</template>
                   </span>
                 </span>
                 <button

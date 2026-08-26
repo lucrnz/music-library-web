@@ -7,7 +7,7 @@ export const SOURCE_TAG = "source";
 
 /** Toast / details copy for a lossy-source file. */
 export const LOSSY_SOURCE_COPY =
-  "Lossy source — played as stored. Not a lossless file.";
+  "Lossy source - played as stored. Not a lossless file.";
 
 export type LossyKind = "mp3" | "aac" | "lossy";
 export type AlbumLossyKind = LossyKind | "mixed";

@@ -170,17 +170,17 @@ export function getQueueControlState() {
 
 export function getPauseBanner() {
   if (userPaused) {
-    return "Paused by you — downloads won't start until you resume.";
+    return "Paused by you - downloads won't start until you resume.";
   }
   const reason = downloadAutoPauseReason();
   if (reason === "offline") {
-    return "Paused — you're offline. Downloads will resume when you're back online.";
+    return "Paused - you're offline. Downloads will resume when you're back online.";
   }
   if (reason === "server") {
-    return "Paused — waiting for the library server. Retrying automatically…";
+    return "Paused - waiting for the library server. Retrying automatically…";
   }
   if (reason === "companion") {
-    return "Paused — waiting for the Desktop companion. Retrying automatically…";
+    return "Paused - waiting for the Desktop companion. Retrying automatically…";
   }
   return "";
 }

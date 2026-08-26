@@ -36,7 +36,7 @@ export function monthChipLabel(key: string, currentYear: number): string {
   const month = Number(key.slice(5, 7));
   const name = MONTH_NAMES[month - 1] || key;
   if (year === currentYear) return name;
-  return `${year} — ${name}`;
+  return `${year} - ${name}`;
 }
 
 export function buildRangeChips(opts: {

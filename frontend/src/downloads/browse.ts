@@ -102,7 +102,7 @@ export async function loadDownloadsView(
       { title: "Downloads", showBack: false },
       {
         kind: "empty",
-        message: "No downloads yet — download tracks from the library",
+        message: "No downloads yet - download tracks from the library",
       },
       { artUrls },
     );

@@ -17,7 +17,7 @@ describe("formatDownloadsStorageLine", () => {
       "No downloads yet",
     );
     expect(formatDownloadsStorageLine({ trackCount: 0 }, "short")).toBe(
-      "Ready — no downloads yet",
+      "Ready - no downloads yet",
     );
   });
 

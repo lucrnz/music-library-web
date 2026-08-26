@@ -133,7 +133,7 @@ watch(activeIdx, async (idx) => {
       <div class="lyrics-body" ref="listEl">
         <p v-if="view.kind === 'loading'" class="lyrics-status">Loading lyrics…</p>
         <p v-else-if="view.kind === 'pending'" class="lyrics-status">
-          Lyrics not fetched yet — run a library scan.
+          Lyrics not fetched yet - run a library scan.
         </p>
         <p v-else-if="view.kind === 'instrumental'" class="lyrics-status">
           Instrumental

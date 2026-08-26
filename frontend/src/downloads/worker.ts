@@ -357,7 +357,7 @@ async function executeCompanionJob(
     const msg = err instanceof Error ? err.message : String(err);
     if (code === "enospc" || /no space|ENOSPC|quota/i.test(msg)) {
       return {
-        outcome: { kind: "failed", error: "Storage full — free space and retry" },
+        outcome: { kind: "failed", error: "Storage full - free space and retry" },
       };
     }
     if (isNetworkClassError(err)) {
@@ -534,7 +534,7 @@ export async function executeDownloadJob(
         kind: "failed",
         error:
           name === "QuotaExceededError" || /quota/i.test(msg)
-            ? "Storage full — free space and retry"
+            ? "Storage full - free space and retry"
             : msg,
       },
     };

@@ -121,12 +121,12 @@ const MESSAGES = {
   offline: {
     toast: "Offline",
     banner: "You're offline. Enable Downloads in Settings to save music for offline use.",
-    loadOn: "Offline — use the Downloads tab for saved music.",
+    loadOn: "Offline - use the Downloads tab for saved music.",
   },
   server_down: {
     toast: "Can't reach server",
     banner: "Can't reach the library server.",
-    loadOn: "Can't reach server — use the Downloads tab for saved music.",
+    loadOn: "Can't reach server - use the Downloads tab for saved music.",
   },
   online: {
     toastRecovered: "Back online",

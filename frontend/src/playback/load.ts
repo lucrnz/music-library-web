@@ -291,7 +291,7 @@ export async function loadResolved(
     consumeMissingTechToast(track.id)
   ) {
     showToast(
-      `${track.title || "Track"}: source format unknown — using device max`,
+      `${track.title || "Track"}: source format unknown - using device max`,
     );
   }
 

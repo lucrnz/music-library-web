@@ -21,7 +21,7 @@ const kind = computed(() => downloadActionKind(props.track).kind);
         case "ready":
           return "Downloaded";
         case "other":
-          return "Downloaded at a different quality — tap to download at download quality";
+          return "Downloaded at a different quality - tap to download at download quality";
         case "pending":
           return "Queued";
         case "active":
@@ -29,7 +29,7 @@ const kind = computed(() => downloadActionKind(props.track).kind);
         case "paused":
           return "Download paused";
         case "retry":
-          return "Download failed — tap to retry";
+          return "Download failed - tap to retry";
         default:
           return "Download";
       }
