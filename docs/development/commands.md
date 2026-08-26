@@ -148,11 +148,14 @@ Requires:
 - `mpv` on `PATH` (or `--mpv /path/to/mpv`) on **macOS** only
 - macOS for real exclusive/hog device behavior
 
+Optional: `DEBUG=true` or `DEBUG=1` for verbose companion logs, including exclusive volume path decisions. `false` / `0` / unset stay at INFO. Sourced from the same `.env` (or process environment). Loopback HTTP access logs stay off so `?token=` does not hit stdout.
+
 ```sh
 # Prefer COMPANION_TOKEN in .env (see .env.example), then:
 uv run musicweb companion
 # optional: --port 18765 (default)  --mpv /opt/homebrew/bin/mpv
 # or one-shot: COMPANION_TOKEN=… uv run musicweb companion
+# verbose: DEBUG=true uv run musicweb companion
 ```
 
 Listens on **127.0.0.1 only**, default port **18765**, WebSocket at `ws://127.0.0.1:18765/ws`. The installed Mac PWA connects with the token; first session is controller, further tabs are read-only.

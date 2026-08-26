@@ -23,17 +23,53 @@ from musicweb.exclusive.session import ExclusiveHub
 logger = logging.getLogger(__name__)
 
 MPV_STUB_LABEL = "stub (this platform)"
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+_DEBUG_ON = frozenset({"1", "true"})
+_DEBUG_OFF = frozenset({"0", "false", ""})
 
 
-def banner_lines(port: int, mpv_path: str, data_dir: Path) -> str:
-    return (
-        f"musicweb companion  protocol v{PROTOCOL_VERSION}\n"
-        f"  listening  ws://127.0.0.1:{port}/ws\n"
-        f"  health     http://127.0.0.1:{port}/health\n"
-        f"  files      {data_dir}\n"
-        f"  mpv        {mpv_path}\n"
-        f"  COMPANION_TOKEN  set — paste the same value into PWA settings"
-    )
+def resolve_debug_env(raw: str | None) -> tuple[bool, str | None]:
+    """Interpret DEBUG as true/1 on, false/0/empty/unset off.
+
+    Returns ``(enabled, warning)``. Unknown tokens are off with a warning.
+    """
+    if raw is None:
+        return False, None
+    token = raw.strip().lower()
+    if token in _DEBUG_ON:
+        return True, None
+    if token in _DEBUG_OFF:
+        return False, None
+    return False, f"DEBUG={raw.strip()!r} is not true/false/0/1; treating as off"
+
+
+def configure_companion_logging(*, debug: bool) -> None:
+    """Raise or keep the process log level. Safe if ``main()`` already configured."""
+    level = logging.DEBUG if debug else logging.INFO
+    root = logging.getLogger()
+    root.setLevel(level)
+    if not root.handlers:
+        logging.basicConfig(level=level, format=_LOG_FORMAT)
+        return
+    for handler in root.handlers:
+        if handler.level == logging.NOTSET or handler.level > level:
+            handler.setLevel(level)
+
+
+def banner_lines(
+    port: int, mpv_path: str, data_dir: Path, *, debug: bool = False
+) -> str:
+    lines = [
+        f"musicweb companion  protocol v{PROTOCOL_VERSION}",
+        f"  listening  ws://127.0.0.1:{port}/ws",
+        f"  health     http://127.0.0.1:{port}/health",
+        f"  files      {data_dir}",
+        f"  mpv        {mpv_path}",
+        "  COMPANION_TOKEN  set — paste the same value into PWA settings",
+    ]
+    if debug:
+        lines.append("  debug      verbose")
+    return "\n".join(lines)
 
 
 def check_loopback_port(port: int) -> None:
@@ -51,13 +87,19 @@ def check_loopback_port(port: int) -> None:
         probe.close()
 
 
-def serve_loopback(app: object, port: int, on_bound: Callable[[], None]) -> None:
+def serve_loopback(
+    app: object,
+    port: int,
+    on_bound: Callable[[], None],
+    *,
+    log_level: str = "info",
+) -> None:
     """Bind 127.0.0.1 and print *on_bound* only after the listen succeeds."""
     config = uvicorn.Config(
         app,
         host="127.0.0.1",
         port=port,
-        log_level="info",
+        log_level=log_level,
         access_log=False,
         ws="websockets-sansio",
     )
@@ -116,6 +158,12 @@ def run_companion(
     # Same .env discovery as the library server (cwd, then project root).
     # Does not take data-dir lock or open the DB.
     load_env_file()
+    debug, debug_warn = resolve_debug_env(os.environ.get("DEBUG"))
+    configure_companion_logging(debug=debug)
+    if debug_warn:
+        print(debug_warn, file=sys.stderr)
+    if debug:
+        logger.debug("DEBUG enabled — verbose companion logging")
 
     token = (os.environ.get("COMPANION_TOKEN") or "").strip()
     if not token:
@@ -144,7 +192,10 @@ def run_companion(
     serve_loopback(
         app,
         port,
-        lambda: print(banner_lines(port, banner_mpv, data_dir), flush=True),
+        lambda: print(
+            banner_lines(port, banner_mpv, data_dir, debug=debug), flush=True
+        ),
+        log_level="debug" if debug else "info",
     )
 
 
@@ -166,6 +217,8 @@ def companion(
 
     Requires COMPANION_TOKEN in the project .env or the process environment.
     Binds 127.0.0.1 only. mpv is required on macOS. On Windows/Linux exclusive
-    hog is a no-op stub so Downloads still start.
+    hog is a no-op stub so Downloads still start. DEBUG=true or 1 enables
+    verbose logs, including exclusive volume path decisions (false / 0 / unset
+    stay at INFO).
     """
     run_companion(port=port, mpv=mpv)
