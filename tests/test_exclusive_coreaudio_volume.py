@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from musicweb.exclusive.coreaudio import (
     MUTE_SELECTORS,
     VOLUME_SELECTORS,
@@ -196,6 +198,18 @@ def test_apply_unmute_not_enough_without_scalar():
     assert not io.set_scalar_calls or all(
         not io.has(s) or io._key(s) not in io.writable for s, _ in io.set_scalar_calls
     )
+
+
+def test_apply_logs_selector_decision(caplog):
+    io = FakeVolumeIO()
+    io.allow_scalar(VOLUME_SELECTORS[0])
+    io.allow_mute(MUTE_SELECTORS[0], muted=True)
+    with caplog.at_level(logging.DEBUG, logger="musicweb.exclusive.coreaudio"):
+        assert apply_hardware_volume(50, io)
+    assert "hardware volume apply" in caplog.text
+    assert "applied=True" in caplog.text
+    assert "scalar_ok=True" in caplog.text
+    assert "mute_ok=True" in caplog.text
 
 
 def test_apply_scalar_plus_unmute():

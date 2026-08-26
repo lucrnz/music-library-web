@@ -205,24 +205,59 @@ class VolumePropertyIO(Protocol):
     def set_mute(self, sel: VolumeSelector, muted: bool) -> bool: ...
 
 
+def _fourcc_str(code: int) -> str:
+    chars: list[str] = []
+    for shift in (24, 16, 8, 0):
+        ch = (code >> shift) & 0xFF
+        chars.append(chr(ch) if 32 <= ch < 127 else "?")
+    return "".join(chars)
+
+
+def _selector_label(sel: VolumeSelector) -> str:
+    return f"{_fourcc_str(sel.selector)}:{_fourcc_str(sel.scope)}:{sel.element}"
+
+
 def apply_hardware_volume(volume_0_100: float, io: VolumePropertyIO) -> bool:
     """Write volume through *io* using VOLUME_SELECTORS. No device resolve."""
     vol = max(0.0, min(100.0, float(volume_0_100)))
     scalar = vol / 100.0
     scalar_ok = False
+    written: list[str] = []
     for sel in VOLUME_SELECTORS:
         if io.set_scalar(sel, scalar):
             scalar_ok = True
+            written.append(_selector_label(sel))
     mute_present = any(io.has(sel) for sel in MUTE_SELECTORS)
     mute_ok = False
+    mute_hit = "-"
     if vol > 0:
         if mute_present:
-            mute_ok = any(io.set_mute(sel, False) for sel in MUTE_SELECTORS)
+            for sel in MUTE_SELECTORS:
+                if io.set_mute(sel, False):
+                    mute_ok = True
+                    mute_hit = _selector_label(sel)
+                    break
     else:
-        mute_ok = any(io.set_mute(sel, True) for sel in MUTE_SELECTORS)
-    return hardware_set_succeeded(
+        for sel in MUTE_SELECTORS:
+            if io.set_mute(sel, True):
+                mute_ok = True
+                mute_hit = _selector_label(sel)
+                break
+    applied = hardware_set_succeeded(
         scalar_ok, mute_ok, mute_present=mute_present, volume=vol
     )
+    logger.debug(
+        "hardware volume apply user=%.1f scalar_ok=%s mute_ok=%s "
+        "mute_present=%s applied=%s scalars=[%s] mute=%s",
+        vol,
+        scalar_ok,
+        mute_ok,
+        mute_present,
+        applied,
+        ",".join(written) or "-",
+        mute_hit,
+    )
+    return applied
 
 
 def read_hardware_volume(io: VolumePropertyIO) -> float | None:
@@ -231,7 +266,14 @@ def read_hardware_volume(io: VolumePropertyIO) -> float | None:
         raw = io.get_scalar(sel)
         if raw is None:
             continue
-        return max(0.0, min(100.0, float(raw) * 100.0))
+        level = max(0.0, min(100.0, float(raw) * 100.0))
+        logger.debug(
+            "hardware volume read selector=%s level=%.1f",
+            _selector_label(sel),
+            level,
+        )
+        return level
+    logger.debug("hardware volume read: no readable selector")
     return None
 
 
@@ -486,14 +528,29 @@ def _resolve_audio_device_id(device_id: str) -> int | None:
 def _set_hardware_volume(device_id: str, volume_0_100: float) -> bool:
     audio_id = _resolve_audio_device_id(device_id)
     if audio_id is None:
+        logger.debug(
+            "hardware volume write skipped: unresolved device %s", device_id
+        )
         return False
+    logger.debug(
+        "hardware volume write device=%s audio_id=%s user=%.1f",
+        device_id,
+        audio_id,
+        volume_0_100,
+    )
     return apply_hardware_volume(volume_0_100, _HalVolumeIO(audio_id))
 
 
 def _get_hardware_volume(device_id: str) -> float | None:
     audio_id = _resolve_audio_device_id(device_id)
     if audio_id is None:
+        logger.debug(
+            "hardware volume read skipped: unresolved device %s", device_id
+        )
         return None
+    logger.debug(
+        "hardware volume read device=%s audio_id=%s", device_id, audio_id
+    )
     return read_hardware_volume(_HalVolumeIO(audio_id))
 
 

@@ -1,5 +1,7 @@
 """Exclusive volume policy: plan, tenure, ExclusiveVolume."""
 
+import logging
+
 from musicweb.exclusive.protocol import VOLUME_DIGITAL, VOLUME_HARDWARE
 from musicweb.exclusive.volume import (
     ExclusiveVolume,
@@ -172,6 +174,40 @@ def test_on_device_switch_adopts_new_pre_hog():
     assert ev.user == 40.0
     ev.apply()
     assert hw.sets[-1] == ("B", 40.0)
+
+
+def test_apply_logs_hardware_vs_digital_decision(caplog):
+    hw = _FakeHw()
+    ev = ExclusiveVolume(get_hw=hw.get, set_hw=hw.set, set_digital=hw.set_digital)
+    ev.on_device("coreaudio/A")
+    with caplog.at_level(logging.DEBUG, logger="musicweb.exclusive.volume"):
+        ev.set_user(80)
+    assert "exclusive volume decision" in caplog.text
+    assert "hardware_applied=True" in caplog.text
+    assert "path=hardware" in caplog.text
+    assert "digital=100.0" in caplog.text
+    hw.hw_ok = False
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG, logger="musicweb.exclusive.volume"):
+        ev.apply()
+    assert "hardware_applied=False" in caplog.text
+    assert "path=digital" in caplog.text
+    assert "digital=80.0" in caplog.text
+
+
+def test_on_device_logs_adopt_and_unread(caplog):
+    hw = _FakeHw()
+    hw.levels["A"] = 25.0
+    ev = ExclusiveVolume(get_hw=hw.get, set_hw=hw.set, set_digital=hw.set_digital)
+    with caplog.at_level(logging.DEBUG, logger="musicweb.exclusive.volume"):
+        ev.on_device("A")
+    assert "adopt pre-hog" in caplog.text
+    assert "volume=25.0" in caplog.text
+    hw.levels["B"] = None
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG, logger="musicweb.exclusive.volume"):
+        ev.on_device("B")
+    assert "no pre-hog read" in caplog.text
 
 
 def test_on_release_clears_live_id_later_apply_skips_hw():
