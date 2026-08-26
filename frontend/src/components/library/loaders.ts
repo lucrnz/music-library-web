@@ -27,6 +27,8 @@ export type LibraryAlbum = Pick<Album, "id" | "title" | "artist"> & {
   artistId?: string | null;
   year?: number | null;
   trackCount?: number | null;
+  duration?: number | null;
+  durationMs?: number | null;
   hasCover?: boolean;
   lossyKind?: string | null;
 };
@@ -160,7 +162,7 @@ export async function loadArtistsList(): Promise<LibraryPage> {
     return page(chrome, {
       kind: "empty",
       message:
-        "No artists yet — wait for library scan or re-scan in Settings",
+        "No artists yet - wait for library scan or re-scan in Settings",
     });
   }
   return page(chrome, { kind: "artists", artists });
@@ -173,7 +175,7 @@ export async function loadAlbumsList(): Promise<LibraryPage> {
     return page(chrome, {
       kind: "empty",
       message:
-        "No albums yet — wait for library scan or re-scan in Settings",
+        "No albums yet - wait for library scan or re-scan in Settings",
     });
   }
   return page(chrome, { kind: "albumGrid", albums });

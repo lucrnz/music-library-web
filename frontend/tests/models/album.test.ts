@@ -16,5 +16,25 @@ describe("fromApiAlbum", () => {
     expect(album.trackCount).toBe(12);
     expect(album.hasCover).toBe(true);
     expect(album.lossyKind).toBe("mixed");
+    expect(album.duration).toBeNull();
+    expect(album.durationMs).toBeNull();
+  });
+
+  it("maps duration_ms to seconds and ms", () => {
+    const album = fromApiAlbum({
+      id: "a",
+      duration_ms: 2912000,
+    });
+    expect(album.durationMs).toBe(2912000);
+    expect(album.duration).toBe(2912);
+  });
+
+  it("maps duration seconds to ms", () => {
+    const album = fromApiAlbum({
+      id: "a",
+      duration: 2912,
+    });
+    expect(album.duration).toBe(2912);
+    expect(album.durationMs).toBe(2912000);
   });
 });

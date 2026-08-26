@@ -8,6 +8,7 @@ import { useDesktopViewport } from "@/layout";
 import Icon from "@/components/icons/Icon.vue";
 import LossyMark from "@/components/lossy/LossyMark.vue";
 import type { LibraryAlbum } from "@/components/library/loaders";
+import { formatAlbumMeta } from "@/util";
 const props = withDefaults(defineProps<{
   album: LibraryAlbum;
   coverSrc?: string | null;
@@ -25,11 +26,14 @@ const cover = computed(() =>
         coverUrl({ albumId: props.album.id }, "thumb", false),
       )
     );
-    const sub = computed(() => {
-      const a = props.album;
-      const year = a.year ? ` · ${a.year}` : "";
-      return `${a.artist || ""}${year} · ${a.trackCount ?? 0} tracks`;
-    });
+    const sub = computed(() =>
+      formatAlbumMeta({
+        artist: props.album.artist,
+        year: props.album.year,
+        trackCount: props.album.trackCount,
+        durationSec: props.album.duration,
+      })
+    );
     const lossyKind = computed(() => kindForAlbum(props.album));
     function onClick(e: MouseEvent) {
       if (

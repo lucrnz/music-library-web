@@ -223,8 +223,9 @@ main {
 }
 
 .view-bar {
-  height: var(--viewbar-h);
+  min-height: var(--viewbar-h);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
@@ -239,6 +240,14 @@ main {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.view-sub {
+  flex: 1 0 100%;
+  margin-top: -4px;
+  padding-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
 }
 
 .view-actions {
@@ -374,9 +383,10 @@ main {
 
 .media-card-lossy {
   position: absolute;
-  top: auto;
-  bottom: 22px;
+  top: 0;
   right: 0;
+  /* 100% = card width = cover height; sit on the cover, not the subtitle. */
+  margin-top: calc(100% - 22px);
 }
 
 .row-sub {

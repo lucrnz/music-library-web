@@ -45,6 +45,7 @@ import { useLibraryLocation } from "@/components/library/useLibraryLocation";
 import { downloadsBrowse } from "@/components/library/sources/downloadsBrowse";
 import { onlineBrowse } from "@/components/library/sources/onlineBrowse";
 import type { Track } from "@/models/track";
+import { formatAlbumMeta } from "@/util";
 
 const INITIAL_BODY: LibraryBody = { kind: "empty", message: "" };
 const router = useRouter();
@@ -373,6 +374,16 @@ function onHeaderMenuClick(e: MouseEvent) {
   onEntityMenuClick(target, e);
 }
 
+const chromeSubtitle = computed(() => {
+  const album = headerAlbum.value;
+  if (!album) return "";
+  return formatAlbumMeta({
+    year: album.year,
+    trackCount: album.trackCount,
+    durationSec: album.duration,
+  });
+});
+
 watch(
   () => [route.fullPath, ui.libraryLayout, showTree.value] as const,
   () => closeEntityMenu(),
@@ -383,6 +394,7 @@ watch(
     <LibraryChrome
       :aria-label="source.flags.ariaLabel"
       :title="mode === 'stats' ? 'Stats' : title"
+      :subtitle="chromeSubtitle"
       :show-back="showBack && !showTree && mode !== 'stats'"
       :offline-banner="offlineBanner"
       :show-layout-toggle="showLayoutToggle"

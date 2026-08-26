@@ -5,7 +5,7 @@
 import { computed } from "vue";
 import { coverUrl } from "@/api";
 import { resolveRowCover } from "@/components/library/rowCover";
-import { formatTrackLabel } from "@/util";
+import { formatTime, formatTrackLabel } from "@/util";
 import DownloadIcon from "@/components/downloads/DownloadIcon.vue";
 import Icon from "@/components/icons/Icon.vue";
 import LossyMark from "@/components/lossy/LossyMark.vue";
@@ -43,12 +43,17 @@ const cover = computed(() =>
       if (!t) return "";
       if (props.subtitleMode === "none") return "";
       if (props.subtitleMode === "artist-album") {
-        return [t.artist, t.album].filter(Boolean).join(" — ");
+        return [t.artist, t.album].filter(Boolean).join(" - ");
       }
       return t.artist || "";
     });
 
     const lossyKind = computed(() => kindForTrack(props.track));
+    const durationLabel = computed(() => {
+      const sec = props.track?.duration;
+      if (sec == null || !Number.isFinite(sec) || sec < 0) return "";
+      return formatTime(sec);
+    });
 
     async function onPlay(e: MouseEvent) {
       const target = e.target;
@@ -98,6 +103,7 @@ const cover = computed(() =>
         </span>
         <span v-if="subtitle" class="row-sub">{{ subtitle }}</span>
       </span>
+      <span v-if="durationLabel" class="row-dur">{{ durationLabel }}</span>
       <DownloadIcon v-if="showDownload" :track="track" />
       <button
         v-if="showMenu"

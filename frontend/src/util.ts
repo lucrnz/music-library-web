@@ -9,6 +9,42 @@ export function formatTime(sec: number | null | undefined): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+export function formatTrackCount(n: number): string {
+  return n === 1 ? "1 track" : `${n} tracks`;
+}
+
+export function formatAlbumMeta(opts: {
+  artist?: string | null;
+  year?: number | null;
+  trackCount?: number | null;
+  durationSec?: number | null;
+}): string {
+  const parts: string[] = [];
+  if (opts.artist) parts.push(opts.artist);
+  if (opts.year) parts.push(String(opts.year));
+  if (opts.trackCount != null && Number.isFinite(opts.trackCount)) {
+    parts.push(formatTrackCount(opts.trackCount));
+  }
+  if (
+    opts.durationSec != null &&
+    Number.isFinite(opts.durationSec) &&
+    opts.durationSec >= 0
+  ) {
+    parts.push(formatTime(opts.durationSec));
+  }
+  return parts.join(" · ");
+}
+
+export function formatPlayingSubtitle(track: {
+  artist?: string | null;
+  album?: string | null;
+  year?: number | null;
+}): string {
+  const base = [track.artist, track.album].filter(Boolean).join(" - ");
+  if (base && track.year) return `${base} (${track.year})`;
+  return base;
+}
+
 export function formatTrackLabel({
   track,
   title,

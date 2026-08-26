@@ -4,6 +4,7 @@
 import { coverUrl, fetchAlbums, fetchAlbumTracks } from "@/api";
 import { kindForAlbum, kindForTrack } from "@/lossyKind";
 import { treeNodeId, type TreeNode } from "@/components/tree/treeNode";
+import { formatAlbumMeta } from "@/util";
 
 export async function listAlbumRoots(): Promise<TreeNode[]> {
   const items = await fetchAlbums();
@@ -13,7 +14,12 @@ export async function listAlbumRoots(): Promise<TreeNode[]> {
       isLeaf: false,
       kind: "album",
       title: al.title || "Unknown album",
-      subtitle: al.artist || "",
+      subtitle: formatAlbumMeta({
+        artist: al.artist,
+        year: al.year,
+        trackCount: al.trackCount,
+        durationSec: al.duration,
+      }),
       cover: coverUrl({ albumId: al.id }, "thumb", false),
       lossyKind: kindForAlbum(al),
       data: al,

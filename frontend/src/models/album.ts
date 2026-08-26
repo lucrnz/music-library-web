@@ -12,6 +12,9 @@ export interface Album {
   artistId: string | null;
   year: number | null;
   trackCount: number | null;
+  /** seconds */
+  duration: number | null;
+  durationMs: number | null;
   hasCover: boolean;
   lossyKind: string | null;
 }
@@ -31,6 +34,14 @@ export function fromApiAlbum(raw: unknown): Album {
   const artistId = rec.artistId ?? rec.artist_id ?? null;
   const trackCount = rec.trackCount ?? rec.track_count ?? null;
   const lossyKind = rec.lossyKind ?? rec.lossy_kind ?? null;
+  let duration = rec.duration ?? null;
+  let durationMs = rec.durationMs ?? rec.duration_ms ?? null;
+  if (durationMs == null && duration != null && Number.isFinite(Number(duration))) {
+    durationMs = Math.round(Number(duration) * 1000);
+  }
+  if (duration == null && durationMs != null && Number.isFinite(Number(durationMs))) {
+    duration = Number(durationMs) / 1000;
+  }
   return {
     id: String(id),
     title: typeof rec.title === "string" ? rec.title : "",
@@ -38,6 +49,8 @@ export function fromApiAlbum(raw: unknown): Album {
     artistId: artistId != null ? String(artistId) : null,
     year: rec.year == null ? null : Number(rec.year),
     trackCount: trackCount != null ? Number(trackCount) : null,
+    duration: duration != null ? Number(duration) : null,
+    durationMs: durationMs != null ? Number(durationMs) : null,
     hasCover: !!(rec.hasCover ?? rec.has_cover),
     lossyKind:
       lossyKind === "mp3" ||

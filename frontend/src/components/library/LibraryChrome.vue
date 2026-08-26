@@ -11,11 +11,12 @@ import ModeBar from "@/components/layout/ModeBar.vue";
 const _props = withDefaults(defineProps<{
   ariaLabel?: string;
   title?: string;
+  subtitle?: string;
   showBack?: boolean;
   offlineBanner?: string;
   showLayoutToggle?: boolean;
   showSettings?: boolean;
-}>(), { ariaLabel: "Library", title: "", showBack: false, offlineBanner: "", showLayoutToggle: false, showSettings: true });
+}>(), { ariaLabel: "Library", title: "", subtitle: "", showBack: false, offlineBanner: "", showLayoutToggle: false, showSettings: true });
 const emit = defineEmits<{
   back: [];
 }>();
@@ -61,6 +62,7 @@ function onBack() {
             <Icon name="settings" />
           </button>
         </div>
+        <div v-if="subtitle" class="view-sub">{{ subtitle }}</div>
       </div>
 
       <ModeBar />
