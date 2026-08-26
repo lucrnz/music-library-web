@@ -60,7 +60,7 @@ Status line and Playback details take a `PlayStatusState` with required `session
 
 The current track’s last paused (or page-hidden) time is one `{ trackId, seconds }` slot in `musicweb.playbackPosition.v1`, not the playlist blob.
 
-It is written on any pause, on page hide / document hidden, and on seek while paused. Boot hydrates the now-playing bar from that slot and the track tag duration. Media is not loaded and Play is not started. Seek runs only on the first Play while `playSource` is still `none`. An already-loaded tap of the current queue row still starts at 0 and clears the slot.
+It is written on any pause, on page hide / document hidden, and on seek while paused. Boot hydrates the now-playing bar from that slot and the track tag duration. Media is not loaded and Play is not started. Seek runs only on the first Play while `playSource` is still `none`. An already-loaded tap of the current queue row still starts at 0 and clears the slot. Remote now-playing covers wait for `canUseRemoteMedia()` (same gate as play); a boot resolve that only has the placeholder is not cached so the first `reportSuccess` can paint `/api/cover`. The restored seek range fill is painted on first mount (`setRangeFill`), not only after a later time update.
 
 Apply only when the saved id matches the current track. Clear on stop, skip, track end, and a different-track load. A save within 3 seconds of duration (or past the end) restores at 0. Exclusive companion uses the same rules; seek waits until duration is known. Auto-play on restore is out of product scope.
 

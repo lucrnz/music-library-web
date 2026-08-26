@@ -11,7 +11,7 @@ import {
   hydrateOutputVolume,
   initOutputVolume,
 } from "@/stores/playerPrefs";
-import { updateMediaSession } from "@/stores/playerSession";
+import { initPlayerSession, updateMediaSession } from "@/stores/playerSession";
 import { initAudioListeners } from "@/stores/player";
 import { initRadioListeners } from "@/stores/radio";
 import { loadCodecs } from "@/stores/settings";
@@ -36,6 +36,7 @@ initAudioListeners();
 initRadioListeners();
 // Connectivity store before codecs so the first probe report is mirrored.
 bindConnectivityStore();
+initPlayerSession();
 loadCodecs();
 void initExclusiveAudio().then(() => syncCompanionConnection());
 bindConnectivityToasts();

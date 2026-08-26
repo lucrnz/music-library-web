@@ -2,7 +2,7 @@
  * Cover resolve + Media Session metadata. Imports playerState, not player.js.
  */
 import { coverUrl } from "@/api";
-import { canUseRemoteMedia } from "@/connectivity";
+import { canUseRemoteMedia, onConnectivityChange } from "@/connectivity";
 import { resolveCoverUrl } from "@/downloads/resolve";
 import { downloads } from "@/downloads/state";
 import { PLACEHOLDER_COVER } from "@/util";
@@ -13,6 +13,7 @@ const msSupported = typeof navigator !== "undefined" && "mediaSession" in naviga
 
 let coverResolveGen = 0;
 let lastCoverTrackId: string | null = null;
+let sessionBound = false;
 
 export function clearCovers() {
   player.coverThumb = PLACEHOLDER_COVER;
@@ -21,6 +22,19 @@ export function clearCovers() {
 
 export function invalidateCoverCache() {
   lastCoverTrackId = null;
+}
+
+/**
+ * Retry cover resolve when remote media becomes usable (boot race: downloads
+ * catalog can finish before the first reportSuccess).
+ */
+export function initPlayerSession() {
+  if (sessionBound) return;
+  sessionBound = true;
+  onConnectivityChange(() => {
+    if (!canUseRemoteMedia()) return;
+    void updateMediaSession();
+  });
 }
 
 /**
@@ -60,9 +74,19 @@ export async function updateMediaSession() {
   if (gen !== coverResolveGen) return;
   if (pl.current?.id !== t.id) return;
 
-  lastCoverTrackId = trackKey;
-  player.coverThumb = thumb || PLACEHOLDER_COVER;
-  player.coverFull = full || PLACEHOLDER_COVER;
+  const nextThumb = thumb || PLACEHOLDER_COVER;
+  const nextFull = full || PLACEHOLDER_COVER;
+  player.coverThumb = nextThumb;
+  player.coverFull = nextFull;
+  // Unconfirmed reachability yields placeholders — do not latch, so the
+  // connectivity confirm can resolve remote covers without a play tap.
+  if (
+    allowRemote ||
+    nextThumb !== PLACEHOLDER_COVER ||
+    nextFull !== PLACEHOLDER_COVER
+  ) {
+    lastCoverTrackId = trackKey;
+  }
 
   if (!msSupported) return;
   navigator.mediaSession.metadata = new MediaMetadata({

@@ -270,6 +270,7 @@ watch(
       setRangeFill(seekEl.value);
     }
   },
+  { immediate: true },
 );
 
 watch(
