@@ -21,6 +21,58 @@
     border-right: 1px solid var(--border);
   }
 
+  /* Custom width from PaneResizer / ui.libraryPaneWidthPx. Queue min matches LIBRARY_PANE_QUEUE_MIN_PX. */
+  main.has-library-pane-width #view-library {
+    flex: 0 0 var(--library-pane-w);
+    width: var(--library-pane-w);
+    max-width: calc(100% - 280px);
+  }
+
+  .library-pane-resizer {
+    position: relative;
+    flex: 0 0 0;
+    width: 0;
+    align-self: stretch;
+    z-index: 5;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    touch-action: none;
+  }
+
+  .library-pane-resizer::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -5px;
+    width: 11px;
+    cursor: col-resize;
+  }
+
+  .library-pane-resizer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -1px;
+    width: 1px;
+    background: transparent;
+    pointer-events: none;
+    transition: width 0.12s ease, background 0.12s ease;
+  }
+
+  .library-pane-resizer:hover::after,
+  .library-pane-resizer:focus-visible::after,
+  .library-pane-resizer.is-dragging::after {
+    width: 3px;
+    background: var(--accent);
+  }
+
+  .library-pane-resizer:focus-visible {
+    outline: none;
+  }
+
   .view-bar {
     border-bottom: 1px solid var(--border);
   }
@@ -233,4 +285,14 @@
     flex-basis: 32%;
     max-width: 560px;
   }
+
+  main.has-library-pane-width #view-library {
+    flex-basis: var(--library-pane-w);
+    max-width: calc(100% - 280px);
+  }
+}
+
+html.is-resizing-library-pane,
+html.is-resizing-library-pane * {
+  cursor: col-resize !important;
 }

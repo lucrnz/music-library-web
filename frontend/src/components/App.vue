@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, watch, type StyleValue } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDesktopViewport } from "@/layout";
 import { ui } from "@/stores/ui";
@@ -14,6 +14,7 @@ import DownloadsModal from "@/components/downloads/DownloadsModal.vue";
 import AppDialog from "@/components/dialog/AppDialog.vue";
 import ImageCropper from "@/components/artistArt/ImageCropper.vue";
 import TabBar from "@/components/layout/TabBar.vue";
+import PaneResizer from "@/components/layout/PaneResizer.vue";
 import RadioView from "@/components/radio/RadioView.vue";
 
 /**
@@ -29,6 +30,17 @@ const route = useRoute();
     const onRadio = computed(() => route.meta.pane === "radio");
     const showRadioPage = computed(() => onRadio.value && !desktop.value);
     const showLibraryPanes = computed(() => desktop.value || !onRadio.value);
+    const customLibraryPane = computed(
+      () => desktop.value && ui.libraryPaneWidthPx != null,
+    );
+    const libraryPaneStyle = computed((): StyleValue | undefined => {
+      if (!customLibraryPane.value || ui.libraryPaneWidthPx == null) {
+        return undefined;
+      }
+      return {
+        "--library-pane-w": `${ui.libraryPaneWidthPx}px`,
+      };
+    });
 
     function lastLibraryLocation() {
       return {
@@ -75,10 +87,14 @@ const route = useRoute();
 </script>
 
 <template>
-    <main>
+    <main
+      :class="{ 'has-library-pane-width': customLibraryPane }"
+      :style="libraryPaneStyle"
+    >
       <RadioView v-if="showRadioPage" />
       <template v-if="showLibraryPanes">
         <LibraryView :class="{ hidden: onQueue }" />
+        <PaneResizer v-if="desktop" />
         <PlaylistView :class="{ hidden: !onQueue }" />
       </template>
     </main>
