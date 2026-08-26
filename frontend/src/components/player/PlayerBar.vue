@@ -18,6 +18,7 @@ import type { NowPlayingFullExpose } from "@/components/player/NowPlayingFull.vu
 import RadioMini from "@/components/radio/RadioMini.vue";
 import RadioNowPlaying from "@/components/radio/RadioNowPlaying.vue";
 import { radioChromeActive } from "@/stores/radio";
+import { formatPlayingSubtitle } from "@/util";
 
 const root = ref<HTMLElement | null>(null);
     const fullRef = ref<NowPlayingFullExpose | null>(null);
@@ -55,7 +56,7 @@ const root = ref<HTMLElement | null>(null);
     const subtitle = computed(() => {
       const t = track.value;
       if (!t) return "No track";
-      return [t.artist, t.album].filter(Boolean).join(" — ") || "Unknown";
+      return formatPlayingSubtitle(t) || "Unknown";
     });
     const coverThumb = computed(() => player.coverThumb);
     const coverFull = computed(() => player.coverFull);

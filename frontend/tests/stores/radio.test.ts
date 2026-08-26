@@ -155,7 +155,12 @@ describe("radio store", () => {
     expect(radio.face).toBe("current");
     expect(radio.track).toEqual(fromApiTrack(currentPayload));
     expect(radio.track?.title).toBe("Song");
-    expect(radioSubtitle(radio.track)).toBe("Artist — Album");
+    expect(radioSubtitle(radio.track)).toBe("Artist - Album");
+  });
+
+  it("radioSubtitle appends track year when present", () => {
+    applySnapshot({ ...currentPayload, year: 1996 });
+    expect(radioSubtitle(radio.track)).toBe("Artist - Album (1996)");
   });
 
   it("interpolates official position between snapshots", () => {

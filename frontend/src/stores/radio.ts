@@ -5,6 +5,7 @@
 import { reactive, watch } from "vue";
 import { fetchRadioNow } from "@/api";
 import { fromApiTrack, type Track } from "@/models/track";
+import { formatPlayingSubtitle } from "@/util";
 import { discard as discardListen } from "@/listens/bridge";
 import { become, onLeaveRadio } from "@/playback/session";
 import { player } from "@/stores/playerState";
@@ -153,7 +154,7 @@ export function radioChromeActive(): boolean {
 
 export function radioSubtitle(track: Track | null | undefined): string {
   if (!track) return "";
-  return [track.artist, track.album].filter(Boolean).join(" — ");
+  return formatPlayingSubtitle(track);
 }
 
 export function radioPlayState(): PlayStatusState {
