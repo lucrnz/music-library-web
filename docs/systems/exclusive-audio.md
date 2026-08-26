@@ -38,7 +38,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#de
 - Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `mpv_player.py`, `coreaudio.py`, `volume.py`)
 - Profile tags + catalog: `src/musicweb/transcode/profiles.py`
 - HTTP: `GET /api/exclusive-formats`, existing `GET /api/stream` + `POST /api/transcode/prepare` with tags
-- Client: `frontend/src/exclusive/` (including `statusFace.ts`, `companionClient.ts`), `stores/exclusiveAudio.ts`, `playback/sinks/`, `stores/player.ts`, `playbackStatus.ts`
+- Client: `frontend/src/exclusive/` (including `statusFace.ts`, `companionClient.ts`), `stores/exclusiveAudio.ts`, `playback/exclusiveDelivery.ts`, `playback/sinks/`, `radio/audio.ts`, `stores/player.ts`, `playbackStatus.ts`
 - One-way imports: `exclusiveAudio.ts` persists prefs and accepts `setExclusiveLive`; it does not import `companionClient`. The client writes live fields through `setExclusiveLive`. `main.ts`, `CompanionPanel`, and `ExclusiveAudioPanel` call `syncCompanionConnection` / `syncPreferredDevice` / `disconnectCompanion` directly. Token and port live on **Desktop companion** Settings.
 - Companion hub: `src/musicweb/exclusive/session.py` (module-level `COMMANDS` table + `_with_live`). Load is the only start command. Store has no companion playing/paused mirrors.
 - Device list items: `{ id, name, sample_rates, bit_depths }`
@@ -46,7 +46,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#de
 
 ## Architecture (prose)
 
-1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks play exclusive via a local download or an mpv `source` stream — do not remux MP3/AAC through a companion FLAC tag. **Exclusive-mode radio is TODO.** Tune-in stops the hog; radio audio is HTML-only until a future exclusive-radio design. See `docs/systems/radio.md`. **Windows/Linux hog is a no-op stub**; the companion still runs there for Downloads ([companion.md](companion.md)).
+1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks play exclusive via a local download or an mpv `source` stream — do not remux MP3/AAC through a companion FLAC tag. Household radio on this Mac uses the same exclusive delivery into mpv and seeks the station clock; Tune-in keeps hog armed (`stop` is transport-only). Unarmed exclusive Tune-in hard-fails (no HTML). See `docs/systems/radio.md`. **Windows/Linux hog is a no-op stub**; the companion still runs there for Downloads ([companion.md](companion.md)).
 2. **Mac PWA** (installed, standalone) enables exclusive mode, stores `COMPANION_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
 3. **Desktop companion** (`musicweb companion`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
 4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until the companion **accepts** a live device.
@@ -105,7 +105,7 @@ Two distinct client fields (do not conflate):
 
 Ensure/wait logic lives on the **companion client**, not as a timeout loop inside `playIndex`.
 
-When exclusive is **enabled**, the Streaming picker is hidden (exclusive lossless uses device-capped FLAC tags). Downloads quality and **When a download exists** stay visible: exclusive applies the same policy and may load a companion (or leftover) local file into mpv.
+When exclusive is **enabled**, the Streaming picker is hidden (exclusive lossless uses device-capped FLAC tags). Downloads quality and **When a download exists** stay visible: exclusive applies the same policy and may load a companion locker file into mpv. Leftover OPFS stays HTML-only and is not sent to mpv (stream instead).
 
 ### Client sync entry points
 
@@ -118,7 +118,7 @@ Single **`syncPreferredDevice`** when controller ∧ preference set ∧ (live mi
 
 ## Now-playing face and details
 
-While exclusive is **enabled**, the now-playing **primary face is always exclusive** (never “Streaming · codec”):
+While exclusive is **enabled**, the now-playing **primary face is always exclusive** for queue and radio (never “Streaming · codec”):
 
 | Kind | Copy |
 |------|------|
@@ -131,7 +131,7 @@ While exclusive is **enabled**, the now-playing **primary face is always exclusi
 
 Implementation: pure `static/js/exclusive/statusFace.js` — Settings panel uses the same helper.
 
-**Playback details** (deep dive) hold Output Exclusive, Device, Profile tag, bit depth, sample rate from the **exclusive-formats** catalog (not browser `/api/codecs`).
+**Playback details** (deep dive) hold Output Exclusive, Device, then either exclusive-formats Profile / bit depth / sample rate (lossless) or source-format rows (lossy: codec, bitrate, encoding, file rate — not Profile: source).
 
 ## Lock, heartbeat, and exclusive release
 
@@ -167,9 +167,11 @@ Mac volume keys usually do nothing while hogged. The in-app slider is exclusive 
 ## Prepare while exclusive
 
 - `getActiveStreamCodec()` is the browser Streaming setting and is unused for exclusive play/prepare.
-- Exclusive prepare uses `getExclusiveProfileTag(track)` only; multi-tag queues call prepare **per tag group**.
+- Exclusive prepare uses `getExclusiveProfileTag(track)` only; multi-tag queues call prepare **per tag group**. Lossy / `source` is never prepared.
 - Near-end prepare uses the **next** track’s exclusive tag.
+- Exclusive radio may urgent-prepare the **current** exclusive tag only (household `tune_in` stays a browser codec).
 - Do not prewarm browser Opus/FLAC marketing codecs for the queue while exclusive is on.
+- Do not toast “source format unknown — using device max” for lossy exclusive.
 - Advance on sink `ended` only (player owns repeat-one / next).
 
 ## Manual check: headphones free after controller loss
