@@ -15,9 +15,12 @@ PROTOCOL_VERSION: Final[int] = 1
 # Default loopback port (override with --port / PWA setting).
 DEFAULT_PORT: Final[int] = 18765
 
-# Controller lock: heartbeat interval ~5s; drop after ~15s without beat.
+# Client heartbeat ~5s (also on become-visible). After CONTROLLER_TTL_S
+# with no inbound traffic and nothing loaded in mpv, the companion unhogs
+# so a crashed PWA that never closed the socket cannot keep the device.
+# The same session takes hog back on the next message.
 HEARTBEAT_INTERVAL_S: Final[float] = 5.0
-CONTROLLER_TTL_S: Final[float] = 15.0
+CONTROLLER_TTL_S: Final[float] = 60.0
 
 # --- Client → server ---
 MSG_HELLO: Final[str] = "hello"

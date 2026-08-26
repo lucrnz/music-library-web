@@ -86,6 +86,7 @@ interface CompanionWireMessage {
 let ws: WebSocket | null = null;
 let inFlightKey: string | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let heartbeatVisibilityBound = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
 let wantConnected = false;
@@ -129,6 +130,21 @@ function emit(evt: CompanionEvent): void {
       console.error("[exclusive] listener error", err);
     }
   }
+}
+
+function sendHeartbeat(): void {
+  send(envelope(MSG_HEARTBEAT));
+}
+
+function startHeartbeat(): void {
+  clearHeartbeat();
+  sendHeartbeat();
+  heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+  if (heartbeatVisibilityBound || typeof document === "undefined") return;
+  heartbeatVisibilityBound = true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") sendHeartbeat();
+  });
 }
 
 function clearHeartbeat(): void {
@@ -277,8 +293,12 @@ function handleMessage(raw: unknown): void {
   }
 
   if (type === MSG_STATUS) {
+    const wasController = exclusiveAudio.role === ROLE_CONTROLLER;
     if (msg.role) setExclusiveLive({ role: msg.role });
     applyStatus(msg);
+    if (exclusiveAudio.role === ROLE_CONTROLLER && !wasController) {
+      syncPreferredDevice();
+    }
     emit({ type: "status", ...msg } as CompanionEvent);
     return;
   }
@@ -371,24 +391,10 @@ function applyStatus(msg: CompanionWireMessage): void {
     setOutputVolume(resolved.face, { notifySinks: false });
   }
 
-  // TTL demotion: socket stays open so disconnect does not fire — hard-stop via error.
+  // Idle un-hog: socket stays open. Next heartbeat / visibility reclaim.
   if (msg.role === ROLE_READONLY && msg.reason === "controller_ttl") {
-    setExclusiveLive({ lastError: "controller_ttl" });
     clearLiveDevice();
-    emit({
-      type: "error",
-      code: "controller_lost",
-      message: "Exclusive controller timed out",
-    });
-    // Socket stays open after TTL; close so onclose reconnects and hello
-    // can reclaim the free lock. Do not set intentionalClose.
-    if (wantConnected && ws && ws.readyState === WebSocket.OPEN) {
-      try {
-        ws.close();
-      } catch {
-        /* onclose schedules reconnect */
-      }
-    }
+    sendHeartbeat();
   }
 }
 
@@ -426,10 +432,7 @@ function connectNow(): void {
         sessionId: exclusiveAudio.sessionId,
       }),
     );
-    clearHeartbeat();
-    heartbeatTimer = setInterval(() => {
-      send(envelope(MSG_HEARTBEAT));
-    }, HEARTBEAT_INTERVAL_MS);
+    startHeartbeat();
   };
 
   ws.onmessage = (ev) => handleMessage(ev.data);

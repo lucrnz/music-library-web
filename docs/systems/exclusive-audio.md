@@ -136,8 +136,8 @@ Implementation: pure `static/js/exclusive/statusFace.js` — Settings panel uses
 ## Lock, heartbeat, and exclusive release
 
 - First successful `hello` becomes **controller**; further sessions are **readonly**.
-- Client heartbeat ~5s; companion TTL ~15s without heartbeat releases the lock.
-- Socket close also releases that session’s claim.
+- Client heartbeat ~5s (also on become-visible). After **60s** with no inbound traffic and nothing loaded in mpv, the companion **unhogs** (crash / half-open socket safety). A later message from the same session **reclaims** the lock and re-arms the last device. A loaded stream is not idle — hog stays.
+- Socket close also releases that session’s claim (the clean goodbye path).
 - Client always uses **`ws://127.0.0.1`** (not `localhost`) to avoid IPv6 mismatch.
 
 ### Controller owns the hog
@@ -147,16 +147,15 @@ Implementation: pure `static/js/exclusive/statusFace.js` — Settings panel uses
   1. Stop transport
   2. Set `audio-exclusive=no`, clear `audio-device`
   3. Clear companion `selected_device_id` (only after successful release) → client clears live
-- Controller loss paths: **WebSocket disconnect** of the controller, or **heartbeat TTL** demotion (`role` → readonly, `reason=controller_ttl`).
+- Controller loss paths: **WebSocket disconnect**, or **60s idle TTL** (`role` → readonly, `reason=controller_ttl`) while nothing is loaded. TTL does not toast or close the socket; the same session reclaims on the next heartbeat / visibility / command and re-arms the last device.
 - Never release on hello replace of the same session (reconnect reclaim without thrashing).
-- User **preference** stays in PWA localStorage; on next controller `hello_ok` the client re-sends `set_device` via `syncPreferredDevice`.
-- TTL with socket still open: client emits `error` with `code=controller_lost` so the existing exclusive hard-stop UI runs (not the WebSocket `disconnect` event).
+- User **preference** stays in PWA localStorage; on next controller `hello_ok` (or reclaim) the client re-sends `set_device` via `syncPreferredDevice`.
 
 ## Volume
 
 Digital **mpv** volume is required and must not block playback. Hog bypasses the Mac mixer, so exclusive at the in-app slider 100% is often quieter than browser playback unless analog gain is written.
 
-When a hardware volume write succeeds, that write is the slider and mpv stays at unity. Otherwise the slider is digital mpv. Each apply picks the path independently. The companion re-applies after exclusive output is up, not only when the slider moves.
+When a hardware volume write succeeds, that write is the slider and mpv stays at unity. Otherwise the slider is digital mpv. Each apply picks the path independently. The companion re-applies after exclusive output is up, not only when the slider moves. `DEBUG=true` / `1` on the companion process logs those path decisions.
 
 When exclusive is enabled and a device is selected, the companion reads that device’s current (pre-hog) hardware volume, uses it as the slider, and the first status `volume` for that live device updates the in-app face. Later status messages do not move the slider; the in-app control is the source of truth after adopt, and status must not be written back as `set_volume`. Re-selecting the same live device does not re-read. If the level could not be read, the slider is left alone.
 
@@ -180,7 +179,7 @@ Mac volume keys usually do nothing while hogged. The in-app slider is exclusive 
 2. Quit/close the PWA (not only hide).
 3. Companion logs controller disconnect / lock free **and** exclusive device released; another app can use the headphones immediately.
 4. Reopen PWA: reconnects as controller, preference re-applied via `set_device`, play works after ensure (exclusive re-armed).
-5. TTL path: starve JS heartbeats until TTL while PWA stays open — hard-stop toast (`controller_lost`), hog released. The client reconnects so a new hello can reclaim the free lock (a later heartbeat from the demoted session also reclaims).
+5. Idle (nothing playing) for ~60s: hog releases so another app can use the headphones. Come back — no timeout toast; heartbeat reclaim re-arms the last device (**Ready · device**). Quit/crash still releases immediately on socket close.
 
 ## Out of scope (v1)
 

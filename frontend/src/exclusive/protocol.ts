@@ -6,7 +6,8 @@
 export const PROTOCOL_VERSION = 1;
 export const DEFAULT_PORT = 18765;
 export const HEARTBEAT_INTERVAL_MS = 5000;
-export const CONTROLLER_TTL_S = 15;
+/** Idle un-hog after this many seconds with no inbound traffic and nothing loaded. */
+export const CONTROLLER_TTL_S = 60;
 
 /** Client → server */
 export const MSG_HELLO = "hello";

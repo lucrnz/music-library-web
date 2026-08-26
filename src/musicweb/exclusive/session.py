@@ -54,6 +54,7 @@ class ExclusiveHub:
         self._lock = asyncio.Lock()
         self._blob_aborts: dict[str, threading.Event] = {}
         self._reclaim_id: str | None = None
+        self._rearm_device_id: str | None = None
 
     @property
     def player(self) -> MpvPlayer:
@@ -106,25 +107,35 @@ class ExclusiveHub:
                 await self._ensure_no_controller_exclusive()
                 await self._broadcast_status_unlocked()
                 return
-            if time.monotonic() - sess.last_heartbeat > p.CONTROLLER_TTL_S:
-                logger.info("Controller %s TTL expired", cid)
-                sess.role = p.ROLE_READONLY
-                self._reclaim_id = cid
-                self._controller_id = None
-                await self._ensure_no_controller_exclusive()
-                await self._broadcast_status_unlocked()
-                try:
-                    await self._send(
-                        sess,
-                        p.envelope(
-                            p.MSG_STATUS,
-                            role=p.ROLE_READONLY,
-                            reason="controller_ttl",
-                            **self._status_fields(),
-                        ),
-                    )
-                except Exception:
-                    pass
+            silent = time.monotonic() - sess.last_heartbeat
+            if silent <= p.CONTROLLER_TTL_S:
+                return
+            if self._player.status_snapshot().get("url"):
+                return
+            logger.info(
+                "Controller %s idle %.0fs; released hog (reclaim on activity)",
+                cid,
+                silent,
+            )
+            sess.role = p.ROLE_READONLY
+            self._reclaim_id = cid
+            if self._device_id:
+                self._rearm_device_id = self._device_id
+            self._controller_id = None
+            await self._ensure_no_controller_exclusive()
+            await self._broadcast_status_unlocked()
+            try:
+                await self._send(
+                    sess,
+                    p.envelope(
+                        p.MSG_STATUS,
+                        role=p.ROLE_READONLY,
+                        reason="controller_ttl",
+                        **self._status_fields(),
+                    ),
+                )
+            except Exception:
+                pass
 
     def _on_mpv_event(self, event: str, payload: dict[str, Any]) -> None:
         loop = self._loop
@@ -254,6 +265,41 @@ class ExclusiveHub:
             and self._controller_id == sess.session_id
         )
 
+    def _mpv_device_for(self, device_id: str) -> str:
+        for d in self._devices:
+            if d.id == device_id:
+                return d.mpv_device or d.id
+        return device_id
+
+    def _promote_reclaim_unlocked(
+        self, sess: ClientSession
+    ) -> tuple[bool, str | None]:
+        """If this session owns idle reclaim, become controller. Return (promoted, rearm id)."""
+        if self._controller_id is not None:
+            return False, None
+        if self._reclaim_id != sess.session_id:
+            return False, None
+        sess.role = p.ROLE_CONTROLLER
+        self._controller_id = sess.session_id
+        self._reclaim_id = None
+        logger.info(
+            "Controller %s reclaimed",
+            sess.session_id,
+        )
+        return True, self._rearm_device_id
+
+    async def _rearm_device(self, sess: ClientSession, device_id: str) -> None:
+        await asyncio.to_thread(
+            self._player.set_device, self._mpv_device_for(device_id)
+        )
+        if not await self._with_live(sess):
+            if await self._should_undo_player():
+                await asyncio.to_thread(self._player.release_device)
+            return
+        async with self._lock:
+            self._device_id = device_id
+            await self._broadcast_status_unlocked()
+
     async def handle_disconnect(self, sess: ClientSession) -> None:
         async with self._lock:
             if not self._is_current(sess):
@@ -276,19 +322,20 @@ class ExclusiveHub:
         async with self._lock:
             if not self._is_current(sess):
                 return
+            sess.last_heartbeat = time.monotonic()
             mtype = msg["type"]
-            if mtype == p.MSG_HEARTBEAT:
-                sess.last_heartbeat = time.monotonic()
-                if (
-                    self._controller_id is None
-                    and self._reclaim_id == sess.session_id
-                ):
-                    sess.role = p.ROLE_CONTROLLER
-                    self._controller_id = sess.session_id
-                    self._reclaim_id = None
-                    await self._broadcast_status_unlocked()
-                return
+            promoted, rearm = self._promote_reclaim_unlocked(sess)
             live = self._is_live_controller(sess)
+
+        if promoted:
+            if rearm:
+                await self._rearm_device(sess, rearm)
+            else:
+                async with self._lock:
+                    await self._broadcast_status_unlocked()
+
+        if mtype == p.MSG_HEARTBEAT:
+            return
 
         if mtype in p.BLOB_CLIENT_TYPES:
             try:
@@ -350,18 +397,16 @@ class ExclusiveHub:
         device_id = str(msg.get("deviceId") or msg.get("device_id") or "")
         if not device_id:
             raise ValueError("deviceId required")
-        mpv_dev = device_id
-        for d in self._devices:
-            if d.id == device_id:
-                mpv_dev = d.mpv_device or d.id
-                break
-        await asyncio.to_thread(self._player.set_device, mpv_dev)
+        await asyncio.to_thread(
+            self._player.set_device, self._mpv_device_for(device_id)
+        )
         if not await self._with_live(sess):
             if await self._should_undo_player():
                 await asyncio.to_thread(self._player.release_device)
             return
         async with self._lock:
             self._device_id = device_id
+            self._rearm_device_id = device_id
 
     async def _cmd_load(self, sess: ClientSession, msg: dict[str, Any]) -> None:
         async with self._lock:

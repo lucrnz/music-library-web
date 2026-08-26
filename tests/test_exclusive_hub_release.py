@@ -117,7 +117,7 @@ def test_controller_disconnect_releases_device():
     assert "c1" not in hub._clients
 
 
-def test_ttl_demotion_releases_device():
+def test_ttl_demotion_releases_idle_device():
     hub, fake = _hub_with_fake()
     sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
     hub._device_id = "dev-1"
@@ -137,6 +137,22 @@ def test_ttl_demotion_releases_device():
         if m.get("type") == p.MSG_STATUS and m.get("reason") == "controller_ttl"
     ]
     assert ttl_msgs
+
+
+def test_ttl_skips_while_stream_loaded():
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    hub._device_id = "dev-1"
+    fake._device = "coreaudio/Dev1"
+    fake._url = "http://127.0.0.1/stream"
+    sess.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
+
+    asyncio.run(hub._check_ttl())
+
+    assert hub._controller_id == "c1"
+    assert hub._device_id == "dev-1"
+    assert fake.release_calls == 0
+    assert sess.role == p.ROLE_CONTROLLER
 
 
 def test_readonly_disconnect_does_not_release():
@@ -256,7 +272,27 @@ def test_displaced_handle_message_is_noop():
     assert hub._controller_id == "c1"
 
 
-def test_ttl_then_load_is_noop():
+def test_ttl_then_activity_reclaims_and_rearms():
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    hub._device_id = "dev-1"
+    fake._device = "coreaudio/Dev1"
+    sess.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
+
+    async def run() -> None:
+        await hub._check_ttl()
+        await hub.handle_message(sess, {"type": p.MSG_HEARTBEAT})
+
+    asyncio.run(run())
+
+    assert sess.role == p.ROLE_CONTROLLER
+    assert hub._controller_id == "c1"
+    assert hub._device_id == "dev-1"
+    assert fake._device == "dev-1"
+    assert fake.release_calls == 1
+
+
+def test_ttl_then_load_reclaims_then_plays():
     hub, fake = _hub_with_fake()
     sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
     hub._device_id = "dev-1"
@@ -272,12 +308,34 @@ def test_ttl_then_load_is_noop():
 
     asyncio.run(run())
 
-    assert fake.load_calls == []
-    assert hub._controller_id is None
-    assert hub._device_id is None
-    assert fake.release_calls == 1
-    assert sess.role == p.ROLE_READONLY
+    assert fake.load_calls == ["http://127.0.0.1/stream"]
+    assert hub._controller_id == "c1"
+    assert hub._device_id == "dev-1"
+    assert sess.role == p.ROLE_CONTROLLER
     assert hub._clients.get("c1") is sess
+
+
+def test_ttl_heartbeat_does_not_promote_other_session():
+    hub, _fake = _hub_with_fake()
+    c1 = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    ws = FakeWebSocket()
+    ro = _add_session(hub, "ro", role=p.ROLE_READONLY, ws=ws)
+    c1.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
+    asyncio.run(hub._check_ttl())
+    asyncio.run(hub.handle_message(ro, {"type": p.MSG_HEARTBEAT}))
+    assert hub._controller_id is None
+    assert ro.role == p.ROLE_READONLY
+    asyncio.run(hub.handle_message(c1, {"type": p.MSG_HEARTBEAT}))
+    assert hub._controller_id == "c1"
+    assert c1.role == p.ROLE_CONTROLLER
+
+
+def test_any_inbound_message_refreshes_heartbeat():
+    hub, _fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    sess.last_heartbeat = time.monotonic() - 30.0
+    asyncio.run(hub.handle_message(sess, {"type": p.MSG_DISK_INFO}))
+    assert time.monotonic() - sess.last_heartbeat < 1.0
 
 
 def test_midflight_load_replace_skips_hub_write():
@@ -395,86 +453,6 @@ def test_readonly_may_blob_stat_but_not_load():
         hub.handle_message(ro, p.envelope(p.MSG_LOAD, url="http://127.0.0.1/x"))
     )
     assert any(m.get("code") == "readonly" for m in ws.sent)
-
-
-def test_midflight_set_device_ttl_releases():
-    hub, fake = _hub_with_fake()
-    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
-    hub._device_id = "dev-1"
-    fake.gate = threading.Event()
-    sess.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
-
-    async def run() -> None:
-        task = asyncio.create_task(
-            hub.handle_message(
-                sess, {"type": p.MSG_SET_DEVICE, "deviceId": "dev-2"}
-            )
-        )
-        entered = await asyncio.to_thread(fake.entered_set_device.wait, 2.0)
-        assert entered
-        await hub._check_ttl()
-        fake.gate.set()
-        await task
-
-    asyncio.run(run())
-    assert hub._controller_id is None
-    assert fake.release_calls >= 1
-    assert fake._device is None
-
-
-def test_midflight_load_ttl_releases():
-    hub, fake = _hub_with_fake()
-    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
-    hub._device_id = "dev-1"
-    fake._device = "coreaudio/Dev1"
-    fake.gate = threading.Event()
-    sess.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
-
-    async def run() -> None:
-        task = asyncio.create_task(
-            hub.handle_message(
-                sess,
-                {"type": p.MSG_LOAD, "url": "http://127.0.0.1/stream"},
-            )
-        )
-        entered = await asyncio.to_thread(fake.entered_load.wait, 2.0)
-        assert entered
-        await hub._check_ttl()
-        fake.gate.set()
-        await task
-
-    asyncio.run(run())
-    assert hub._controller_id is None
-    assert fake.release_calls >= 1
-    assert fake._url is None
-
-
-def test_ttl_heartbeat_reclaims_same_session():
-    hub, _fake = _hub_with_fake()
-    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
-    hub._device_id = "dev-1"
-    sess.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
-    asyncio.run(hub._check_ttl())
-    assert sess.role == p.ROLE_READONLY
-    assert hub._controller_id is None
-    asyncio.run(hub.handle_message(sess, {"type": p.MSG_HEARTBEAT}))
-    assert sess.role == p.ROLE_CONTROLLER
-    assert hub._controller_id == "c1"
-
-
-def test_ttl_heartbeat_does_not_promote_other_session():
-    hub, _fake = _hub_with_fake()
-    c1 = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
-    ws = FakeWebSocket()
-    ro = _add_session(hub, "ro", role=p.ROLE_READONLY, ws=ws)
-    c1.last_heartbeat = time.monotonic() - (p.CONTROLLER_TTL_S + 1.0)
-    asyncio.run(hub._check_ttl())
-    asyncio.run(hub.handle_message(ro, {"type": p.MSG_HEARTBEAT}))
-    assert hub._controller_id is None
-    assert ro.role == p.ROLE_READONLY
-    asyncio.run(hub.handle_message(c1, {"type": p.MSG_HEARTBEAT}))
-    assert hub._controller_id == "c1"
-    assert c1.role == p.ROLE_CONTROLLER
 
 
 def test_blob_put_rejects_file_url():
