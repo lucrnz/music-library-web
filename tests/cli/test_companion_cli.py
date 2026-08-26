@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from musicweb.cli.app import app
 from musicweb.cli.companion import (
+    DropWsTimeFrames,
     banner_lines,
     configure_companion_logging,
     resolve_debug_env,
@@ -127,6 +128,47 @@ def test_configure_companion_logging_raises_level():
     assert root.level == logging.DEBUG
     configure_companion_logging(debug=False)
     assert root.level == logging.INFO
+
+
+def _ws_record(msg: str) -> logging.LogRecord:
+    return logging.LogRecord(
+        name="uvicorn.error",
+        level=logging.DEBUG,
+        pathname="",
+        lineno=0,
+        msg=msg,
+        args=(),
+        exc_info=None,
+    )
+
+
+def test_ws_time_frames_are_dropped():
+    filt = DropWsTimeFrames()
+    assert (
+        filt.filter(
+            _ws_record(
+                '> TEXT \'{"v":1,"type":"time","t":1.2,"d":180.0}\' [48 bytes]'
+            )
+        )
+        is False
+    )
+    assert (
+        filt.filter(
+            _ws_record(
+                '> TEXT \'{"v":1,"type":"status","role":"controller"}\' [44 bytes]'
+            )
+        )
+        is True
+    )
+    assert filt.filter(_ws_record("< TEXT '{\"v\":1,\"type\":\"heartbeat\"}' [26 bytes]"))
+    assert filt.filter(_ws_record("> PING af a3 b8 1d [binary, 4 bytes]"))
+    assert filt.filter(_ws_record('> TEXT \'{"v":1,"type":"timeout"}\' [28 bytes]'))
+
+
+def test_configure_companion_logging_installs_time_filter():
+    configure_companion_logging(debug=True)
+    names = {type(f).__name__ for f in logging.getLogger("uvicorn.error").filters}
+    assert "DropWsTimeFrames" in names
 
 
 def _stub_companion_run(monkeypatch) -> dict:

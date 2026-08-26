@@ -23,7 +23,7 @@ Two jobs share one process (`uv run musicweb companion`) and one `COMPANION_TOKE
 - The companion fetches library stream URLs and writes jailed relative keys. The PWA plays those files over a token-gated loopback GET with Range. HTML and exclusive both consume that store.
 - Auto-connect when Downloads **or** exclusive is enabled and a token is set. Enabling Downloads on a desktop PWA turns the flag on, waits for hello, then boots the queue. `hello_ok` / `disk_info` carry the data-dir path for Settings.
 - Settings token/port commit runs a hello probe: green/red field border plus `Token accepted` / `Invalid token` / `Companion not reachable`. Feature-off probes hang up after hello so they do not take the controller lock. The companion logs hello rejects only (not the token).
-- `DEBUG` (`true`/`1` vs `false`/`0`/unset) from the same `.env` or process env raises process logs to DEBUG, including exclusive volume path decisions (hardware vs digital, pre-hog adopt, restore, Core Audio selector outcome). Loopback HTTP access logs stay off so `?token=` does not hit stdout.
+- `DEBUG` (`true`/`1` vs `false`/`0`/unset) from the same `.env` or process env raises process logs to DEBUG, including exclusive volume path decisions (hardware vs digital, pre-hog adopt, restore, Core Audio selector outcome). Loopback HTTP access logs stay off so `?token=` does not hit stdout. WebSocket time-pos frames are not logged.
 - Loopback file HTTP allows CORS and Private Network Access from the PWA origin so migrate PUT and cover fetch work. GET Range and migrate PUT stream; they do not slurp the whole file.
 
 ## Guardrails

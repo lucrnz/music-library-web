@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import socket
 import sys
@@ -26,6 +27,31 @@ MPV_STUB_LABEL = "stub (this platform)"
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 _DEBUG_ON = frozenset({"1", "true"})
 _DEBUG_OFF = frozenset({"0", "false", ""})
+_WS_TIME_LOGGERS = ("uvicorn.error", "websockets", "websockets.server")
+_WS_TIME_TYPE = re.compile(r'"type"\s*:\s*"time"\s*[,}]')
+
+
+class DropWsTimeFrames(logging.Filter):
+    """Drop websocket TEXT dumps of exclusive time-pos updates."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        if "TEXT" not in msg:
+            return True
+        return _WS_TIME_TYPE.search(msg) is None
+
+
+_WS_TIME_FILTER = DropWsTimeFrames()
+
+
+def _silence_ws_time_frames() -> None:
+    for name in _WS_TIME_LOGGERS:
+        log = logging.getLogger(name)
+        if not any(isinstance(f, DropWsTimeFrames) for f in log.filters):
+            log.addFilter(_WS_TIME_FILTER)
 
 
 def resolve_debug_env(raw: str | None) -> tuple[bool, str | None]:
@@ -50,10 +76,11 @@ def configure_companion_logging(*, debug: bool) -> None:
     root.setLevel(level)
     if not root.handlers:
         logging.basicConfig(level=level, format=_LOG_FORMAT)
-        return
-    for handler in root.handlers:
-        if handler.level == logging.NOTSET or handler.level > level:
-            handler.setLevel(level)
+    else:
+        for handler in root.handlers:
+            if handler.level == logging.NOTSET or handler.level > level:
+                handler.setLevel(level)
+    _silence_ws_time_frames()
 
 
 def banner_lines(
