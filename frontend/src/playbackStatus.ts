@@ -10,6 +10,7 @@ import {
 } from "@/exclusive/statusFace";
 import {
   LOSSY_SOURCE_COPY,
+  SOURCE_TAG,
   formatLossyCodecText,
   lossySourceParts,
 } from "@/lossyKind";
@@ -112,16 +113,26 @@ export function sourceIconName(playSource: PlaySourceState): string | null {
   return null;
 }
 
+function exclusiveSessionOn(
+  session: PlayStatusState["session"],
+  exclusiveSnap: ExclusiveFaceSnapshot | null,
+): boolean {
+  return (
+    !!exclusiveSnap?.enabled &&
+    (session === "queue" || session === "radio")
+  );
+}
+
 /**
  * Primary status-line face text (without icon).
- * Exclusive face wins only for on-demand session (never radio).
+ * Exclusive face wins for queue and radio when exclusive is enabled.
  */
 export function formatPrimaryStatus(
   state: PlayStatusState,
   catalog: ProfileMeta[] = [],
   exclusiveSnap: ExclusiveFaceSnapshot | null = null,
 ): PlaybackStatusFace {
-  if (state.session === "queue" && exclusiveSnap?.enabled) {
+  if (exclusiveSessionOn(state.session, exclusiveSnap)) {
     const face = formatExclusiveFace(exclusiveSnap);
     if (face) {
       return {
@@ -218,6 +229,10 @@ function exclusiveDetailRows(
       rows.push({ key: "reason", label: "Reason", value: reason });
     }
   }
+  if (state.track?.isLossy || state.playProfileId === SOURCE_TAG) {
+    appendLossySourceRows(rows, state.track);
+    return rows;
+  }
   if (state.playProfileId) {
     const meta = resolveAnyProfile(
       state.playProfileId,
@@ -252,6 +267,44 @@ function exclusiveDetailRows(
   return rows;
 }
 
+function appendLossySourceRows(
+  rows: PlaybackDetailRow[],
+  track: PlayStatusState["track"],
+): void {
+  const parts = lossySourceParts(track);
+  if (parts.label) {
+    rows.push({ key: "codec", label: "Codec", value: parts.label });
+  }
+  if (parts.bitrateKbps > 0) {
+    rows.push({
+      key: "bitrate",
+      label: "Bitrate",
+      value: `${parts.bitrateKbps} kbps`,
+    });
+  }
+  const mode = (track?.bitrateMode || "").toLowerCase();
+  if (KNOWN_BITRATE_MODES.has(mode)) {
+    rows.push({
+      key: "encoding",
+      label: "Encoding",
+      value: mode.toUpperCase(),
+    });
+  }
+  const fileRate = formatSampleRate(track?.sampleRateHz);
+  if (fileRate) {
+    rows.push({
+      key: "sample_rate",
+      label: "Sample rate",
+      value: fileRate,
+    });
+  }
+  rows.push({
+    key: "lossy",
+    label: "Source file",
+    value: LOSSY_SOURCE_COPY,
+  });
+}
+
 export function buildPlaybackDetailsRows(
   state: PlayStatusState,
   catalog: ProfileMeta[] = [],
@@ -259,7 +312,7 @@ export function buildPlaybackDetailsRows(
 ): PlaybackDetailRow[] {
   const exclusiveSnap = opts.exclusiveSnap || null;
   const exclusiveFormats = opts.exclusiveFormats || [];
-  const exclusiveOn = state.session === "queue" && !!exclusiveSnap?.enabled;
+  const exclusiveOn = exclusiveSessionOn(state.session, exclusiveSnap);
 
   const playSource = state?.playSource || "none";
 
@@ -297,38 +350,7 @@ export function buildPlaybackDetailsRows(
   }
 
   if (state.track?.isLossy) {
-    const parts = lossySourceParts(state.track);
-    if (parts.label) {
-      rows.push({ key: "codec", label: "Codec", value: parts.label });
-    }
-    if (parts.bitrateKbps > 0) {
-      rows.push({
-        key: "bitrate",
-        label: "Bitrate",
-        value: `${parts.bitrateKbps} kbps`,
-      });
-    }
-    const mode = (state.track.bitrateMode || "").toLowerCase();
-    if (KNOWN_BITRATE_MODES.has(mode)) {
-      rows.push({
-        key: "encoding",
-        label: "Encoding",
-        value: mode.toUpperCase(),
-      });
-    }
-    const fileRate = formatSampleRate(state.track.sampleRateHz);
-    if (fileRate) {
-      rows.push({
-        key: "sample_rate",
-        label: "Sample rate",
-        value: fileRate,
-      });
-    }
-    rows.push({
-      key: "lossy",
-      label: "Source file",
-      value: LOSSY_SOURCE_COPY,
-    });
+    appendLossySourceRows(rows, state.track);
     return rows;
   }
 

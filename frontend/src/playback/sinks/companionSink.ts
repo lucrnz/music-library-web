@@ -37,6 +37,7 @@ export function createCompanionSink(): PlaybackSink {
   function ensureListen(): void {
     if (unsub) return;
     unsub = onCompanionEvent((evt) => {
+      if (!hasLoad) return;
       if (evt.type === "time") {
         currentTime = Number(evt.t) || 0;
         const d = Number(evt.d);

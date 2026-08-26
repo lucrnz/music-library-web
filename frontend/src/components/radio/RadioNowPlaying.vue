@@ -14,6 +14,10 @@ import {
   tuneIn,
   tuneOut,
 } from "@/stores/radio";
+import {
+  exclusiveStatusSnapshot,
+  isExclusiveEnabled,
+} from "@/stores/exclusiveAudio";
 import { openRadioRail, setExpanded, setOutputVolume } from "@/stores/playerPrefs";
 
 const props = withDefaults(
@@ -80,6 +84,9 @@ const tunedOrTuning = computed(
 const tuneIcon = computed(() => (tunedOrTuning.value ? "tune-out" : "tune-in"));
 const tuneLabel = computed(() => (tunedOrTuning.value ? "Tune out" : "Tune in"));
 const playState = computed(() => radioPlayState());
+const exclusiveSnap = computed(() =>
+  isExclusiveEnabled() ? exclusiveStatusSnapshot() : null,
+);
 
 function onTune() {
   if (tunedOrTuning.value) tuneOut();
@@ -166,7 +173,7 @@ function onCollapse() {
     :sheet-dismissible="false"
     :open-label="compact ? 'Open radio' : 'Open now playing'"
     :play-state="playState"
-    :exclusive-snap="null"
+    :exclusive-snap="exclusiveSnap"
     @volume="onVolume"
     @toggle-lyrics="lyricsOpen = !lyricsOpen"
     @cover-or-meta-open="openRadio"

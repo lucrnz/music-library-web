@@ -110,7 +110,7 @@ describe("buildPlaybackDetailsRows lossy", () => {
     expect(value(rows, "codec")).toBe("FLAC");
   });
 
-  it("does not add lossy encoding rows in exclusive mode", () => {
+  it("exclusive lossy lists source-format rows, not Profile source", () => {
     const exclusive: ExclusiveFaceSnapshot = {
       enabled: true,
       connection: "connected",
@@ -120,13 +120,61 @@ describe("buildPlaybackDetailsRows lossy", () => {
       devices: [{ id: "dev1", name: "DAC" }],
     };
     const rows = buildPlaybackDetailsRows(
-      lossyState({ playProfileId: "flac_24_96000" }),
+      lossyState({ playProfileId: "source" }),
       [],
       { exclusiveSnap: exclusive },
     );
+    expect(value(rows, "output")).toBe("Exclusive");
+    expect(value(rows, "device")).toBe("DAC");
+    expect(value(rows, "codec")).toBe("MP3");
+    expect(value(rows, "bitrate")).toBe("320 kbps");
+    expect(value(rows, "encoding")).toBe("VBR");
+    expect(value(rows, "sample_rate")).toBe("44.1 kHz");
+    expect(value(rows, "lossy")).toBe(LOSSY_SOURCE_COPY);
+    expect(keys(rows)).not.toContain("profile");
+  });
+
+  it("exclusive lossless still lists profile and bit depth", () => {
+    const exclusive: ExclusiveFaceSnapshot = {
+      enabled: true,
+      connection: "connected",
+      role: "controller",
+      preferenceId: "dev1",
+      liveId: "dev1",
+      devices: [{ id: "dev1", name: "DAC" }],
+    };
+    const rows = buildPlaybackDetailsRows(
+      {
+        session: "queue",
+        playSource: "streaming",
+        playProfileId: "flac_24_96000",
+        track: {
+          isLossy: false,
+          sourceCodec: "flac",
+          bitrateKbps: null,
+          sampleRateHz: 96000,
+          bitrateMode: null,
+        },
+      },
+      [],
+      {
+        exclusiveSnap: exclusive,
+        exclusiveFormats: [
+          {
+            tag: "flac_24_96000",
+            label: "FLAC 24/96",
+            sample_rate: 96000,
+            bit_depth: 24,
+          },
+        ],
+      },
+    );
+    expect(value(rows, "output")).toBe("Exclusive");
+    expect(value(rows, "profile")).toBe("FLAC 24/96");
+    expect(value(rows, "bit_depth")).toBe("24-bit");
+    expect(value(rows, "sample_rate")).toBe("96 kHz");
     expect(keys(rows)).not.toContain("encoding");
     expect(keys(rows)).not.toContain("lossy");
-    expect(value(rows, "output")).toBe("Exclusive");
   });
 });
 
@@ -136,13 +184,38 @@ describe("formatPrimaryStatus", () => {
     expect(face.text).toBe("Streaming · MP3 320k");
   });
 
-  it("radio session ignores an enabled exclusive snap", () => {
+  it("radio session with exclusive enabled uses the exclusive face", () => {
     const exclusive: ExclusiveFaceSnapshot = {
       enabled: true,
       connection: "connected",
       role: "controller",
       preferenceId: "dev",
       liveId: "dev",
+      devices: [{ id: "dev", name: "DAC" }],
+    };
+    const face = formatPrimaryStatus(
+      lossyState({ session: "radio", playProfileId: "source" }),
+      [],
+      exclusive,
+    );
+    expect(face.text).toBe("Ready · DAC");
+    const rows = buildPlaybackDetailsRows(
+      lossyState({ session: "radio", playProfileId: "source" }),
+      [],
+      { exclusiveSnap: exclusive },
+    );
+    expect(value(rows, "output")).toBe("Exclusive");
+    expect(value(rows, "codec")).toBe("MP3");
+    expect(keys(rows)).not.toContain("profile");
+  });
+
+  it("radio session ignores a disabled exclusive snap", () => {
+    const exclusive: ExclusiveFaceSnapshot = {
+      enabled: false,
+      connection: "disconnected",
+      role: null,
+      preferenceId: null,
+      liveId: null,
     };
     const face = formatPrimaryStatus(
       lossyState({ session: "radio" }),
@@ -157,6 +230,46 @@ describe("formatPrimaryStatus", () => {
     );
     expect(value(rows, "output")).toBeUndefined();
     expect(value(rows, "source")).toBe("Streaming");
+  });
+
+  it("exclusive-on radio lossless lists the exclusive profile", () => {
+    const exclusive: ExclusiveFaceSnapshot = {
+      enabled: true,
+      connection: "connected",
+      role: "controller",
+      preferenceId: "dev",
+      liveId: "dev",
+      devices: [{ id: "dev", name: "DAC" }],
+    };
+    const rows = buildPlaybackDetailsRows(
+      {
+        session: "radio",
+        playSource: "streaming",
+        playProfileId: "flac_24_96000",
+        track: {
+          isLossy: false,
+          sourceCodec: "flac",
+          bitrateKbps: null,
+          sampleRateHz: 96000,
+          bitrateMode: null,
+        },
+      },
+      [],
+      {
+        exclusiveSnap: exclusive,
+        exclusiveFormats: [
+          {
+            tag: "flac_24_96000",
+            label: "FLAC 24/96",
+            sample_rate: 96000,
+            bit_depth: 24,
+          },
+        ],
+      },
+    );
+    expect(value(rows, "output")).toBe("Exclusive");
+    expect(value(rows, "profile")).toBe("FLAC 24/96");
+    expect(value(rows, "bit_depth")).toBe("24-bit");
   });
 
   it("radio downloaded lossless uses the Downloaded source word", () => {

@@ -29,6 +29,7 @@ import {
 import { connectivity } from "@/stores/connectivity";
 import type { PlayStatusState } from "@/playbackStatus";
 import { subscribeOutputVolume } from "@/stores/playerPrefs";
+import { exclusiveAudio, isExclusiveEnabled } from "@/stores/exclusiveAudio";
 import { getActiveStreamCodec, settings } from "@/stores/settings";
 import { showToast } from "@/stores/ui";
 
@@ -120,6 +121,16 @@ export function initRadioListeners(): void {
     },
   );
   watch(
+    () => [
+      exclusiveAudio.enabled,
+      exclusiveAudio.formatMode,
+      exclusiveAudio.selectedDeviceId,
+    ],
+    () => {
+      void onExclusivePlaybackChanged();
+    },
+  );
+  watch(
     () => connectivity.state,
     (state) => {
       if (state === "online") {
@@ -146,6 +157,7 @@ export function radioSubtitle(track: Track | null | undefined): string {
 }
 
 export function radioPlayState(): PlayStatusState {
+  const exclusive = isExclusiveEnabled();
   return {
     session: "radio",
     playSource:
@@ -154,7 +166,9 @@ export function radioPlayState(): PlayStatusState {
         : "streaming",
     playProfileId: radio.isLossy
       ? null
-      : radio.playProfileId || radio.tunerProfile || getActiveStreamCodec(),
+      : exclusive
+        ? radio.playProfileId
+        : radio.playProfileId || radio.tunerProfile || getActiveStreamCodec(),
     track: radio.track,
   };
 }
@@ -219,6 +233,7 @@ function leaveRadio(): void {
   cancelRadioRejoin();
   if (radioChromeActive()) sendJson({ type: "tune_out" });
   audio.stop();
+  audio.setBackend("htmlAudio");
   clearLoadedKeys();
   bumpRadioGen();
   radio.tunerProfile = null;
@@ -286,6 +301,7 @@ export function tuneOut(): void {
   cancelRadioRejoin();
   sendJson({ type: "tune_out" });
   audio.stop();
+  audio.setBackend("htmlAudio");
   clearLoadedKeys();
   bumpRadioGen();
   radio.chrome = "stopped";
@@ -325,6 +341,13 @@ export async function onPlaybackPolicyChanged(): Promise<void> {
   await onFaceOrTrack(null);
 }
 
+export async function onExclusivePlaybackChanged(): Promise<void> {
+  if (radio.chrome !== "tuning" && radio.chrome !== "tuned") return;
+  bumpRadioGen();
+  clearLoadedKeys();
+  await onFaceOrTrack(null);
+}
+
 function bindVisibility(): void {
   if (visibilityBound || typeof document === "undefined") return;
   visibilityBound = true;
@@ -337,6 +360,7 @@ export function resetRadioStore(): void {
   cancelRadioRejoin();
   disconnect();
   audio.stop();
+  audio.setBackend("htmlAudio");
   radio.chrome = "inactive";
   radio.face = "idle";
   radio.track = null;

@@ -13,8 +13,19 @@ import {
   startCycle as startListenCycle,
 } from "@/listens/bridge";
 import { SOURCE_TAG } from "@/lossyKind";
+import {
+  PLAY_BLOCK_MESSAGES,
+  PlayBlockError,
+  type PlayBlockReason,
+} from "@/playBlock";
+import { exclusiveDelivery } from "@/playback/exclusiveDelivery";
+import { requestPrepare } from "@/playback/prepare";
 import { suspendMediaSession } from "@/playback/session";
 import { needsReseek } from "@/radio/sync";
+import {
+  getExclusiveProfileTag,
+  isExclusiveEnabled,
+} from "@/stores/exclusiveAudio";
 import {
   cancelRadioRejoin,
   interpolatedPosition,
@@ -24,7 +35,8 @@ import {
   tuneIn,
   tuneOut,
 } from "@/stores/radio";
-import { getActiveStreamCodec, settings } from "@/stores/settings";
+import { getActiveStreamCodec, openSettings, settings } from "@/stores/settings";
+import { showToast } from "@/stores/ui";
 
 let lastLoadedTrackId: string | null = null;
 let lastLoadedLossy: boolean | null = null;
@@ -57,13 +69,8 @@ export function clearLoadedKeys(): void {
 export function maybeReseek(): void {
   if (radio.chrome !== "tuned") return;
   const official = interpolatedPosition();
-  const el = radioAudio.el;
-  if (
-    el &&
-    Number.isFinite(el.duration) &&
-    el.duration > 0 &&
-    official >= el.duration
-  ) {
+  const dur = radioAudio.duration;
+  if (Number.isFinite(dur) && dur > 0 && official >= dur) {
     return;
   }
   if (needsReseek(radioAudio.currentTime, official)) {
@@ -109,7 +116,7 @@ function streamCodecForLoad(): string {
 }
 
 type RadioDelivery =
-  | { source: "unavailable" }
+  | { source: "unavailable"; block?: PlayBlockReason | null }
   | { source: "streaming" | "downloaded"; url: string; profile: string | null };
 
 async function resolveRadioDelivery(
@@ -133,6 +140,34 @@ async function resolveRadioDelivery(
   return resolved;
 }
 
+async function resolveExclusiveRadio(
+  track: Parameters<typeof exclusiveDelivery>[0],
+  localBroken: boolean,
+): Promise<RadioDelivery> {
+  const d = await exclusiveDelivery(track, {
+    enabled: localBroken ? false : downloads.enabled,
+    offline: false,
+    exclusiveTag: getExclusiveProfileTag(track),
+    activeStreamCodec: streamCodecForLoad(),
+    playbackPolicy: settings.playbackPolicy,
+    catalog: settings.options,
+  });
+  if (d.source === "unavailable") {
+    return { source: "unavailable", block: d.block };
+  }
+  return d;
+}
+
+function failExclusiveTune(reason: string | null | undefined): void {
+  if (reason === "exclusive_needs_device") {
+    showToast(PLAY_BLOCK_MESSAGES.exclusive_needs_device);
+    openSettings();
+  } else if (reason === "exclusive_readonly" || reason === "exclusive_no_format") {
+    showToast(PLAY_BLOCK_MESSAGES[reason]);
+  }
+  failTuneIn();
+}
+
 function rememberDelivery(
   source: "streaming" | "downloaded",
   profile: string | null,
@@ -150,11 +185,24 @@ async function loadResolvedRadio(
   gen: number,
   localBroken: boolean,
 ): Promise<void> {
-  const resolved = await resolveRadioDelivery(track, localBroken);
+  const exclusive = isExclusiveEnabled();
+  radioAudio.setBackend(exclusive ? "companion" : "htmlAudio");
+  const resolved = exclusive
+    ? await resolveExclusiveRadio(radio.track, localBroken)
+    : await resolveRadioDelivery(track, localBroken);
   if (gen !== radioGen) return;
   if (resolved.source === "unavailable") {
-    failTuneIn();
+    if (exclusive) failExclusiveTune(resolved.block);
+    else failTuneIn();
     return;
+  }
+  if (
+    exclusive &&
+    resolved.source === "streaming" &&
+    resolved.profile &&
+    resolved.profile !== SOURCE_TAG
+  ) {
+    requestPrepare([track], resolved.profile, { urgent: true });
   }
   const prevBlob = localRadioUrl;
   localRadioUrl = resolved.source === "downloaded" ? resolved.url : null;
@@ -183,13 +231,17 @@ async function loadResolvedRadio(
       });
     }
     writeRadioMediaSession();
-  } catch {
+  } catch (err) {
     if (gen !== radioGen) return;
     if (resolved.source === "downloaded" && !localBroken) {
       console.warn("Local radio playback failed, falling back to stream");
       markTrackBroken(track.id).catch(() => {});
       revokeRadioLocalUrl();
       return loadResolvedRadio(track, gen, true);
+    }
+    if (exclusive && err instanceof PlayBlockError) {
+      failExclusiveTune(err.reason);
+      return;
     }
     failTuneIn();
   }

@@ -41,6 +41,20 @@ vi.mock("@/radio/runtime", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/radio/runtime")>();
   return { ...actual, sendTuneIn: vi.fn(actual.sendTuneIn) };
 });
+vi.mock("@/stores/exclusiveAudio", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/stores/exclusiveAudio")>();
+  return {
+    ...actual,
+    isExclusiveEnabled: vi.fn(() => false),
+    getExclusiveProfileTag: vi.fn(() => "flac_24_96000"),
+  };
+});
+vi.mock("@/playback/exclusiveDelivery", () => ({
+  exclusiveDelivery: vi.fn(),
+}));
+vi.mock("@/playback/prepare", () => ({
+  requestPrepare: vi.fn(),
+}));
 
 import { fromApiTrack } from "@/models/track";
 import { SOURCE_TAG } from "@/lossyKind";
@@ -53,6 +67,7 @@ import {
   connect,
   heardPosition,
   interpolatedPosition,
+  onExclusivePlaybackChanged,
   onPlaybackPolicyChanged,
   radio,
   radioAudio,
@@ -68,6 +83,7 @@ import {
 import { fetchRadioNow } from "@/api";
 import { sendTuneIn } from "@/radio/runtime";
 import { connectivity } from "@/stores/connectivity";
+import { isExclusiveEnabled } from "@/stores/exclusiveAudio";
 import { getActiveStreamCodec } from "@/stores/settings";
 import { showToast } from "@/stores/ui";
 import { initOutputVolume, setOutputVolume } from "@/stores/playerPrefs";
@@ -95,6 +111,7 @@ describe("radio store", () => {
     vi.mocked(streamUrl).mockClear();
     vi.mocked(startCycle).mockClear();
     vi.mocked(discard).mockClear();
+    vi.mocked(isExclusiveEnabled).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -196,7 +213,7 @@ describe("radio store", () => {
     expect(radio.connected).toBe(false);
   });
 
-  it("radioPlayState is streaming with the tuner profile, never exclusive", () => {
+  it("radioPlayState is streaming with the tuner profile when exclusive is off", () => {
     applySnapshot(currentPayload);
     radio.tunerProfile = "opus_192_48000";
     const state = radioPlayState();
@@ -206,6 +223,14 @@ describe("radio store", () => {
     expect(state.track?.isLossy).toBe(false);
     applySnapshot({ ...currentPayload, is_lossy: true });
     expect(radioPlayState().playProfileId).toBeNull();
+  });
+
+  it("radioPlayState uses the exclusive play profile when exclusive is on", () => {
+    vi.mocked(isExclusiveEnabled).mockReturnValue(true);
+    applySnapshot(currentPayload);
+    radio.tunerProfile = "opus_192_48000";
+    radio.playProfileId = "flac_24_96000";
+    expect(radioPlayState().playProfileId).toBe("flac_24_96000");
   });
 
   it("radioPlayState reports a downloaded catalog profile", () => {
@@ -313,6 +338,40 @@ describe("radio store", () => {
     load.mockClear();
     await onPlaybackPolicyChanged();
     expect(load).not.toHaveBeenCalled();
+  });
+
+  it("onExclusivePlaybackChanged reloads while tuned", async () => {
+    applySnapshot(currentPayload);
+    radio.chrome = "tuned";
+    radio.tunerProfile = "opus_192_48000";
+    vi.spyOn(radioAudio, "load").mockResolvedValue();
+    vi.spyOn(radioAudio, "seek").mockResolvedValue();
+    vi.spyOn(radioAudio, "play").mockResolvedValue();
+    await onExclusivePlaybackChanged();
+    expect(radioAudio.load).toHaveBeenCalled();
+  });
+
+  it("onExclusivePlaybackChanged does not load while stopped", async () => {
+    applySnapshot(currentPayload);
+    radio.chrome = "stopped";
+    const load = vi.spyOn(radioAudio, "load").mockResolvedValue();
+    load.mockClear();
+    await onExclusivePlaybackChanged();
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("sendTuneIn still uses the browser streaming codec when exclusive is on", async () => {
+    vi.mocked(isExclusiveEnabled).mockReturnValue(true);
+    const codec = getActiveStreamCodec();
+    expect(codec).not.toBe("source");
+    expect(codec).not.toBe("flac_24_96000");
+    vi.mocked(sendTuneIn).mockImplementationOnce(async () => {
+      radio.tunerProfile = codec;
+      return true;
+    });
+    await sendTuneIn();
+    expect(radio.tunerProfile).toBe(codec);
+    expect(radio.tunerProfile).not.toBe("flac_24_96000");
   });
 
   it("tuneIn stays tuning when sendTuneIn fails", async () => {
