@@ -194,6 +194,7 @@ class ExclusiveHub:
         session_id: str,
     ) -> ClientSession | None:
         if not p.token_ok(token, self.companion_token):
+            logger.info("Client rejected (invalid_token)")
             await websocket.send_json(
                 p.envelope(p.MSG_HELLO_REJECT, reason="invalid_token")
             )

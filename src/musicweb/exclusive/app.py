@@ -229,6 +229,7 @@ def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
             raw = await websocket.receive_json()
             msg = p.parse_message(raw)
             if msg is None or msg.get("type") != p.MSG_HELLO:
+                logger.info("Client rejected (expected_hello)")
                 await websocket.send_json(
                     p.envelope(
                         p.MSG_HELLO_REJECT,

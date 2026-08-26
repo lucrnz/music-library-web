@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 from typing import Any
@@ -166,6 +167,17 @@ def test_double_disconnect_ensure_idempotent():
 
     assert fake.release_calls == 2
     assert hub._device_id is None
+
+
+def test_hello_invalid_token_logs(caplog):
+    hub, _fake = _hub_with_fake()
+    ws = FakeWebSocket()
+    with caplog.at_level(logging.INFO, logger="musicweb.exclusive.session"):
+        sess = asyncio.run(hub.handle_connect_hello(ws, "wrong", "c1"))
+    assert sess is None
+    assert ws.sent[0]["type"] == p.MSG_HELLO_REJECT
+    assert "invalid_token" in caplog.text
+    assert "wrong" not in caplog.text
 
 
 def test_hello_replace_same_session_does_not_release():
