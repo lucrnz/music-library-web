@@ -10,7 +10,7 @@ This page owns the listen contract. Exact columns, JSON fields, and route wiring
 
 - Event row and rankings SQL: `src/musicweb/db/models.py`, `src/musicweb/db/repositories/listens.py`
 - HTTP ingest and rankings: `src/musicweb/routes/listens.py`
-- 70% cycle, outbox, flush, chips: `frontend/src/listens/`
+- 65% cycle, outbox, flush, chips: `frontend/src/listens/`
 - Player call sites: sink time/ended in `frontend/src/stores/player.ts`; cycle start after successful load in `frontend/src/playback/load.ts`
 - Radio call sites: start after a successful tuned load, time/ended, and discard in `frontend/src/radio/session.ts`; Tune out / leave also discard via `frontend/src/stores/radio.ts`
 - Stats browse UI: `frontend/src/components/stats/`
@@ -18,11 +18,11 @@ This page owns the listen contract. Exact columns, JSON fields, and route wiring
 
 ## What a listen is
 
-A listen is **70% accumulated media time** in one play cycle (successful load, or a restart near 0 such as repeat-one / previous-track seek-0). Pauses and seek jumps do not add. Playback rate is not a special case: media-time deltas already require 70% of the file.
+A listen is **65% accumulated media time** in one play cycle (successful load, or a restart near 0 such as repeat-one / previous-track seek-0). Pauses and seek jumps do not add. Playback rate is not a special case: media-time deltas already require 65% of the file.
 
-Cold-load resume is a seek. Time skipped by the resume jump does not count. Finishing from a late resume without hearing 70% after that seek does not count.
+Cold-load resume is a seek. Time skipped by the resume jump does not count. Finishing from a late resume without hearing 65% after that seek does not count.
 
-All sinks count: stream, downloaded OPFS, and exclusive companion. Start the cycle after a successful html or exclusive load. Radio **does** start a cycle after a successful tuned load (load + seek-to-clock + play), only while this client is `tuned`, with the same 70% / pause / seek / late-resume rules. The Tune-in seek is a cold-load resume. Tune-out discards the cycle (Stop, not Pause); two halves on the same official play do not add. Each tuned-in client posts independently. Tab-open, `tuning`, `stopped`, and the station clock with no this-client tune-in do not start a cycle. Do **not** infer listens from `GET /api/stream`, prepare, diagnostic JSONL, or the station clock.
+All sinks count: stream, downloaded OPFS, and exclusive companion. Start the cycle after a successful html or exclusive load. Radio **does** start a cycle after a successful tuned load (load + seek-to-clock + play), only while this client is `tuned`, with the same 65% / pause / seek / late-resume rules. The Tune-in seek is a cold-load resume. Tune-out discards the cycle (Stop, not Pause); two halves on the same official play do not add. Each tuned-in client posts independently. Tab-open, `tuning`, `stopped`, and the station clock with no this-client tune-in do not start a cycle. Do **not** infer listens from `GET /api/stream`, prepare, diagnostic JSONL, or the station clock.
 
 If duration is never known, count only on ended / companion eof.
 
