@@ -32,20 +32,20 @@ function play(cycleApi: ReturnType<typeof createListenCycle>, from: number, to: 
 describe("createListenCycle", () => {
   it("exports the named constants", () => {
     expect(LISTEN_SEEK_EPSILON_SECONDS).toBe(2);
-    expect(LISTEN_THRESHOLD).toBe(0.7);
+    expect(LISTEN_THRESHOLD).toBe(0.65);
   });
 
-  it("fires once after 70% of playing samples and not again", () => {
+  it("fires once after 65% of playing samples and not again", () => {
     const c = cycle({ durationSec: 100 });
-    expect(play(c, 0, 69)).toBeNull();
-    const event = play(c, 69.5, 70);
+    expect(play(c, 0, 64)).toBeNull();
+    const event = play(c, 64.5, 65);
     expect(event).toMatchObject({
       trackId: "t1",
       profile: "source",
       playSource: "streaming",
       origin: "queue",
     });
-    expect(play(c, 70.5, 80)).toBeNull();
+    expect(play(c, 65.5, 80)).toBeNull();
     expect(c.onEnded()).toBeNull();
   });
 
@@ -99,7 +99,7 @@ describe("createListenCycle", () => {
     expect(c.onEnded()).toBeNull();
   });
 
-  it("onEnded is null when duration is known and below 70%", () => {
+  it("onEnded is null when duration is known and below 65%", () => {
     const c = cycle({ durationSec: 10 });
     c.onTime({ currentTime: 0, duration: 10, playing: true });
     c.onTime({ currentTime: 5, duration: 10, playing: true });

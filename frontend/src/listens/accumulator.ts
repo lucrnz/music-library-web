@@ -1,7 +1,7 @@
-/** Pure 70% play-cycle rules. No player, storage, or fetch. */
+/** Pure 65% play-cycle rules. No player, storage, or fetch. */
 
 export const LISTEN_SEEK_EPSILON_SECONDS = 2;
-export const LISTEN_THRESHOLD = 0.7;
+export const LISTEN_THRESHOLD = 0.65;
 
 export type ListenPlaySource = "streaming" | "downloaded";
 export type ListenOrigin = "queue" | "radio";
