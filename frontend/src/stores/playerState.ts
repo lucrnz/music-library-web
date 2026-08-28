@@ -26,6 +26,8 @@ export interface PlayerState {
   coverThumb: string;
   coverFull: string;
   lyricsOpen: boolean;
+  /** Queue playIndex/loadResolved in flight (Play button busy). */
+  loadPending: boolean;
 }
 
 export const player = reactive<PlayerState>({
@@ -52,6 +54,7 @@ export const player = reactive<PlayerState>({
   coverFull: PLACEHOLDER_COVER,
   /** Expanded now-playing: lyrics overlay open */
   lyricsOpen: false,
+  loadPending: false,
 });
 
 /**

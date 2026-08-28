@@ -24,6 +24,7 @@ import {
   syncTransportFlags,
   teardownOnDemandMedia,
 } from "@/playback/load";
+import { playTapAction } from "@/playback/playTap";
 import { prepareTracks } from "@/playback/prepare";
 import {
   clearPlaybackPosition,
@@ -73,6 +74,18 @@ let nearEndPrepareSent = false;
 
 /** Cold-load resume seek waiting for sink duration, keyed by playGen. */
 let pendingResume: { gen: number; seconds: number } | null = null;
+
+/** Pause once the in-flight load finishes. Initialized from resumePaused. */
+let wantPaused = false;
+
+function applyTransportFlags() {
+  const hold =
+    pendingResume && still(pendingResume.gen) && pendingResume.seconds > 0
+      ? pendingResume.seconds
+      : null;
+  syncTransportFlags();
+  if (hold != null) player.currentTime = hold;
+}
 
 function persistCurrentPosition() {
   const id = pl.current?.id;
@@ -209,7 +222,7 @@ function wireSinkHandlers() {
       });
     },
     onPauseState: () => {
-      syncTransportFlags();
+      applyTransportFlags();
       persistPausePosition();
     },
   };
@@ -222,6 +235,8 @@ export function stopPlayback() {
   discardListen();
   setPlayNotice(null);
   nearEndPrepareSent = false;
+  pendingResume = null;
+  wantPaused = false;
   pl.index = -1;
   player.currentTime = 0;
   player.duration = 0;
@@ -255,6 +270,16 @@ function maybePrepareNext() {
   prepareTracks([nextTrack], { urgent: true, limit: 1 });
 }
 
+function reloadCurrentQueueTrack() {
+  if (activeSession() !== "queue") return;
+  if (pl.index < 0) return;
+  persistCurrentPosition();
+  void playIndex(pl.index, {
+    resumeAt: player.currentTime,
+    resumePaused: getActiveSink().paused,
+  });
+}
+
 /** Replace the queue with `entries` and start the first track at 0. */
 export async function playAllTracks(
   entries: Array<QueueEntry | null | undefined> | null | undefined,
@@ -283,8 +308,10 @@ export async function playIndex(
           })
         : null;
   if (seekTo == null && keepAt == null) clearPlaybackPosition();
+  wantPaused = opts?.resumePaused === true;
   const gen = beginLoad();
   pendingResume = seekTo != null ? { gen, seconds: seekTo } : null;
+  player.currentTime = seekTo != null && seekTo > 0 ? seekTo : 0;
   pl.index = index;
   if (pl.shuffle) {
     pl.shufflePos = pl.shuffleOrder.indexOf(index);
@@ -303,7 +330,15 @@ export async function playIndex(
   setPlayNotice(null);
 
   await loadResolved(gen, track);
-  if (still(gen) && opts?.resumePaused) {
+  if (
+    still(gen) &&
+    pendingResume &&
+    still(pendingResume.gen) &&
+    pendingResume.seconds > 0
+  ) {
+    player.currentTime = pendingResume.seconds;
+  }
+  if (still(gen) && wantPaused) {
     try {
       getActiveSink().pause();
     } catch {
@@ -330,7 +365,7 @@ function stopAtQueueEnd() {
   } catch {
     /* ignore */
   }
-  syncTransportFlags();
+  applyTransportFlags();
 }
 
 export function playNext() {
@@ -364,29 +399,49 @@ export function playPrev() {
 }
 
 function ensureAudible() {
-  if (!pl.length) return;
-  if (pl.index < 0) {
+  const action = playTapAction({
+    hasTracks: pl.length > 0,
+    index: pl.index,
+    loadInFlight: player.loadPending,
+    playSource: player.playSource,
+  });
+  if (action === "noop") return;
+  if (action === "flip-want") {
+    wantPaused = !wantPaused;
+    return;
+  }
+  if (action === "start-first") {
     playIndex(0);
     return;
   }
-  if (
-    player.playSource !== "streaming" &&
-    player.playSource !== "downloaded"
-  ) {
-    playIndex(pl.index);
+  if (action === "resume") {
+    Promise.resolve(getActiveSink().resume()).catch(console.error);
     return;
   }
-  Promise.resolve(getActiveSink().resume()).catch(console.error);
+  const track = pl.current ?? pl.tracks[pl.index];
+  const at =
+    player.currentTime > 0
+      ? player.currentTime
+      : resumeSeconds({
+          trackId: track?.id,
+          saved: readPlaybackPosition(),
+          duration: track?.duration,
+        });
+  playIndex(pl.index, { resumeAt: at ?? undefined });
 }
 
 export function togglePlay() {
+  if (player.loadPending) {
+    wantPaused = !wantPaused;
+    return;
+  }
   const sink = getActiveSink();
   if (!sink.paused) {
     sink.pause();
   } else {
     ensureAudible();
   }
-  syncTransportFlags();
+  applyTransportFlags();
 }
 
 export function toggleShuffle() {
@@ -428,8 +483,7 @@ export function initAudioListeners() {
     () => settings.streamCodec,
     () => {
       prepareTracks(pl.tracks, { replace: true });
-      if (activeSession() !== "queue") return;
-      if (pl.index >= 0) playIndex(pl.index);
+      reloadCurrentQueueTrack();
     },
   );
   watch(
@@ -442,13 +496,7 @@ export function initAudioListeners() {
     () => exclusiveAudio.enabled,
     () => {
       prepareTracks(pl.tracks, { replace: true });
-      if (activeSession() !== "queue") return;
-      if (pl.index < 0) return;
-      persistCurrentPosition();
-      void playIndex(pl.index, {
-        resumeAt: player.currentTime,
-        resumePaused: getActiveSink().paused,
-      });
+      reloadCurrentQueueTrack();
     },
   );
   wireSinkHandlers();
@@ -463,7 +511,13 @@ export function initAudioListeners() {
     play: () => {
       ensureAudible();
     },
-    pause: () => getActiveSink().pause(),
+    pause: () => {
+      if (player.loadPending) {
+        wantPaused = true;
+        return;
+      }
+      getActiveSink().pause();
+    },
     previous: playPrev,
     next: playNext,
     seekto: (details) => {

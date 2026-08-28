@@ -9,6 +9,7 @@ import {
   stopHtmlAudio,
 } from "@/playback/sinks/htmlElement";
 import { PlayBlockError } from "@/playBlock";
+import { isSoftPlayReject } from "@/playback/playReject";
 import type { PlaybackSink, SinkHandlers } from "@/playback/sinks/types";
 
 export function createHtmlAudioSink(): PlaybackSink {
@@ -58,6 +59,7 @@ export function createHtmlAudioSink(): PlaybackSink {
       try {
         await audio.play();
       } catch (err: unknown) {
+        if (isSoftPlayReject(err)) return;
         throw err instanceof PlayBlockError
           ? err
           : new PlayBlockError(

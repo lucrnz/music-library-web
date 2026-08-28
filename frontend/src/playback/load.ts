@@ -74,6 +74,7 @@ export function beginLoad() {
   discardListen();
   beginPlay();
   clearPlaySourceState();
+  player.loadPending = true;
   try {
     htmlSink.stop();
   } catch {
@@ -88,6 +89,7 @@ export function still(gen: number) {
 
 export function invalidateLoads() {
   playGen += 1;
+  player.loadPending = false;
 }
 
 function applyIntent(intent: PlayIntent) {
@@ -146,7 +148,10 @@ export function failCurrentLoad(opts: {
   if (reason === "exclusive_needs_device") {
     openSettings();
   }
+  const held = player.currentTime;
+  player.loadPending = false;
   syncTransportFlags();
+  if (held > 0) player.currentTime = held;
 }
 
 export function revokeLocalPlayUrl() {
@@ -166,6 +171,7 @@ function stopSink(sink: PlaybackSink) {
 
 /** Leave on-demand media: both sinks + revoke the local blob. */
 export function teardownOnDemandMedia() {
+  player.loadPending = false;
   stopSink(htmlSink);
   stopSink(companionSink);
   revokeLocalPlayUrl();
@@ -185,7 +191,10 @@ export function selectSink(kind: PlaySink) {
 
 export function syncTransportFlags() {
   player.paused = activeSink.paused;
-  player.currentTime = activeSink.currentTime || 0;
+  const sinkTime = activeSink.currentTime || 0;
+  if (!(player.loadPending && player.currentTime > 0 && sinkTime === 0)) {
+    player.currentTime = sinkTime;
+  }
   player.duration = Number.isFinite(activeSink.duration)
     ? activeSink.duration
     : 0;
@@ -216,6 +225,9 @@ async function attemptPlay(
   if (!still(gen)) return { ok: false, err: toPlayBlockError(undefined, "play_failed") };
   try {
     await activeSink.load(url);
+    if (!still(gen)) {
+      return { ok: false, err: toPlayBlockError(undefined, "play_failed") };
+    }
     return { ok: true };
   } catch (err: unknown) {
     const block = toPlayBlockError(err, "play_failed");
@@ -270,7 +282,10 @@ export async function loadResolved(
   extra: { localBroken?: boolean } = {},
 ) {
   const intent = await intentForTrack(track, gen, extra);
-  if (!still(gen) || !intent) return;
+  if (!still(gen) || !intent) {
+    if (still(gen)) player.loadPending = false;
+    return;
+  }
   applyIntent(intent);
   if (needsCompanionStop(intent, activeSink.kind)) {
     stopSink(companionSink);
@@ -330,4 +345,5 @@ export async function loadResolved(
   );
   maybeStartListenCycle(track);
   syncTransportFlags();
+  player.loadPending = false;
 }
