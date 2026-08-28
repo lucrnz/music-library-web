@@ -542,3 +542,27 @@
 .vol-label input[type="range"] {
   flex: 1;
 }
+
+.player-load-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: player-load-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.icon-btn.primary .player-load-spinner {
+  width: 26px;
+  height: 26px;
+  border-width: 3px;
+  border-color: rgba(0, 0, 0, 0.2);
+  border-top-color: #000;
+}
+
+@keyframes player-load-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

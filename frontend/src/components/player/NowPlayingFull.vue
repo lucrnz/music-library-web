@@ -183,11 +183,17 @@ defineExpose({
       <button
         type="button"
         class="icon-btn primary"
-        title="Play / Pause"
-        aria-label="Play / Pause"
+        :title="player.loadPending ? 'Loading stream…' : 'Play / Pause'"
+        :aria-label="player.loadPending ? 'Loading stream…' : 'Play / Pause'"
+        :aria-busy="player.loadPending ? 'true' : undefined"
         @click="togglePlay"
       >
-        <Icon :name="playIcon" />
+        <span
+          v-if="player.loadPending"
+          class="player-load-spinner"
+          aria-hidden="true"
+        />
+        <Icon v-else :name="playIcon" />
       </button>
       <button
         type="button"
