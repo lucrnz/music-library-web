@@ -66,16 +66,33 @@ import { resolvePlaySource } from "@/downloads/resolve";
 import { exclusiveDelivery } from "@/playback/exclusiveDelivery";
 import { requestPrepare } from "@/playback/prepare";
 import { discard, startCycle } from "@/listens/bridge";
+import { RADIO_JOIN_HOLD_MS } from "@/radio/hold";
 import {
+  bindAudioHandlers,
   bumpRadioGen,
   loadCurrent,
   onFaceOrTrack,
+  pauseWhileTuned,
 } from "@/radio/session";
 import { sendTuneIn } from "@/radio/runtime";
 import { isExclusiveEnabled } from "@/stores/exclusiveAudio";
 import { radio, radioAudio, resetRadioStore } from "@/stores/radio";
 import { showToast } from "@/stores/ui";
 import { PLAY_BLOCK_MESSAGES } from "@/playBlock";
+
+async function tuneAndBind(): Promise<void> {
+  vi.mocked(resolvePlaySource).mockResolvedValue({
+    source: "streaming",
+    url: "/api/stream?id=t1&codec=opus_192_48000",
+    profile: "opus_192_48000",
+  });
+  radio.chrome = "tuning";
+  radio.face = "current";
+  radio.track = { id: "t1", title: "Song" } as never;
+  radio.tunerProfile = "opus_192_48000";
+  bindAudioHandlers();
+  await loadCurrent();
+}
 
 describe("radio session", () => {
   beforeEach(() => {
@@ -319,7 +336,55 @@ describe("radio session", () => {
     await onFaceOrTrack(null);
     expect(radio.chrome).toBe("tuning");
     radioAudio.el?.dispatchEvent(new Event("pause"));
+    pauseWhileTuned();
     expect(radio.chrome).toBe("tuning");
+  });
+
+  it("pause during the join hold stays tuning", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await tuneAndBind();
+    expect(radio.chrome).toBe("tuned");
+    radioAudio.el?.dispatchEvent(new Event("pause"));
+    pauseWhileTuned();
+    expect(radio.chrome).toBe("tuning");
+    expect(radio.chrome).not.toBe("stopped");
+    expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it("pause after the join hold tunes out", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await tuneAndBind();
+    expect(radio.chrome).toBe("tuned");
+    await vi.advanceTimersByTimeAsync(RADIO_JOIN_HOLD_MS);
+    radioAudio.el?.dispatchEvent(new Event("pause"));
+    pauseWhileTuned();
+    expect(radio.chrome).toBe("stopped");
+  });
+
+  it("ended during the join hold does not tune out or retry", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await tuneAndBind();
+    expect(radio.chrome).toBe("tuned");
+    vi.spyOn(radioAudio, "ended", "get").mockReturnValue(true);
+    radioAudio.el?.dispatchEvent(new Event("ended"));
+    radioAudio.el?.dispatchEvent(new Event("pause"));
+    pauseWhileTuned();
+    expect(radio.chrome).toBe("tuned");
+    expect(radio.chrome).not.toBe("stopped");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(radio.chrome).toBe("tuned");
+  });
+
+  it("a second loadCurrent resets the join hold", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await tuneAndBind();
+    await vi.advanceTimersByTimeAsync(3000);
+    await loadCurrent();
+    expect(radio.chrome).toBe("tuned");
+    radioAudio.el?.dispatchEvent(new Event("pause"));
+    pauseWhileTuned();
+    expect(radio.chrome).toBe("tuning");
+    expect(radio.chrome).not.toBe("stopped");
   });
 
   it("failed load stays tuning and retries to tuned", async () => {

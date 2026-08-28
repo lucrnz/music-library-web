@@ -13,6 +13,7 @@ import { createRadioAudio } from "@/radio/audio";
 import { createRejoinClock } from "@/radio/rejoin";
 import {
   bumpRadioGen,
+  cancelRadioJoinHold,
   clearLoadedKeys,
   loadCurrent,
   maybeReseek,
@@ -231,6 +232,7 @@ function bindSession(): void {
 
 function leaveRadio(): void {
   if (radio.chrome === "inactive") return;
+  cancelRadioJoinHold();
   cancelRadioRejoin();
   if (radioChromeActive()) sendJson({ type: "tune_out" });
   audio.stop();
@@ -299,6 +301,7 @@ export async function tuneIn(): Promise<void> {
 
 export function tuneOut(): void {
   if (radio.chrome === "inactive") return;
+  cancelRadioJoinHold();
   cancelRadioRejoin();
   sendJson({ type: "tune_out" });
   audio.stop();
@@ -358,6 +361,7 @@ function bindVisibility(): void {
 }
 
 export function resetRadioStore(): void {
+  cancelRadioJoinHold();
   cancelRadioRejoin();
   disconnect();
   audio.stop();

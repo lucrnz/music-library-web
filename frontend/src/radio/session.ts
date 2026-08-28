@@ -21,6 +21,7 @@ import {
 import { exclusiveDelivery } from "@/playback/exclusiveDelivery";
 import { requestPrepare } from "@/playback/prepare";
 import { suspendMediaSession } from "@/playback/session";
+import { createJoinHold } from "@/radio/hold";
 import { needsReseek } from "@/radio/sync";
 import {
   getExclusiveProfileTag,
@@ -43,6 +44,11 @@ let lastLoadedLossy: boolean | null = null;
 let radioGen = 0;
 let audioBound = false;
 let localRadioUrl: string | null = null;
+const joinHold = createJoinHold();
+
+export function cancelRadioJoinHold(): void {
+  joinHold.cancel();
+}
 
 function isChromeActive(chrome: string): boolean {
   return chrome === "stopped" || chrome === "tuning" || chrome === "tuned";
@@ -59,6 +65,7 @@ export function revokeRadioLocalUrl(): void {
 }
 
 export function clearLoadedKeys(): void {
+  cancelRadioJoinHold();
   lastLoadedTrackId = null;
   lastLoadedLossy = null;
   revokeRadioLocalUrl();
@@ -221,6 +228,7 @@ async function loadResolvedRadio(
     lastLoadedLossy = radio.isLossy;
     radio.chrome = "tuned";
     cancelRadioRejoin();
+    joinHold.start();
     if (resolved.profile) {
       startListenCycle({
         trackId: track.id,
@@ -250,10 +258,23 @@ async function loadResolvedRadio(
 export async function loadCurrent(): Promise<void> {
   const track = radio.track;
   if (!track?.id) return;
+  cancelRadioJoinHold();
   if (radio.chrome === "tuned") radio.chrome = "tuning";
   discardListen();
   const gen = ++radioGen;
   await loadResolvedRadio(track, gen, false);
+}
+
+export function pauseWhileTuned(): void {
+  if (radio.chrome !== "tuned" || radioAudio.ended) return;
+  if (radioAudio.loadInFlight || radioAudio.seekInFlight) return;
+  if (joinHold.pending) {
+    cancelRadioJoinHold();
+    radio.chrome = "tuning";
+    scheduleRadioRejoin();
+    return;
+  }
+  tuneOut();
 }
 
 export function writeRadioMediaSession(): void {
@@ -271,14 +292,7 @@ export function writeRadioMediaSession(): void {
     void tuneIn();
   });
   navigator.mediaSession.setActionHandler("pause", () => {
-    if (
-      radio.chrome === "tuned" &&
-      !radioAudio.loadInFlight &&
-      !radioAudio.seekInFlight &&
-      !radioAudio.ended
-    ) {
-      tuneOut();
-    }
+    pauseWhileTuned();
   });
   navigator.mediaSession.setActionHandler("stop", () => {
     tuneOut();
@@ -292,9 +306,10 @@ export function bindAudioHandlers(): void {
   if (audioBound) return;
   audioBound = true;
   radioAudio.onPause(() => {
-    if (radio.chrome === "tuned" && !radioAudio.ended) tuneOut();
+    pauseWhileTuned();
   });
   radioAudio.onEnded(() => {
+    cancelRadioJoinHold();
     onListenEnded();
     /* station clock owns advance */
   });
@@ -311,6 +326,7 @@ export function bindAudioHandlers(): void {
   });
   radioAudio.onError(() => {
     if (radio.chrome !== "tuning" && radio.chrome !== "tuned") return;
+    cancelRadioJoinHold();
     radio.chrome = "tuning";
     scheduleRadioRejoin();
   });

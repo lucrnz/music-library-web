@@ -61,6 +61,7 @@ import { SOURCE_TAG } from "@/lossyKind";
 import { discard, startCycle } from "@/listens/bridge";
 import { streamUrl } from "@/api";
 import { resolvePlaySource } from "@/downloads/resolve";
+import { RADIO_JOIN_HOLD_MS } from "@/radio/hold";
 import { loadCurrent } from "@/radio/session";
 import {
   applySnapshot,
@@ -416,6 +417,32 @@ describe("radio store", () => {
     const calls = load.mock.calls.length;
     tuneOut();
     await vi.advanceTimersByTimeAsync(1000);
+    expect(load.mock.calls.length).toBe(calls);
+    vi.useRealTimers();
+  });
+
+  it("tuneOut after a successful load cancels the join hold", async () => {
+    vi.useFakeTimers();
+    vi.mocked(resolvePlaySource).mockResolvedValue({
+      source: "streaming",
+      url: "/api/stream?id=t1&codec=opus_192_48000",
+      profile: "opus_192_48000",
+    });
+    applySnapshot(currentPayload);
+    radio.chrome = "tuning";
+    radio.connected = true;
+    radio.tunerProfile = "opus_192_48000";
+    vi.mocked(sendTuneIn).mockResolvedValue(true);
+    const load = vi.spyOn(radioAudio, "load").mockResolvedValue();
+    vi.spyOn(radioAudio, "seek").mockResolvedValue();
+    vi.spyOn(radioAudio, "play").mockResolvedValue();
+    await loadCurrent();
+    expect(radio.chrome).toBe("tuned");
+    const calls = load.mock.calls.length;
+    tuneOut();
+    expect(radio.chrome).toBe("stopped");
+    await vi.advanceTimersByTimeAsync(RADIO_JOIN_HOLD_MS);
+    expect(radio.chrome).toBe("stopped");
     expect(load.mock.calls.length).toBe(calls);
     vi.useRealTimers();
   });
