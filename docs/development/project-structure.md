@@ -30,7 +30,8 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `main.py` | FastAPI app factory, lifespan, dist mounts, SPA shell wiring |
 | `cli/` | Typer entry (`serve`, `scan`, regen, `stats`, `doctor`, `companion`, `logs`, `radio`); argv only |
 | `diag/` | Diagnostic JSONL store, emit, join-key reader |
-| `exclusive/` | Desktop companion (loopback WS + mpv hog + blob store); no library DB/lock |
+| `exclusive/` | Desktop companion (loopback WS + mpv hog + blob store + `optical_session` + WAV); no library DB/lock |
+| `cd/` | MusicBrainz disc-id lookup, confirm bind/half-bind, `cd_identities` snapshot |
 | `runtime/` | Data-dir flock, bootstrap, exclusive maintenance, `run_library_job` |
 | `jobs/` | Single-flight library job runner (`ScanState`, `_begin`, `_begin_phase`; scan finish stamps radio watermark). Kind dispatch calls `scan/jobs.py` (`run_scan` / `regen_*`) |
 | `control/` | Private UDS JSON control plane (health, job RPC, live radio debug RPC) for live CLI |
@@ -50,7 +51,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `radio/` | Household station clock, picker, tuner prepare (reuses Transcoder); snapshot serialize lives on `routes/radio.py` |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
-| `routes/` | HTTP API routers (health, scan, discovery, `media.py` stream/cover, `artist_images.py` portraits, playlists, listens, radio, diag) + SPA pages |
+| `routes/` | HTTP API routers (health, scan, discovery, `media.py` stream/cover, `artist_images.py` portraits, playlists, listens, radio, cd, diag) + SPA pages |
 
 ## Ownership rules
 
@@ -63,7 +64,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
 - **Frontend** is Vite Vue SFC + TypeScript under `frontend/src/`. Stores hold client state; components render; `api.ts` talks to the server. FastAPI serves `frontend/dist`.
 - **Library browse** is a `BrowseSource` (`components/library/sources/`) plus `entityActionsFor` consumed by `LibraryView` and `LibraryTreePane`. The source owns list load, tree `loadRoots` / `loadChildren`, `flags` / `chrome` / `cover`, and tree title / empty / focus / reload; the tree pane does not switch on mode for those jobs.
-- **Playback session** is `frontend/src/playback/session.ts` (`become`). Load/fail is `frontend/src/playback/load.ts`. Radio socket is `frontend/src/radio/runtime.ts`; face/load and Media Session are `frontend/src/radio/session.ts`; `stores/radio.ts` is the chrome face. Stream-cache forget retain is lifespan `app.state.retain_stream_ids` + `routes/deps.retain_stream_ids` (not `media.py` → station). Exclusive companion commands are a module-level `COMMANDS` table + `_with_live` in `exclusive/session.py`.
+- **Playback session** is `frontend/src/playback/session.ts` (`become`, including `cd`). Load/fail is `frontend/src/playback/load.ts`. CD cursor + prefs are `frontend/src/stores/cd.ts`; CD chrome is `frontend/src/components/cd/`; CD load is `frontend/src/playback/cdLoad.ts`. Radio socket is `frontend/src/radio/runtime.ts`; face/load and Media Session are `frontend/src/radio/session.ts`; `stores/radio.ts` is the chrome face. Stream-cache forget retain is lifespan `app.state.retain_stream_ids` + `routes/deps.retain_stream_ids` (not `media.py` → station). Exclusive companion commands are a module-level `COMMANDS` table + `_with_live` in `exclusive/session.py`.
 - **Row action menus** live under `frontend/src/components/menu/`. Desktop media queries for new client code live in `frontend/src/layout.ts`. See `docs/frontend/conventions.md`.
 - **Offline downloads** stay under `frontend/src/downloads/` (`snapshot.ts` catalog view, `queueRuntime.ts` pump + abort; `queue.ts` does not import runtime) and must not write the server index.
 - Add feature code near its owner package before introducing shared abstractions.
@@ -76,5 +77,5 @@ This page describes **ownership boundaries** — where code lives and what each 
 - `docs/development/`: commands, environment, structure.
 - `docs/frontend/`: SPA conventions.
 - `docs/product/`: product and audio guidelines.
-- `docs/systems/`: cross-cutting design (scan, transcode, radio, PWA, downloads, playback, playback-stats, connectivity).
+- `docs/systems/`: cross-cutting design (scan, transcode, radio, PWA, downloads, playback, playback-stats, connectivity, CD playback).
 - `docs/plans/`: in-flight multi-stage plans (`*-pending` only). Finished plans live in git history.

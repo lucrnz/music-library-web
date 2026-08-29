@@ -36,7 +36,8 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 - `docs/systems/transcoding.md`: stream profiles, encode policy, cache lifetime.
 - `docs/systems/pwa.md`: installable shell, service worker scope, public origin.
 - `docs/systems/downloads.md`: client offline catalog (OPFS or companion disk), queue, import surface.
-- `docs/systems/companion.md`: Desktop companion sidecar (hog + Downloads blob store).
+- `docs/systems/companion.md`: Desktop companion sidecar (hog + Downloads blob store + optical).
+- `docs/systems/cd-playback.md`: Mac PWA software CD deck (live WAV, unripped stubs, no rip UI).
 - `docs/systems/playback.md`: play source, quality prefs, prepare.
 - `docs/systems/radio.md`: household 24/7 station (encode + seek, not a live pipe).
 - `docs/systems/playback-stats.md`: household listen log and Stats browse mode.

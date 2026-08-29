@@ -2,10 +2,11 @@
 
 Loopback sidecar on the same machine as the installed desktop PWA. It is **not** the library server: no data-dir lock, no SQLite, no scan.
 
-Two jobs share one process (`uv run musicweb companion`) and one `COMPANION_TOKEN`:
+Three jobs share one process (`uv run musicweb companion`) and one `COMPANION_TOKEN`:
 
 1. **Exclusive hog** (macOS) — mpv + Core Audio. See [exclusive-audio.md](exclusive-audio.md).
 2. **Downloads blob store** — real-disk locker for the same Downloads feature the PWA catalogs in IndexedDB. See [downloads.md](downloads.md).
+3. **Optical + live virtual WAV** (macOS) — list/watch/eject a CD, serve a token-gated loopback WAV, `load` with an explicit hog flag. Watch lives on `optical_session.py` and is not torn down by `release_device`. One CDDA reader per track is reused across Ranges. Optional `libcdio` + `libcdio-paranoia`. Windows/Linux stub: empty list, WAV 404. See [cd-playback.md](cd-playback.md).
 
 ## Source of truth
 
@@ -21,7 +22,7 @@ Two jobs share one process (`uv run musicweb companion`) and one `COMPANION_TOKE
 - Data files live in the OS app-support directory (printed on every launch). There is no env override.
 - Hello + token authenticates a session. Any authenticated session may command the blob store. Hog transport (`load`, device, volume) stays **controller-only**.
 - The companion fetches library stream URLs and writes jailed relative keys. The PWA plays those files over a token-gated loopback GET with Range. HTML and exclusive both consume that store.
-- Auto-connect when Downloads **or** exclusive is enabled and a token is set. Enabling Downloads on a desktop PWA turns the flag on, waits for hello, then boots the queue. `hello_ok` / `disk_info` carry the data-dir path for Settings.
+- Auto-connect when Downloads, exclusive, **or** CD playback is enabled and a token is set. Optical watch/read/eject/`load` stay **controller-only**. Enabling Downloads on a desktop PWA turns the flag on, waits for hello, then boots the queue. `hello_ok` / `disk_info` carry the data-dir path for Settings.
 - Settings token/port commit runs a hello probe: green/red field border plus `Token accepted` / `Invalid token` / `Companion not reachable`. Feature-off probes hang up after hello so they do not take the controller lock. The companion logs hello rejects only (not the token).
 - `DEBUG` (`true`/`1` vs `false`/`0`/unset) from the same `.env` or process env raises process logs to DEBUG, including exclusive volume path decisions (hardware vs digital, pre-hog adopt, restore, Core Audio selector outcome). Loopback HTTP access logs stay off so `?token=` does not hit stdout. WebSocket time-pos frames are not logged.
 - Loopback file HTTP allows CORS and Private Network Access from the PWA origin so migrate PUT and cover fetch work. GET Range and migrate PUT stream; they do not slurp the whole file.

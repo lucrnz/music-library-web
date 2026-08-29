@@ -7,7 +7,7 @@
 - Walk / formats: `src/musicweb/scan/walk.py`, `formats.py`
 - Album lossy-kind reduce: SQL in `finalize.recount_entities` (`mp3` / `aac` / `lossy` / `mixed`)
 - Album duration recount: same `recount_entities` pass (sum of present-track `duration_ms`; null if any present track lacks duration)
-- Fingerprints / identity: `src/musicweb/scan/fingerprint.py`, `identity.py`
+- Fingerprints / identity: `src/musicweb/scan/fingerprint.py`, `identity.py` (a later rip attaches to an unripped CD hole at the same album + track number; never replaces a present file). `count_missing` excludes `unripped` stubs.
 - Batch upsert: `src/musicweb/scan/batch.py` (one `read_metadata` per path; shared cache with `siblings.lossless_slots_in_dir`)
 - Enrichment loop: `src/musicweb/scan/enrichment.py` (`iter_enrichment`)
 - Covers / artist images / lyrics phases: `scan/covers.py`, `scan/artist_images.py`, `scan/lyrics.py`

@@ -41,6 +41,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (Vite + pnpm). Stre
 - [PWA shell](docs/systems/pwa.md)
 - [Offline downloads](docs/systems/downloads.md)
 - [Playback and quality](docs/systems/playback.md)
+- [CD playback](docs/systems/cd-playback.md)
 - [Household radio](docs/systems/radio.md)
 - [Playback stats](docs/systems/playback-stats.md)
 - [Connectivity](docs/systems/connectivity.md)

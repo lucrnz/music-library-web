@@ -33,7 +33,7 @@ Documented names and defaults live in `.env.example` and `Settings` fields. Conc
 
 Never commit `.env`. Do not log API keys or personal contact email.
 
-Desktop companion (`musicweb companion`) loads the same `.env` but does not use `Settings`. It reads `COMPANION_TOKEN` and optional `DEBUG` (`true`/`1` vs `false`/`0`/unset) for verbose process logs. See [companion.md](../systems/companion.md).
+Desktop companion (`musicweb companion`) loads the same `.env` but does not use `Settings`. It reads `COMPANION_TOKEN` and optional `DEBUG` (`true`/`1` vs `false`/`0`/unset) for verbose process logs. See [companion.md](../systems/companion.md). CD identify uses `MUSICBRAINZ_CONTACT_EMAIL` (already documented for artist portraits). Optional host packages: `libcdio` + `libcdio-paranoia`. See [cd-playback.md](../systems/cd-playback.md).
 
 ## Public origin vs bind address
 

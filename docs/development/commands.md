@@ -140,7 +140,7 @@ Exact flags: `uv run musicweb radio --help`.
 
 ## Desktop companion
 
-Desktop companion: loopback sidecar for **hog / exclusive** Core Audio (macOS) **and** the Downloads blob store. This is **not** the library server: it does **not** take `musicweb.lock`, open the DB, or migrate. Hog is Mac-only; on Windows/Linux it is a no-op stub so Downloads still start. The locker directory is the OS app-support path and is **printed after the loopback bind succeeds**.
+Desktop companion: loopback sidecar for **hog / exclusive** Core Audio (macOS), the Downloads blob store, and **optical CD** (list/watch/eject + live virtual WAV). This is **not** the library server: it does **not** take `musicweb.lock`, open the DB, or migrate. Hog and optical are Mac-only; on Windows/Linux they are stubs so Downloads still start. Optional CD deps: `brew install libcdio libcdio-paranoia` (companion still starts without them). Identify needs `MUSICBRAINZ_CONTACT_EMAIL` (same as artist portraits). Verify flags in `pyproject.toml`, `.env.example`, and source. The locker directory is the OS app-support path and is **printed after the loopback bind succeeds**.
 
 Requires:
 

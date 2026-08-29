@@ -13,6 +13,7 @@ This page owns the listen contract. Exact columns, JSON fields, and route wiring
 - 65% cycle, outbox, flush, chips: `frontend/src/listens/`
 - Player call sites: sink time/ended in `frontend/src/stores/player.ts`; cycle start after successful load in `frontend/src/playback/load.ts`
 - Radio call sites: start after a successful tuned load, time/ended, and discard in `frontend/src/radio/session.ts`; Tune out / leave also discard via `frontend/src/stores/radio.ts`
+- CD call sites: `frontend/src/playback/cdLoad.ts` starts a cycle only for MusicBrainz-identified rows (`origin=cd`, `play_source=cd`, profile `cdda`) — bound library ids or unripped stubs. Sentinel `cd:unknown:` ids never start a cycle. Rankings stay mixed; no Stats origin chip. See [cd-playback.md](cd-playback.md).
 - Stats browse UI: `frontend/src/components/stats/`
 - Related: `docs/systems/playback.md` (delivery, not listens), `docs/systems/radio.md`, `docs/systems/diagnostics.md` (JSONL, not listens)
 

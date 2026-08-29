@@ -10,7 +10,7 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 - Exclusive URL / profile / block (no sink): `frontend/src/playback/exclusiveDelivery.ts`
 - Exclusive delivery builder: `frontend/src/playback/deliveryPolicy.ts` (`sink` + `profileFor`)
 - Shared prepare: `frontend/src/playback/prepare.ts` (`prepareTracks`)
-- Session handoff: `frontend/src/playback/session.ts` (`become("none" | "queue" | "radio")`)
+- Session handoff: `frontend/src/playback/session.ts` (`become("none" | "queue" | "radio" | "cd")`). CD does not go through `resolvePlayIntent` or `player.ts`; delivery is companion loopback via `playback/cdLoad.ts`. The disc list is `CdTrackList`, not `PlaylistView`. Queue mutations use `queueActionsAllowed()`. See [cd-playback.md](cd-playback.md).
 - Shared HTML element: `frontend/src/playback/sinks/htmlElement.ts`
 - Companion-stop decision: `needsCompanionStop` in `playback/playIntent.ts`
 - Quality prefs: `frontend/src/stores/settings.ts` (maps `/api/codecs` to camelCase once at hydrate; `setStreamCodec` / `setPlaybackPolicy` persist only)
@@ -38,6 +38,7 @@ Each successful load records a **play source** (not a library path):
 | Source | Meaning |
 |--------|---------|
 | `streaming` | Playing a server stream URL for the active stream profile |
+| `cd` | Playing a live companion `/cdda/` WAV (optical). Not `resolvePlayIntent`. |
 | `downloaded` | Playing a local catalog file (OPFS blob or companion loopback URL) |
 | `unavailable` | Cannot start; structured block reason set |
 | `none` | Player idle (no current load) |
