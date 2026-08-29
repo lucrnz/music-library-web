@@ -7,7 +7,7 @@ import type { PlayBlockReason, PlaySourceState } from "@/playBlock";
 import { PLACEHOLDER_COVER } from "@/util";
 
 /** Desktop-rail / mobile-sheet occupant. Mobile `/radio` ignores this. */
-export type NowPlayingRail = "queue" | "radio";
+export type NowPlayingRail = "queue" | "radio" | "cd";
 
 export interface PlayerState {
   seeking: boolean;

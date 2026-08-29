@@ -17,6 +17,7 @@ import NowPlayingFull from "@/components/player/NowPlayingFull.vue";
 import type { NowPlayingFullExpose } from "@/components/player/NowPlayingFull.vue";
 import RadioMini from "@/components/radio/RadioMini.vue";
 import RadioNowPlaying from "@/components/radio/RadioNowPlaying.vue";
+import CdNowPlaying from "@/components/cd/CdNowPlaying.vue";
 import { radioChromeActive } from "@/stores/radio";
 import { formatPlayingSubtitle } from "@/util";
 
@@ -39,6 +40,12 @@ const root = ref<HTMLElement | null>(null);
         player.expanded &&
         player.railFace === "radio",
     );
+    const desktopCdRail = computed(
+      () =>
+        desktopViewport.value &&
+        player.expanded &&
+        player.railFace === "cd",
+    );
     const desktopQueueRail = computed(
       () =>
         desktopViewport.value &&
@@ -46,8 +53,9 @@ const root = ref<HTMLElement | null>(null);
         player.railFace === "queue",
     );
     const visible = computed(() => {
-      if (desktopRadioRail.value) return true;
+      if (desktopRadioRail.value || desktopCdRail.value) return true;
       if (onRadio.value && !desktopViewport.value) return false;
+      if (route.meta.pane === "cd" && !desktopViewport.value) return false;
       return radioOn.value || Boolean(pl.current) || pl.length > 0;
     });
     const track = computed(() => pl.current);
@@ -182,8 +190,13 @@ const root = ref<HTMLElement | null>(null);
         </button>
       </div>
 
+      <CdNowPlaying
+        v-if="desktopCdRail"
+        layout="room"
+        @collapse="collapse"
+      />
       <RadioNowPlaying
-        v-if="desktopRadioRail"
+        v-else-if="desktopRadioRail"
         layout="room"
         @collapse="collapse"
       />

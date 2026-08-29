@@ -1,11 +1,11 @@
 /**
- * Session owner: queue vs radio vs none. Does not import radio.ts or player.ts.
+ * Session owner: none | queue | radio | cd. Does not import radio.ts or player.ts.
  */
 import { clearPlaySourceState } from "@/stores/playerState";
 
 const msSupported = typeof navigator !== "undefined" && "mediaSession" in navigator;
 
-export type ActiveSession = "none" | "queue" | "radio";
+export type ActiveSession = "none" | "queue" | "radio" | "cd";
 
 export interface OnDemandMediaHandlers {
   play: () => void;
@@ -18,6 +18,7 @@ export interface OnDemandMediaHandlers {
 let active: ActiveSession = "none";
 let leaveQueueFn: (() => void) | null = null;
 let leaveRadioFn: (() => void) | null = null;
+let leaveCdFn: (() => void) | null = null;
 let onDemandHandlers: OnDemandMediaHandlers | null = null;
 let suspended = false;
 
@@ -29,20 +30,29 @@ export function onLeaveRadio(fn: (() => void) | null): void {
   leaveRadioFn = fn;
 }
 
+export function onLeaveCd(fn: (() => void) | null): void {
+  leaveCdFn = fn;
+}
+
 export function become(next: ActiveSession): void {
   if (next === active) return;
   if (active === "radio") leaveRadioFn?.();
+  if (active === "cd") leaveCdFn?.();
   if (active === "queue") {
     clearPlaySourceState();
     leaveQueueFn?.();
   }
   active = next;
-  if (next === "radio") suspendMediaSession();
+  if (next === "radio" || next === "cd") suspendMediaSession();
   else restoreMediaSession();
 }
 
 export function activeSession(): ActiveSession {
   return active;
+}
+
+export function queueActionsAllowed(): boolean {
+  return active === "queue" || active === "none";
 }
 
 export function installOnDemandMediaSession(handlers: OnDemandMediaHandlers): void {

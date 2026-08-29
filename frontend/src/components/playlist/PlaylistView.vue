@@ -22,7 +22,8 @@ import {
   playIndex,
   stopPlayback,
 } from "@/stores/player";
-import { toggleRadioRail } from "@/stores/playerPrefs";
+import { toggleCdRail, toggleRadioRail } from "@/stores/playerPrefs";
+import { canShowCdUi } from "@/exclusive/capability";
 import { downloads } from "@/downloads/state";
 import { downloadTracks } from "@/downloads/ui";
 import { confirmDialog, promptDialog } from "@/stores/dialog";
@@ -58,6 +59,8 @@ const route = useRoute();
         console.error(err);
       }
     }
+
+    const showCdButton = computed(() => canShowCdUi());
 
     function toggleEdit() {
       pl.editing = !pl.editing;
@@ -297,6 +300,15 @@ const route = useRoute();
             @click="toggleRadioRail"
           ><Icon name="radio" /></button>
           <button
+            v-if="desktop && showCdButton"
+            type="button"
+            class="icon-btn"
+            title="CD"
+            aria-label="CD"
+            :aria-pressed="player.expanded && player.railFace === 'cd' ? 'true' : 'false'"
+            @click="toggleCdRail"
+          ><Icon name="cd" /></button>
+          <button
             v-if="downloads.enabled && pl.length"
             type="button"
             class="pill"
@@ -357,7 +369,7 @@ const route = useRoute();
       </div>
 
       <div class="row-list" :class="{ editing: pl.editing }">
-        <div v-if="!pl.length" class="list-empty">
+        <div v-if="!pl.tracks.length" class="list-empty">
           {{ pl.editing
             ? 'Playlist is empty'
             : 'Playlist empty - tap tracks in the Library to add them' }}

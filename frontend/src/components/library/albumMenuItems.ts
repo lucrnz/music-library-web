@@ -4,6 +4,7 @@
 import { copyAction } from "@/components/menu/copyItems";
 import type { ActionItem } from "@/components/menu/actionItem";
 import type { LibraryAlbum } from "@/components/library/loaders";
+import { queueActionsAllowed } from "@/playback/session";
 
 export function buildAlbumMenuItems({
   album,
@@ -16,20 +17,21 @@ export function buildAlbumMenuItems({
   playAll: () => void | Promise<void>;
   download?: () => void | Promise<void>;
 }): ActionItem[] {
-  const items: ActionItem[] = [
-    {
+  const items: ActionItem[] = [];
+  if (queueActionsAllowed()) {
+    items.push({
       id: "add-all",
       label: "Add all to playlist",
       icon: "plus",
       run: () => addAll(),
-    },
-    {
-      id: "play-all",
-      label: "Play all",
-      icon: "play",
-      run: () => playAll(),
-    },
-  ];
+    });
+  }
+  items.push({
+    id: "play-all",
+    label: "Play all",
+    icon: "play",
+    run: () => playAll(),
+  });
   if (download) {
     items.push({
       id: "download",

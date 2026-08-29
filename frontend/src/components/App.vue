@@ -3,11 +3,16 @@ import { computed, watch, type StyleValue } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDesktopViewport } from "@/layout";
 import { ui } from "@/stores/ui";
-import { openRadioRail } from "@/stores/playerPrefs";
+import { openCdRail, openRadioRail } from "@/stores/playerPrefs";
 import { player } from "@/stores/playerState";
 import { setTabOpen } from "@/stores/radio";
+import { canShowCdUi } from "@/exclusive/capability";
+import { enterCdMode } from "@/stores/cd";
+import { activeSession } from "@/playback/session";
 import LibraryView from "@/components/library/LibraryView.vue";
 import PlaylistView from "@/components/playlist/PlaylistView.vue";
+import CdView from "@/components/cd/CdView.vue";
+import CdTrackList from "@/components/cd/CdTrackList.vue";
 import PlayerBar from "@/components/player/PlayerBar.vue";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import DownloadsModal from "@/components/downloads/DownloadsModal.vue";
@@ -28,8 +33,17 @@ const route = useRoute();
     const desktop = useDesktopViewport();
     const onQueue = computed(() => route.meta.pane === "queue");
     const onRadio = computed(() => route.meta.pane === "radio");
+    const onCd = computed(() => route.meta.pane === "cd");
     const showRadioPage = computed(() => onRadio.value && !desktop.value);
-    const showLibraryPanes = computed(() => desktop.value || !onRadio.value);
+    const showCdPage = computed(
+      () => onCd.value && !desktop.value && canShowCdUi(),
+    );
+    const showLibraryPanes = computed(
+      () => desktop.value || (!onRadio.value && !showCdPage.value),
+    );
+    const showCdList = computed(
+      () => desktop.value && canShowCdUi() && activeSession() === "cd",
+    );
     const customLibraryPane = computed(
       () => desktop.value && ui.libraryPaneWidthPx != null,
     );
@@ -55,12 +69,43 @@ const route = useRoute();
       void router.replace(lastLibraryLocation());
     }
 
+    function absorbDesktopCd() {
+      if (!canShowCdUi()) {
+        void router.replace(lastLibraryLocation());
+        return;
+      }
+      enterCdMode();
+      openCdRail();
+      void router.replace(lastLibraryLocation());
+    }
+
     watch(
       () => onRadio.value && desktop.value,
       (absorb) => {
         if (absorb) absorbDesktopRadio();
       },
       { immediate: true },
+    );
+
+    watch(
+      () => onCd.value,
+      (open) => {
+        if (!open) return;
+        if (!canShowCdUi()) {
+          void router.replace(lastLibraryLocation());
+          return;
+        }
+        if (desktop.value) absorbDesktopCd();
+        else enterCdMode();
+      },
+      { immediate: true },
+    );
+
+    watch(
+      () => desktop.value && player.expanded && player.railFace === "cd",
+      (open) => {
+        if (open && canShowCdUi()) enterCdMode();
+      },
     );
 
     watch(desktop, (isDesktop, wasDesktop) => {
@@ -92,10 +137,12 @@ const route = useRoute();
       :style="libraryPaneStyle"
     >
       <RadioView v-if="showRadioPage" />
+      <CdView v-if="showCdPage" />
       <template v-if="showLibraryPanes">
         <LibraryView :class="{ hidden: onQueue }" />
         <PaneResizer v-if="desktop" />
-        <PlaylistView :class="{ hidden: !onQueue }" />
+        <CdTrackList v-if="showCdList" />
+        <PlaylistView v-else :class="{ hidden: !onQueue }" />
       </template>
     </main>
     <PlayerBar />

@@ -10,6 +10,7 @@ vi.mock("@/downloads/ui", () => ({
   downloadTrack: vi.fn(),
 }));
 
+import { become } from "@/playback/session";
 import { pl } from "@/stores/playlist";
 import {
   buildQueueMenuItems,
@@ -45,7 +46,22 @@ function track(partial: Partial<Track> = {}): Track {
 }
 
 describe("buildQueueMenuItems", () => {
+  it("hides queue actions while CD session is on", () => {
+    become("cd");
+    const t = track();
+    pl.tracks = [t];
+    expect(
+      buildQueueMenuItems({
+        track: t,
+        index: 0,
+        openedKey: slotKey(t),
+      }),
+    ).toEqual([]);
+    become("none");
+  });
+
   it("puts copies between go-to and download/remove", () => {
+    become("none");
     const t = track();
     pl.tracks = [t];
     const items = buildQueueMenuItems({

@@ -9,10 +9,11 @@ import {
 function cycle(overrides?: {
   durationSec?: number | null;
   playSource?: string;
-  origin?: "queue" | "radio";
+  origin?: "queue" | "radio" | "cd";
+  trackId?: string;
 }) {
   return createListenCycle({
-    trackId: "t1",
+    trackId: overrides?.trackId ?? "t1",
     durationSec: overrides?.durationSec === undefined ? 100 : overrides.durationSec,
     profile: "source",
     playSource: overrides?.playSource ?? "streaming",
@@ -126,6 +127,25 @@ describe("createListenCycle", () => {
   it("copies origin radio through on fire", () => {
     const c = cycle({ durationSec: 10, origin: "radio" });
     expect(play(c, 0, 7.5)).toMatchObject({ origin: "radio" });
+  });
+
+  it("fires at 65% for cd origin and play source", () => {
+    const c = cycle({ durationSec: 10, playSource: "cd", origin: "cd" });
+    expect(play(c, 0, 7.5)).toMatchObject({
+      playSource: "cd",
+      origin: "cd",
+    });
+  });
+
+  it("does not fire for sentinel cd:unknown ids", () => {
+    const c = cycle({
+      durationSec: 10,
+      playSource: "cd",
+      origin: "cd",
+      trackId: "cd:unknown:1",
+    });
+    expect(play(c, 0, 10)).toBeNull();
+    expect(c.onEnded()).toBeNull();
   });
 
   it("never fires when playSource is none", () => {

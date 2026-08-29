@@ -19,6 +19,7 @@ import {
   type PlayBlockReason,
   type PlaySourceState,
 } from "@/playBlock";
+import type { CdRoomFace } from "@/stores/cd";
 import type { Track } from "@/models/track";
 import { resolveProfileMeta, type ProfileMeta } from "@/qualityRank";
 
@@ -27,10 +28,11 @@ export type { ProfileMeta };
 const KNOWN_BITRATE_MODES = new Set(["cbr", "vbr", "abr"]);
 
 export interface PlayStatusState {
-  session: "none" | "queue" | "radio";
+  session: "none" | "queue" | "radio" | "cd";
   playSource: PlaySourceState;
   playProfileId?: string | null;
   playBlockReason?: PlayBlockReason | string | null;
+  cdFace?: CdRoomFace | null;
   track?: Pick<
     Track,
     "isLossy" | "sourceCodec" | "bitrateKbps" | "sampleRateHz" | "bitrateMode"
@@ -103,6 +105,7 @@ export function formatPrimaryCodecText(
 export function formatSourceWord(playSource: PlaySourceState): string | null {
   if (playSource === "streaming") return "Streaming";
   if (playSource === "downloaded") return "Downloaded";
+  if (playSource === "cd") return "CD";
   return null;
 }
 
@@ -132,6 +135,24 @@ export function formatPrimaryStatus(
   catalog: ProfileMeta[] = [],
   exclusiveSnap: ExclusiveFaceSnapshot | null = null,
 ): PlaybackStatusFace {
+  if (state.session === "cd") {
+    const face = state.cdFace;
+    const labels: Record<CdRoomFace, string> = {
+      no_disc: "No disc",
+      drive_missing: "Drive missing",
+      companion_offline: "Companion offline",
+      needs_setting: "Enable CD in Settings",
+      needs_libcdio: "Install libcdio",
+      idle: "Audio CD",
+      detecting: "Detecting",
+      reading: "Reading",
+      playing: "Playing",
+      pick: "Pick a release",
+    };
+    const label = face && face in labels ? labels[face] : "Audio CD";
+    return { interactive: true, text: label, icon: "cd" };
+  }
+
   if (exclusiveSessionOn(state.session, exclusiveSnap)) {
     const face = formatExclusiveFace(exclusiveSnap);
     if (face) {

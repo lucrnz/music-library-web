@@ -20,7 +20,7 @@ export interface SinkHandlers {
 export interface PlaybackSink {
   kind: "htmlAudio" | "companion";
   setHandlers: (h: SinkHandlers) => void;
-  load: (url: string) => Promise<void>;
+  load: (url: string, opts?: { hog?: boolean }) => Promise<void>;
   pause: () => void;
   resume: () => void | Promise<void>;
   stop: () => void;

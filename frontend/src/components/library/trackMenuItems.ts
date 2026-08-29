@@ -3,6 +3,7 @@
  */
 import { copyAction } from "@/components/menu/copyItems";
 import type { ActionItem } from "@/components/menu/actionItem";
+import { queueActionsAllowed } from "@/playback/session";
 
 export function buildTrackMenuItems({
   title,
@@ -15,14 +16,15 @@ export function buildTrackMenuItems({
   album?: string | null;
   addToPlaylist: () => void | Promise<void>;
 }): ActionItem[] {
-  const items: ActionItem[] = [
-    {
+  const items: ActionItem[] = [];
+  if (queueActionsAllowed()) {
+    items.push({
       id: "add-to-playlist",
       label: "Add to playlist",
       icon: "plus",
       run: () => addToPlaylist(),
-    },
-  ];
+    });
+  }
   for (const copy of [
     copyAction({ id: "copy-title", label: "Copy title", value: title }),
     copyAction({

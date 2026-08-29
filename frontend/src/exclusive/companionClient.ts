@@ -14,6 +14,12 @@ import {
 } from "@/stores/exclusiveAudio";
 import { canUseCompanionDownloads } from "@/exclusive/capability";
 import {
+  bindOpticalSend,
+  handleOpticalMessage,
+  onCompanionHello,
+  opticalWantsSocket,
+} from "@/exclusive/opticalClient";
+import {
   INITIAL_VOLUME_ADOPT,
   resolveCompanionStatusVolume,
   type CompanionVolumeAdoptState,
@@ -171,6 +177,8 @@ export function sendCompanion(msg: Record<string, unknown>): boolean {
   return send(msg);
 }
 
+bindOpticalSend((msg) => send(msg));
+
 function send(msg: Record<string, unknown>): boolean {
   if (!ws || ws.readyState !== WebSocket.OPEN) return false;
   try {
@@ -278,6 +286,7 @@ function handleMessage(raw: unknown): void {
     if (msg.role === ROLE_CONTROLLER) {
       syncPreferredDevice();
       send(envelope(MSG_LIST_DEVICES));
+      onCompanionHello();
     }
     emit({ type: "hello_ok", role: msg.role });
     return;
@@ -359,6 +368,10 @@ function handleMessage(raw: unknown): void {
       message: msg.message,
       code: msg.code,
     });
+    return;
+  }
+
+  if (handleOpticalMessage(msg)) {
     return;
   }
 
@@ -507,7 +520,8 @@ function wantsCompanionSocket(): boolean {
   const token = !!(exclusiveAudio.companionToken || "").trim();
   const exclusiveOn = exclusiveAudio.capable && exclusiveAudio.enabled;
   const downloadsOn = canUseCompanionDownloads() && downloads.enabled;
-  return token && (exclusiveOn || downloadsOn);
+  const cdOn = opticalWantsSocket();
+  return token && (exclusiveOn || downloadsOn || cdOn);
 }
 
 function clearTokenProbe(): void {
@@ -672,9 +686,11 @@ export function companionReleaseDevice(): boolean {
 }
 
 /** @param url absolute http(s) */
-export function companionLoad(url: string): boolean {
+export function companionLoad(url: string, opts?: { hog?: boolean }): boolean {
   if (exclusiveAudio.role !== ROLE_CONTROLLER) return false;
-  return send(envelope(MSG_LOAD, { url }));
+  const fields: Record<string, unknown> = { url };
+  if (opts && "hog" in opts) fields.hog = !!opts.hog;
+  return send(envelope(MSG_LOAD, fields));
 }
 
 export function companionPause(): boolean {

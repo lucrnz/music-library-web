@@ -14,9 +14,13 @@ import {
 import { initPlayerSession, updateMediaSession } from "@/stores/playerSession";
 import { initAudioListeners } from "@/stores/player";
 import { initRadioListeners } from "@/stores/radio";
+import { leaveCdMode } from "@/stores/cd";
+import { onLeaveCd } from "@/playback/session";
+import { cdStopTransport, initCdListeners } from "@/playback/cdLoad";
 import { loadCodecs } from "@/stores/settings";
 import { syncCompanionConnection } from "@/exclusive/companionClient";
 import { initExclusiveAudio } from "@/stores/exclusiveAudio";
+import "@/stores/cd";
 import { bindConnectivityToasts } from "@/connectivityUi";
 import { initArtistArtPending } from "@/artistArt/pending";
 import { initDownloads } from "@/downloads/index";
@@ -34,6 +38,11 @@ applyExpanded();
 applyPlaybackPosition();
 initAudioListeners();
 initRadioListeners();
+onLeaveCd(() => {
+  cdStopTransport();
+  leaveCdMode();
+});
+initCdListeners();
 // Connectivity store before codecs so the first probe report is mirrored.
 bindConnectivityStore();
 initPlayerSession();

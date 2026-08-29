@@ -12,6 +12,7 @@ import {
 import { router } from "@/router";
 import { playIndex, stopPlayback } from "@/stores/player";
 import { pl, removeIndices } from "@/stores/playlist";
+import { queueActionsAllowed } from "@/playback/session";
 import { copyText } from "@/clipboard";
 import { copyAction } from "@/components/menu/copyItems";
 import { showToast } from "@/stores/ui";
@@ -41,6 +42,7 @@ export function buildQueueMenuItems({
   index: number;
   openedKey: string;
 }): ActionItem[] {
+  if (!queueActionsAllowed()) return [];
   const items: ActionItem[] = [];
 
   if (track.albumId) {

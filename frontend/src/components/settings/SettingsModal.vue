@@ -41,8 +41,9 @@ import {
   shouldHideStreamQualityControls,
 } from "@/stores/exclusiveAudio";
 import Icon from "@/components/icons/Icon.vue";
-import { canUseCompanionDownloads } from "@/exclusive/capability";
+import { canShowCdUi, canUseCompanionDownloads } from "@/exclusive/capability";
 import CompanionPanel from "@/components/settings/CompanionPanel.vue";
+import CdPlaybackPanel from "@/components/settings/CdPlaybackPanel.vue";
 import ExclusiveAudioPanel from "@/components/settings/ExclusiveAudioPanel.vue";
 import LibraryScanPanel from "@/components/settings/LibraryScanPanel.vue";
 import SettingsSelect from "@/components/settings/SettingsSelect.vue";
@@ -63,6 +64,7 @@ const playbackPolicies = PLAYBACK_POLICIES;
 
     const showExclusivePanel = computed(() => exclusiveAudio.capable);
     const showCompanionPanel = computed(() => canUseCompanionDownloads());
+    const showCdPanel = computed(() => canShowCdUi());
 
     const scanPanelActive = computed(
       () => settings.open && libraryReachable.value
@@ -313,6 +315,12 @@ const playbackPolicies = PLAYBACK_POLICIES;
 
         <ExclusiveAudioPanel
           v-if="showExclusivePanel"
+          :open-menu="openMenu"
+          @toggle="toggleMenu"
+        />
+
+        <CdPlaybackPanel
+          v-if="showCdPanel"
           :open-menu="openMenu"
           @toggle="toggleMenu"
         />

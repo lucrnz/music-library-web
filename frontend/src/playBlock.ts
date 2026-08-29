@@ -13,7 +13,8 @@ export type PlaySourceState =
   | "none"
   | "streaming"
   | "downloaded"
-  | "unavailable";
+  | "unavailable"
+  | "cd";
 
 /** Machine reason when playback cannot start or failed. */
 export type PlayBlockReason =
@@ -28,7 +29,8 @@ export type PlayBlockReason =
   | "exclusive_readonly"
   | "exclusive_failed"
   | "exclusive_no_format"
-  | "exclusive_lossy";
+  | "exclusive_lossy"
+  | "cd_not_ready";
 
 /** User-facing messages for play block reasons. */
 export const PLAY_BLOCK_MESSAGES: Record<PlayBlockReason, string> = {
@@ -45,6 +47,7 @@ export const PLAY_BLOCK_MESSAGES: Record<PlayBlockReason, string> = {
   exclusive_failed: "Exclusive playback stopped.",
   exclusive_no_format: "No supported exclusive format for this device.",
   exclusive_lossy: "Exclusive playback cannot load this lossy file.",
+  cd_not_ready: "CD is not ready to play (drive, disc, or companion).",
   codec_unsupported: "This browser cannot decode this file.",
 };
 

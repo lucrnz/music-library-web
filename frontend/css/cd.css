@@ -1,0 +1,82 @@
+/* CD room + compact status. Not an extension of player.css. */
+
+#view-cd,
+#view-cd-list {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+}
+
+#view-cd #view-cd-list {
+  flex: 1;
+}
+
+#view-cd .player-full {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 8px 24px calc(24px + env(safe-area-inset-bottom));
+  gap: 16px;
+}
+
+.cd-view-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.cd-transport {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.cd-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.cd-picker-card {
+  background: var(--bg-elevated, #1c1c1c);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 420px;
+  width: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cd-picker-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.cd-picker-row {
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #333);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cd-picker-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+@keyframes cd-spin {
+  to { transform: rotate(360deg); }
+}
+
+.status-line .icon-cd,
+.playback-status .icon-cd {
+  animation: cd-spin 4s linear infinite;
+}

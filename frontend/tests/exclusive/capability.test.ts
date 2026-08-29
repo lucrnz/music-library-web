@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  canShowCdUi,
   canShowExclusiveUi,
   canUseCompanionDownloads,
   isDesktopPlatform,
@@ -48,12 +49,14 @@ describe("companion capability", () => {
   it("Mac + standalone: exclusive and companion", () => {
     stubNav({ uaDataPlatform: "macOS", displayMode: "standalone" });
     expect(canShowExclusiveUi()).toBe(true);
+    expect(canShowCdUi()).toBe(true);
     expect(canUseCompanionDownloads()).toBe(true);
   });
 
   it("Windows + standalone: companion only", () => {
     stubNav({ uaDataPlatform: "Windows", displayMode: "standalone" });
     expect(canShowExclusiveUi()).toBe(false);
+    expect(canShowCdUi()).toBe(false);
     expect(canUseCompanionDownloads()).toBe(true);
     expect(isDesktopPlatform()).toBe(true);
   });
@@ -72,6 +75,7 @@ describe("companion capability", () => {
   it("Mac tab is not companion downloads", () => {
     stubNav({ uaDataPlatform: "macOS", displayMode: "browser" });
     expect(canShowExclusiveUi()).toBe(false);
+    expect(canShowCdUi()).toBe(false);
     expect(canUseCompanionDownloads()).toBe(false);
   });
 

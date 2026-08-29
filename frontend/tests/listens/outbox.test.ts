@@ -55,6 +55,12 @@ describe("listen outbox", () => {
     expect(readPendingListens()).toEqual([radio]);
   });
 
+  it("keeps a cd play_source and origin", () => {
+    const row = { ...sample, play_source: "cd" as const, origin: "cd" as const };
+    expect(enqueuePending(row)).toBe(true);
+    expect(readPendingListens()).toEqual([row]);
+  });
+
   it("drops a row with an unknown origin", () => {
     localStorage.setItem(
       LISTENS_PENDING_KEY,

@@ -3,8 +3,8 @@
 export const LISTEN_SEEK_EPSILON_SECONDS = 2;
 export const LISTEN_THRESHOLD = 0.65;
 
-export type ListenPlaySource = "streaming" | "downloaded";
-export type ListenOrigin = "queue" | "radio";
+export type ListenPlaySource = "streaming" | "downloaded" | "cd";
+export type ListenOrigin = "queue" | "radio" | "cd";
 
 export interface ListenEvent {
   id: string;
@@ -40,8 +40,11 @@ export function createListenCycle(opts: {
   onRestart: () => null;
 } {
   const canFire =
-    (opts.playSource === "streaming" || opts.playSource === "downloaded") &&
-    (opts.origin === "queue" || opts.origin === "radio");
+    (opts.playSource === "streaming" ||
+      opts.playSource === "downloaded" ||
+      opts.playSource === "cd") &&
+    (opts.origin === "queue" || opts.origin === "radio" || opts.origin === "cd") &&
+    !opts.trackId.startsWith("cd:unknown:");
   const playSource = opts.playSource as ListenPlaySource;
   let duration = knownDuration(opts.durationSec);
   let lastCurrentTime: number | null = null;

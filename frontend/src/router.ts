@@ -77,6 +77,12 @@ const routes = [
     component: Shell,
     meta: { pane: "radio", title: "Radio" },
   },
+  {
+    path: "/cd",
+    name: "cd",
+    component: Shell,
+    meta: { pane: "cd", title: "CD" },
+  },
 ];
 
 export const router = createRouter({

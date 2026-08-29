@@ -25,6 +25,10 @@ export function startCycle(opts: {
   playSource: string;
   origin: ListenOrigin;
 }): void {
+  if (opts.trackId.startsWith("cd:unknown:")) {
+    current = null;
+    return;
+  }
   current = createListenCycle(opts);
 }
 

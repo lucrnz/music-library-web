@@ -2,6 +2,7 @@
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Icon from "@/components/icons/Icon.vue";
+import { canShowCdUi } from "@/exclusive/capability";
 import { rememberLibraryRoute, ui } from "@/stores/ui";
 const route = useRoute();
     const router = useRouter();
@@ -28,6 +29,12 @@ const route = useRoute();
 
     function goRadio() {
       router.push({ name: "radio" });
+    }
+
+    const showCdTab = computed(() => canShowCdUi());
+
+    function goCd() {
+      router.push({ name: "cd" });
     }
 </script>
 
@@ -59,6 +66,16 @@ const route = useRoute();
         @click="goRadio"
       >
         <Icon name="radio" /><span>Radio</span>
+      </button>
+      <button
+        v-if="showCdTab"
+        type="button"
+        class="tab"
+        :class="{ active: pane === 'cd' }"
+        aria-label="CD"
+        @click="goCd"
+      >
+        <Icon name="cd" /><span>CD</span>
       </button>
     </nav>
 </template>

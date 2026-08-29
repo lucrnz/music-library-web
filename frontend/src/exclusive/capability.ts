@@ -65,6 +65,9 @@ export function canShowExclusiveUi(): boolean {
   return isMacPlatform() && isInstalledPwa();
 }
 
+/** Installed Mac PWA may show CD playback chrome and settings. */
+export const canShowCdUi = canShowExclusiveUi;
+
 /** Installed desktop PWA may use companion-disk Downloads. */
 export function canUseCompanionDownloads(): boolean {
   return isDesktopPlatform() && isInstalledPwa();

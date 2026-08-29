@@ -97,6 +97,7 @@ export function readRailFace(): NowPlayingRail {
   try {
     const raw = localStorage.getItem(RAIL_FACE_STORAGE_KEY);
     if (raw === "radio") return "radio";
+    if (raw === "cd") return "cd";
   } catch {
     /* ignore */
   }
@@ -147,6 +148,19 @@ export function toggleRadioRail() {
   openRadioRail();
 }
 
+export function openCdRail() {
+  setRailFace("cd");
+  setExpanded(true);
+}
+
+export function toggleCdRail() {
+  if (player.expanded && player.railFace === "cd") {
+    setExpanded(false);
+    return;
+  }
+  openCdRail();
+}
+
 /**
  * Restore now-playing expanded flag and rail face from localStorage.
  * Call after loadPlaylist(). Radio face restores even when the queue is empty;
@@ -156,7 +170,7 @@ export function applyExpanded() {
   const face = readRailFace();
   player.railFace = face;
   const want = readExpanded();
-  if (face === "radio") {
+  if (face === "radio" || face === "cd") {
     player.expanded = want;
     return;
   }

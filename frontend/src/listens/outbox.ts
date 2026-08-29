@@ -6,8 +6,8 @@ export interface PendingListen {
   id: string;
   track_id: string;
   profile: string;
-  play_source: "streaming" | "downloaded";
-  origin: "queue" | "radio";
+  play_source: "streaming" | "downloaded" | "cd";
+  origin: "queue" | "radio" | "cd";
   counted_at: string;
 }
 
@@ -22,8 +22,10 @@ function parsePending(value: unknown): PendingListen | null {
     rec.track_id.length === 0 ||
     typeof rec.profile !== "string" ||
     rec.profile.length === 0 ||
-    (rec.play_source !== "streaming" && rec.play_source !== "downloaded") ||
-    (origin !== "queue" && origin !== "radio") ||
+    (rec.play_source !== "streaming" &&
+      rec.play_source !== "downloaded" &&
+      rec.play_source !== "cd") ||
+    (origin !== "queue" && origin !== "radio" && origin !== "cd") ||
     typeof rec.counted_at !== "string" ||
     rec.counted_at.length === 0
   ) {

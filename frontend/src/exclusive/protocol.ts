@@ -15,6 +15,7 @@ export const MSG_HEARTBEAT = "heartbeat";
 export const MSG_LIST_DEVICES = "list_devices";
 export const MSG_SET_DEVICE = "set_device";
 export const MSG_RELEASE_DEVICE = "release_device";
+/** Client load. Optional ``hog`` (default true) selects exclusive vs auto output. */
 export const MSG_LOAD = "load";
 export const MSG_PAUSE = "pause";
 export const MSG_RESUME = "resume";
@@ -26,6 +27,10 @@ export const MSG_BLOB_ABORT = "blob_abort";
 export const MSG_BLOB_DELETE = "blob_delete";
 export const MSG_BLOB_STAT = "blob_stat";
 export const MSG_DISK_INFO = "disk_info";
+export const MSG_LIST_OPTICAL_DRIVES = "list_optical_drives";
+export const MSG_WATCH_OPTICAL = "watch_optical";
+export const MSG_READ_OPTICAL = "read_optical";
+export const MSG_EJECT_OPTICAL = "eject_optical";
 
 /** Server → client */
 export const MSG_HELLO_OK = "hello_ok";
@@ -41,6 +46,9 @@ export const MSG_BLOB_DONE = "blob_done";
 export const MSG_BLOB_ERROR = "blob_error";
 export const MSG_BLOB_STAT_OK = "blob_stat_ok";
 export const MSG_DISK_INFO_OK = "disk_info_ok";
+export const MSG_OPTICAL_DRIVES = "optical_drives";
+export const MSG_OPTICAL_MEDIA = "optical_media";
+export const MSG_OPTICAL_ERROR = "optical_error";
 
 export const ROLE_CONTROLLER = "controller";
 export const ROLE_READONLY = "readonly";

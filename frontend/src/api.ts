@@ -305,6 +305,31 @@ export async function fetchAlbum(albumId: string): Promise<Album> {
   );
 }
 
+export async function identifyCd(
+  toc: import("@/cd/types").CdTocPayload,
+  cdText: import("@/cd/types").CdTextPayload | null,
+): Promise<import("@/cd/types").CdIdentifyResponse> {
+  return apiPost("/api/cd/identify", { toc, cd_text: cdText });
+}
+
+export async function confirmCd(
+  discid: string,
+  releaseMbid: string,
+  toc: import("@/cd/types").CdTocPayload,
+): Promise<import("@/cd/types").CdApplied> {
+  return apiPost("/api/cd/confirm", {
+    discid,
+    release_mbid: releaseMbid,
+    toc,
+  });
+}
+
+export async function getCdIdentity(
+  discid: string,
+): Promise<import("@/cd/types").CdApplied> {
+  return apiGet(`/api/cd/identities/${encodeURIComponent(discid)}`);
+}
+
 export { fromApiAlbum, mapAlbums } from "@/models/album";
 export { fromApiArtist, mapArtists, type Artist } from "@/models/artist";
 export {

@@ -70,16 +70,19 @@ export function createCompanionSink(): PlaybackSink {
       handlers = h || {};
       ensureListen();
     },
-    async load(url) {
-      const gate = await ensurePreferredDevice({ timeoutMs: 1500 });
-      if (!gate.ok) {
-        throw new PlayBlockError(gate.reason);
+    async load(url, opts) {
+      const hog = opts?.hog !== false;
+      if (hog) {
+        const gate = await ensurePreferredDevice({ timeoutMs: 1500 });
+        if (!gate.ok) {
+          throw new PlayBlockError(gate.reason);
+        }
       }
       ensureListen();
       paused = false;
       currentTime = 0;
       duration = 0;
-      hasLoad = companionLoad(url);
+      hasLoad = companionLoad(url, hog ? { hog: true } : { hog: false });
       if (!hasLoad) {
         throw new PlayBlockError(
           "exclusive_not_ready",
