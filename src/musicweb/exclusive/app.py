@@ -13,6 +13,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from musicweb.exclusive import blob_store
 from musicweb.exclusive import protocol as p
+from musicweb.exclusive.cdda_stream import content_length
 from musicweb.exclusive.session import ExclusiveHub
 
 logger = logging.getLogger("musicweb.companion.app")
@@ -202,6 +203,55 @@ def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
             blob_store.iter_file_span(path, start, end),
             status_code=206,
             media_type="application/octet-stream",
+            headers=headers,
+        )
+
+    @app.api_route("/cdda/{device_id}/{track_no}", methods=["GET", "HEAD"])
+    async def get_cdda(device_id: str, track_no: int, request: Request) -> Response:
+        _require_file_token(request)
+        if track_no < 1:
+            raise HTTPException(status_code=404, detail="missing")
+        reader = hub.open_cdda_track(device_id, track_no)
+        if reader is None:
+            raise HTTPException(status_code=404, detail="missing")
+        size = content_length(reader.sector_count)
+        rng = request.headers.get("range") or request.headers.get("Range")
+        try:
+            span = parse_byte_range(rng, size)
+        except ValueError:
+            raise HTTPException(status_code=416, detail="unsatisfiable") from None
+        start, end = (0, size - 1) if span is None else span
+        if span is None:
+            status = 200
+            headers = {
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(size),
+            }
+        else:
+            status = 206
+            headers = {
+                "Accept-Ranges": "bytes",
+                "Content-Range": f"bytes {start}-{end}/{size}",
+                "Content-Length": str(end - start + 1),
+            }
+        if request.method == "HEAD":
+            return Response(
+                status_code=status,
+                media_type="audio/wav",
+                headers=headers,
+            )
+
+        def body() -> Any:
+            try:
+                yield from reader.iter_span(start, end)
+            except Exception:
+                logger.debug("cdda stream ended")
+                return
+
+        return StreamingResponse(
+            body(),
+            status_code=status,
+            media_type="audio/wav",
             headers=headers,
         )
 

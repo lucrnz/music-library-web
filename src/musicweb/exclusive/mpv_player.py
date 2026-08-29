@@ -197,6 +197,13 @@ class MpvPlayer:
             self._command_unlocked("set_property", "audio-device", mpv_device)
             self._vol.apply()
 
+    def use_auto_output(self) -> None:
+        """Exclusive off: no hog device; mpv ``audio-device=auto``."""
+        if self._stub_out("use_auto_output"):
+            return
+        with self._lock:
+            self._unhog_unlocked()
+
     def load(self, url: str) -> None:
         """Load and play an absolute HTTP(S) stream URL."""
         if self._stub_out("load"):

@@ -18,6 +18,7 @@ from musicweb.exclusive import blob_store
 from musicweb.exclusive import protocol as p
 from musicweb.exclusive.coreaudio import AudioDevice, list_output_devices
 from musicweb.exclusive.mpv_player import MpvPlayer
+from musicweb.exclusive.optical_session import OpticalSession
 from musicweb.exclusive.paths import companion_data_dir
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class ExclusiveHub:
         self._blob_aborts: dict[str, threading.Event] = {}
         self._reclaim_id: str | None = None
         self._rearm_device_id: str | None = None
+        self.optical = OpticalSession()
 
     @property
     def player(self) -> MpvPlayer:
@@ -71,9 +73,34 @@ class ExclusiveHub:
         if self._ttl_task is not None:
             self._ttl_task.cancel()
             self._ttl_task = None
+        self.optical.cancel_watch()
         for ev in list(self._blob_aborts.values()):
             ev.set()
         self._player.close()
+
+    def _cancel_optical_watch(self) -> None:
+        self.optical.cancel_watch()
+
+    def drop_cdda_reader(self) -> None:
+        self.optical.drop_reader()
+
+    def cdda_allowed_device(self) -> str | None:
+        return self.optical.allowed_device()
+
+    def open_cdda_track(self, device_id: str, track_no: int):
+        return self.optical.open_track(device_id, track_no)
+
+    @property
+    def _optical(self):
+        return self.optical.port
+
+    @_optical.setter
+    def _optical(self, port) -> None:
+        self.optical.port = port
+
+    @property
+    def _optical_watch_task(self):
+        return self.optical.watch_task
 
     def ensure_ttl_watch(self) -> None:
         if self._ttl_task is None and self._loop is not None:
@@ -122,6 +149,7 @@ class ExclusiveHub:
             if self._device_id:
                 self._rearm_device_id = self._device_id
             self._controller_id = None
+            self._cancel_optical_watch()
             await self._ensure_no_controller_exclusive()
             await self._broadcast_status_unlocked()
             try:
@@ -310,6 +338,7 @@ class ExclusiveHub:
             if self._controller_id == sess.session_id:
                 self._controller_id = None
                 self._reclaim_id = None
+                self._cancel_optical_watch()
                 logger.info(
                     "Controller %s disconnected; lock free", sess.session_id
                 )
@@ -405,6 +434,32 @@ class ExclusiveHub:
             "Controller %s released exclusive device", sess.session_id
         )
 
+    async def _cmd_list_optical_drives(
+        self, sess: ClientSession, _msg: dict[str, Any]
+    ) -> None:
+        await self.optical.list_drives(
+            sess, send=self._send, live=self._with_live, broadcast=self.broadcast
+        )
+
+    async def _cmd_watch_optical(
+        self, sess: ClientSession, msg: dict[str, Any]
+    ) -> None:
+        await self.optical.watch(msg, broadcast=self.broadcast)
+
+    async def _cmd_read_optical(
+        self, sess: ClientSession, msg: dict[str, Any]
+    ) -> None:
+        await self.optical.read(
+            sess, msg, live=self._with_live, broadcast=self.broadcast
+        )
+
+    async def _cmd_eject_optical(
+        self, sess: ClientSession, msg: dict[str, Any]
+    ) -> None:
+        await self.optical.eject(
+            sess, msg, send=self._send, broadcast=self.broadcast
+        )
+
     async def _cmd_set_device(
         self, sess: ClientSession, msg: dict[str, Any]
     ) -> None:
@@ -423,9 +478,13 @@ class ExclusiveHub:
             self._rearm_device_id = device_id
 
     async def _cmd_load(self, sess: ClientSession, msg: dict[str, Any]) -> None:
-        async with self._lock:
-            if not self._device_id:
-                raise ValueError("select a device first")
+        hog = True if "hog" not in msg else bool(msg.get("hog"))
+        if hog:
+            async with self._lock:
+                if not self._device_id:
+                    raise ValueError("select a device first")
+        else:
+            await asyncio.to_thread(self._player.use_auto_output)
         url = p.require_http_url(str(msg.get("url") or ""))
         await asyncio.to_thread(self._player.load, url)
         if not await self._with_live(sess):
@@ -689,4 +748,8 @@ COMMANDS: dict[str, tuple[_Command, bool]] = {
     p.MSG_STOP: (ExclusiveHub._cmd_stop, True),
     p.MSG_SEEK: (ExclusiveHub._cmd_seek, False),
     p.MSG_SET_VOLUME: (ExclusiveHub._cmd_set_volume, True),
+    p.MSG_LIST_OPTICAL_DRIVES: (ExclusiveHub._cmd_list_optical_drives, False),
+    p.MSG_WATCH_OPTICAL: (ExclusiveHub._cmd_watch_optical, False),
+    p.MSG_READ_OPTICAL: (ExclusiveHub._cmd_read_optical, False),
+    p.MSG_EJECT_OPTICAL: (ExclusiveHub._cmd_eject_optical, False),
 }

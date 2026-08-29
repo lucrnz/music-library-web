@@ -22,6 +22,7 @@ class FakePlayer:
         self.release_calls = 0
         self.fail_release = False
         self.load_calls: list[str] = []
+        self.auto_output_calls = 0
         self._device: str | None = None
         self._url: str | None = None
         self._paused = True
@@ -50,6 +51,10 @@ class FakePlayer:
         self.load_calls.append(url)
         self._url = url
         self._paused = False
+
+    def use_auto_output(self) -> None:
+        self.auto_output_calls += 1
+        self._device = None
 
     def status_snapshot(self) -> dict[str, Any]:
         return {
@@ -532,3 +537,50 @@ def test_blob_put_jail_does_not_escape():
     assert not (hub.data_dir.parent / "escape").exists()
     for child in hub.data_dir.rglob("*"):
         assert "escape" not in child.name
+
+
+def test_load_hog_false_without_device_does_not_raise():
+    hub, fake = _hub_with_fake()
+    ws = FakeWebSocket()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER, ws=ws)
+    asyncio.run(
+        hub.handle_message(
+            sess,
+            p.envelope(
+                p.MSG_LOAD,
+                url="http://127.0.0.1/cdda/dev/1",
+                hog=False,
+            ),
+        )
+    )
+    assert fake.load_calls == ["http://127.0.0.1/cdda/dev/1"]
+    assert fake.auto_output_calls == 1
+    assert not any(m.get("type") == p.MSG_ERROR for m in ws.sent)
+
+
+def test_load_hog_true_without_device_still_fails():
+    hub, fake = _hub_with_fake()
+    ws = FakeWebSocket()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER, ws=ws)
+    asyncio.run(
+        hub.handle_message(
+            sess,
+            p.envelope(p.MSG_LOAD, url="http://127.0.0.1/stream", hog=True),
+        )
+    )
+    assert fake.load_calls == []
+    assert any("select a device first" in str(m.get("message")) for m in ws.sent)
+
+
+def test_load_hog_omitted_without_device_still_fails():
+    hub, fake = _hub_with_fake()
+    ws = FakeWebSocket()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER, ws=ws)
+    asyncio.run(
+        hub.handle_message(
+            sess,
+            p.envelope(p.MSG_LOAD, url="http://127.0.0.1/stream"),
+        )
+    )
+    assert fake.load_calls == []
+    assert any("select a device first" in str(m.get("message")) for m in ws.sent)

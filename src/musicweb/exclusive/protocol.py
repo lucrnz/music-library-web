@@ -28,7 +28,7 @@ MSG_HEARTBEAT: Final[str] = "heartbeat"
 MSG_LIST_DEVICES: Final[str] = "list_devices"
 MSG_SET_DEVICE: Final[str] = "set_device"
 MSG_RELEASE_DEVICE: Final[str] = "release_device"
-MSG_LOAD: Final[str] = "load"
+MSG_LOAD: Final[str] = "load"  # fields: url, optional hog (default true)
 MSG_PAUSE: Final[str] = "pause"
 MSG_RESUME: Final[str] = "resume"
 MSG_SEEK: Final[str] = "seek"
@@ -39,6 +39,10 @@ MSG_BLOB_ABORT: Final[str] = "blob_abort"
 MSG_BLOB_DELETE: Final[str] = "blob_delete"
 MSG_BLOB_STAT: Final[str] = "blob_stat"
 MSG_DISK_INFO: Final[str] = "disk_info"
+MSG_LIST_OPTICAL_DRIVES: Final[str] = "list_optical_drives"
+MSG_WATCH_OPTICAL: Final[str] = "watch_optical"
+MSG_READ_OPTICAL: Final[str] = "read_optical"
+MSG_EJECT_OPTICAL: Final[str] = "eject_optical"
 
 # --- Server → client ---
 MSG_HELLO_OK: Final[str] = "hello_ok"
@@ -54,6 +58,9 @@ MSG_BLOB_DONE: Final[str] = "blob_done"
 MSG_BLOB_ERROR: Final[str] = "blob_error"
 MSG_BLOB_STAT_OK: Final[str] = "blob_stat_ok"
 MSG_DISK_INFO_OK: Final[str] = "disk_info_ok"
+MSG_OPTICAL_DRIVES: Final[str] = "optical_drives"
+MSG_OPTICAL_MEDIA: Final[str] = "optical_media"
+MSG_OPTICAL_ERROR: Final[str] = "optical_error"
 
 BLOB_CLIENT_TYPES: Final[frozenset[str]] = frozenset(
     {

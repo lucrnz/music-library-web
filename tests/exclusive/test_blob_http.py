@@ -206,3 +206,101 @@ def test_asgi_invalid_range_416(tmp_path: Path):
 
 def test_cors_header_table():
     assert CORS_HEADERS["Access-Control-Allow-Origin"] == "*"
+
+
+def test_cdda_stub_is_404(tmp_path: Path):
+    app = _file_app(tmp_path)
+    code, _, _ = _asgi(app, "GET", "/cdda/dev/rdisk2/1", "token=secret")
+    assert code == 404
+
+
+def test_cdda_token_reject_matches_files(tmp_path: Path):
+    app = _file_app(tmp_path)
+    code_file, _, _ = _asgi(app, "GET", "/files/audio/a.bin")
+    code_cdda, _, _ = _asgi(app, "GET", "/cdda/rdisk2/1")
+    assert code_file == 401
+    assert code_cdda == 401
+
+
+class _FakeCdio:
+    def list_device_paths(self) -> list[str]:
+        return ["rdisk2"]
+
+    def open(self, device_id: str):
+        return object() if device_id == "rdisk2" else None
+
+    def destroy(self, handle) -> None:
+        return None
+
+    def hwinfo_name(self, handle) -> str | None:
+        return "SuperDrive"
+
+    def first_track(self, handle) -> int:
+        return 1
+
+    def last_track(self, handle) -> int:
+        return 2
+
+    def track_format(self, handle, track: int) -> int:
+        return 0
+
+    def track_lsn(self, handle, track: int) -> int:
+        if track == 1:
+            return 0
+        if track == 2:
+            return 7500
+        if track == 0xAA:
+            return 15000
+        return -45301
+
+    def cdtext_handle(self, handle):
+        return None
+
+    def cdtext_field(self, cdtext, field: int, track: int) -> str | None:
+        return None
+
+    def eject(self, device_id: str) -> None:
+        return None
+
+
+def test_cdda_wav_header_and_one_sector_range(tmp_path: Path):
+    from musicweb.exclusive.cdda_stream import (
+        HEADER_BYTES,
+        SECTOR_BYTES,
+        MemorySectorSource,
+        wav_header,
+    )
+    from musicweb.exclusive.optical_cdio import DarwinOpticalPort
+
+    source = MemorySectorSource()
+    port = DarwinOpticalPort(lib=_FakeCdio(), sector_source=source)
+    assert port.read("rdisk2").present is True
+    hub = ExclusiveHub(companion_token="secret", data_dir=tmp_path)
+    hub.start_player = lambda: None  # type: ignore[method-assign]
+    hub.stop = lambda: None  # type: ignore[method-assign]
+    hub._optical = port  # type: ignore[assignment]
+    hub._optical_last_device = "rdisk2"
+    app = create_exclusive_app(hub)
+
+    code, headers, body = _asgi(
+        app,
+        "GET",
+        "/cdda/rdisk2/1",
+        "token=secret",
+        headers={"range": "bytes=0-43"},
+    )
+    assert code == 206
+    assert body == wav_header(7500 * SECTOR_BYTES)
+    assert body[:4] == b"RIFF"
+    assert headers.get("access-control-allow-origin") == "*"
+
+    code, _, body = _asgi(
+        app,
+        "GET",
+        "/cdda/rdisk2/1",
+        "token=secret",
+        headers={"range": "bytes=44-2395"},
+    )
+    assert code == 206
+    assert len(body) == SECTOR_BYTES
+    assert HEADER_BYTES == 44

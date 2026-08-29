@@ -5,7 +5,14 @@ import pytest
 from musicweb.exclusive.protocol import (
     MSG_BLOB_PUT,
     MSG_DISK_INFO_OK,
+    MSG_EJECT_OPTICAL,
+    MSG_LIST_OPTICAL_DRIVES,
+    MSG_OPTICAL_DRIVES,
+    MSG_OPTICAL_ERROR,
+    MSG_OPTICAL_MEDIA,
+    MSG_READ_OPTICAL,
     MSG_RELEASE_DEVICE,
+    MSG_WATCH_OPTICAL,
     PROTOCOL_VERSION,
     envelope,
     parse_message,
@@ -25,6 +32,18 @@ def test_blob_type_constants():
     assert MSG_BLOB_PUT == "blob_put"
     assert MSG_DISK_INFO_OK == "disk_info_ok"
     assert MSG_RELEASE_DEVICE == "release_device"
+
+
+def test_optical_type_constants():
+    assert MSG_LIST_OPTICAL_DRIVES == "list_optical_drives"
+    assert MSG_WATCH_OPTICAL == "watch_optical"
+    assert MSG_READ_OPTICAL == "read_optical"
+    assert MSG_EJECT_OPTICAL == "eject_optical"
+    assert MSG_OPTICAL_DRIVES == "optical_drives"
+    assert MSG_OPTICAL_MEDIA == "optical_media"
+    assert MSG_OPTICAL_ERROR == "optical_error"
+    assert parse_message(envelope(MSG_LIST_OPTICAL_DRIVES)) is not None
+    assert parse_message(envelope(MSG_OPTICAL_MEDIA, device_id="d", present=False))
 
 
 def test_token_ok():
