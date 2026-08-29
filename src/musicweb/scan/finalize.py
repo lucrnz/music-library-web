@@ -13,7 +13,10 @@ def mark_missing(session: Session, seen_paths: set[str]) -> int:
     if not seen_paths:
         result = session.execute(
             update(Track)
-            .where(Track.is_missing.is_(False), Track.rel_path.is_not(None))
+            .where(
+                Track.is_missing.is_(False),
+                Track.rel_path.is_not(None),
+            )
             .values(is_missing=True, rel_path=None)
         )
         return result.rowcount or 0

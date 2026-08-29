@@ -106,6 +106,40 @@ def test_mark_missing_unseen_and_empty_set(db):
         assert t1.rel_path is None
 
 
+def test_mark_missing_does_not_touch_unripped_stub(db):
+    with db.session() as session:
+        _album(session)
+        session.add(
+            Track(
+                id="cd-1",
+                fingerprint="disc:1",
+                fingerprint_algo="cd-discid",
+                rel_path=None,
+                title="Stub",
+                artist_name="Artist",
+                album_artist_name="Artist",
+                artist_id="art",
+                album_id="alb",
+                album_artist_id="art",
+                size_bytes=0,
+                mtime_ns=0,
+                is_missing=True,
+                unripped=True,
+                added_at="t",
+                indexed_at="t",
+            )
+        )
+        session.flush()
+        n = mark_missing(session, set())
+        session.commit()
+        stub = session.get(Track, "cd-1")
+        assert stub is not None
+        assert stub.unripped is True
+        assert stub.is_missing is True
+        assert stub.rel_path is None
+        assert n == 0
+
+
 def test_recount_lossless_plus_mp3(db):
     with db.session() as session:
         _track(

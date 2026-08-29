@@ -33,8 +33,8 @@ class ListenIn(BaseModel):
     id: str = Field(..., min_length=1, max_length=36)
     track_id: str = Field(..., min_length=1)
     profile: str = Field(..., min_length=1)
-    play_source: Literal["streaming", "downloaded"]
-    origin: Literal["queue", "radio"] = "queue"
+    play_source: Literal["streaming", "downloaded", "cd"]
+    origin: Literal["queue", "radio", "cd"] = "queue"
     counted_at: str = Field(..., min_length=1)
 
 

@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 import re
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
+
+from musicweb.db.models import Track
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,9 @@ def fts_upsert(
         text("DELETE FROM tracks_fts WHERE track_id = :tid"),
         {"tid": track_id},
     )
+    missing = session.scalar(select(Track.is_missing).where(Track.id == track_id))
+    if missing:
+        return
     session.execute(
         text(
             """

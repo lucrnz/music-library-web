@@ -116,6 +116,48 @@ def test_resolve_track_new_fingerprint_marks_old_missing(db):
         assert new.id != old_pk
 
 
+def test_resolve_track_does_not_steal_unripped_stub(db):
+    stub_id = track_id_for("cd-discid", "disc:1")
+    file_id = track_id_for("sha256", "deadbeef")
+    with db.session() as session:
+        session.add(
+            Track(
+                id=stub_id,
+                fingerprint="disc:1",
+                fingerprint_algo="cd-discid",
+                rel_path=None,
+                title="Stub",
+                artist_name="X",
+                album_artist_name="X",
+                size_bytes=0,
+                mtime_ns=0,
+                is_missing=True,
+                unripped=True,
+                added_at="t",
+                indexed_at="t",
+            )
+        )
+        session.commit()
+
+    with db.session() as session:
+        found = resolve_track(
+            session,
+            fingerprint="deadbeef",
+            fingerprint_algo="sha256",
+            track_id=file_id,
+            rel_path="real.flac",
+            existing_by_path=None,
+            now="t1",
+        )
+        session.commit()
+        assert found.id == file_id
+        stub = session.get(Track, stub_id)
+        assert stub is not None
+        assert stub.rel_path is None
+        assert stub.is_missing is True
+        assert stub.unripped is True
+
+
 def test_apply_track_fields_writes_columns_and_fts(db, tmp_path):
     path = tmp_path / "paranoid.flac"
     path.write_bytes(b"x")

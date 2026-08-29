@@ -205,6 +205,33 @@ def test_rankings_mix_queue_and_radio_origins(db):
         assert "origin" not in all_time["tracks"][0]
 
 
+def test_cd_origin_and_play_source(db):
+    with db.session() as session:
+        _seed(session)
+        post_listen(
+            _body(id="c", origin="cd", play_source="cd", profile="cdda"),
+            db=session,
+        )
+        session.commit()
+        row = session.get(ListenEvent, "c")
+        assert row is not None
+        assert row.origin == "cd"
+        assert row.play_source == "cd"
+        all_time = get_listen_rankings(range="all", db=session)
+        assert all_time["tracks"][0]["play_count"] == 1
+
+
+def test_cd_unknown_track_422(db):
+    with db.session() as session:
+        _seed(session)
+        with pytest.raises(HTTPException) as exc:
+            post_listen(
+                _body(track_id="missing", origin="cd", play_source="cd"),
+                db=session,
+            )
+        assert exc.value.status_code == 422
+
+
 def test_counted_at_not_in_future_allows_past():
     now = datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc)
     counted_at_not_in_future("2026-01-01T00:00:00+00:00", now=now)

@@ -91,3 +91,54 @@ def test_fts_rebuild_counts_non_missing_only(db):
     with db.session() as session:
         assert fts_rebuild(session) == 0
         assert fts_search_track_ids(session, "Present") == []
+
+
+def test_fts_upsert_skips_missing(db):
+    with db.session() as session:
+        artist = Artist(
+            id="art-cd",
+            name="Artist",
+            name_norm="artist-cd",
+            sort_name="artist",
+            album_count=0,
+            track_count=0,
+        )
+        album = Album(
+            id="alb-cd",
+            artist_id="art-cd",
+            title="Album",
+            title_norm="album-cd",
+            track_count=0,
+            has_cover=False,
+        )
+        track = Track(
+            id="cd-hidden",
+            fingerprint="disc:1",
+            fingerprint_algo="cd-discid",
+            rel_path=None,
+            title="Secret",
+            artist_name="Artist",
+            album_artist_name="Artist",
+            artist_id="art-cd",
+            album_id="alb-cd",
+            album_artist_id="art-cd",
+            size_bytes=0,
+            mtime_ns=0,
+            is_missing=True,
+            unripped=True,
+            added_at="t",
+            indexed_at="t",
+        )
+        session.add_all([artist, album, track])
+        session.flush()
+        fts_upsert(
+            session,
+            track_id="cd-hidden",
+            title="Secret",
+            artist_name="Artist",
+            album_title="Album",
+            album_artist_name="Artist",
+        )
+        session.commit()
+    with db.session() as session:
+        assert fts_search_track_ids(session, "Secret") == []

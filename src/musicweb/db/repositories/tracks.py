@@ -55,7 +55,9 @@ def count_present(session: Session) -> int:
 def count_missing(session: Session) -> int:
     return (
         session.scalar(
-            select(func.count()).select_from(Track).where(Track.is_missing.is_(True))
+            select(func.count())
+            .select_from(Track)
+            .where(Track.is_missing.is_(True), Track.unripped.is_(False))
         )
         or 0
     )

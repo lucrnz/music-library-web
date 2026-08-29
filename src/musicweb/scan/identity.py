@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from musicweb.db.fts import fts_upsert
@@ -211,12 +211,107 @@ def apply_track_fields(
         track.added_at = now
 
     session.flush()
+    survivor = _merge_unripped_hole(session, track)
     fts_upsert(
         session,
-        track_id=track.id,
-        title=track.title,
-        artist_name=track.artist_name,
+        track_id=survivor.id,
+        title=survivor.title,
+        artist_name=survivor.artist_name,
         album_title=album.title,
-        album_artist_name=track.album_artist_name,
+        album_artist_name=survivor.album_artist_name,
     )
     return album.id
+
+
+def _slot_row(rows: list[Track]) -> Track | None:
+    return next((t for t in rows if t.disc_no in (None, 1)), None)
+
+
+def _merge_unripped_hole(session: Session, transient: Track) -> Track:
+    """Attach a new file to an unripped stub at the same album + track_no."""
+    if transient.album_id is None or transient.track_no is None:
+        return transient
+    stubs = list(
+        session.scalars(
+            select(Track).where(
+                Track.album_id == transient.album_id,
+                Track.track_no == transient.track_no,
+                Track.unripped.is_(True),
+                Track.id != transient.id,
+            )
+        ).all()
+    )
+    stub = _slot_row(stubs)
+    if stub is None:
+        return transient
+    occupants = list(
+        session.scalars(
+            select(Track).where(
+                Track.album_id == transient.album_id,
+                Track.track_no == transient.track_no,
+                Track.is_missing.is_(False),
+                Track.unripped.is_(False),
+                Track.id != transient.id,
+            )
+        ).all()
+    )
+    if _slot_row(occupants) is not None:
+        return transient
+
+    fingerprint = transient.fingerprint
+    fingerprint_algo = transient.fingerprint_algo
+    rel_path = transient.rel_path
+    title = transient.title
+    artist_name = transient.artist_name
+    album_artist_name = transient.album_artist_name
+    artist_id = transient.artist_id
+    album_artist_id = transient.album_artist_id
+    disc_no = transient.disc_no
+    year = transient.year
+    duration_ms = transient.duration_ms
+    sample_rate_hz = transient.sample_rate_hz
+    bit_depth = transient.bit_depth
+    channels = transient.channels
+    source_codec = transient.source_codec
+    is_lossy = transient.is_lossy
+    bitrate_kbps = transient.bitrate_kbps
+    bitrate_mode = transient.bitrate_mode
+    size_bytes = transient.size_bytes
+    mtime_ns = transient.mtime_ns
+    indexed_at = transient.indexed_at
+    added_at = transient.added_at
+
+    session.execute(
+        text("DELETE FROM tracks_fts WHERE track_id = :tid"),
+        {"tid": transient.id},
+    )
+    session.delete(transient)
+    session.flush()
+
+    stub.fingerprint = fingerprint
+    stub.fingerprint_algo = fingerprint_algo
+    stub.rel_path = rel_path
+    stub.title = title
+    stub.artist_name = artist_name
+    stub.album_artist_name = album_artist_name
+    stub.artist_id = artist_id
+    stub.album_artist_id = album_artist_id
+    stub.disc_no = disc_no
+    stub.year = year
+    stub.duration_ms = duration_ms
+    stub.sample_rate_hz = sample_rate_hz
+    stub.bit_depth = bit_depth
+    stub.channels = channels
+    stub.source_codec = source_codec
+    stub.is_lossy = is_lossy
+    stub.bitrate_kbps = bitrate_kbps
+    stub.bitrate_mode = bitrate_mode
+    stub.size_bytes = size_bytes
+    stub.mtime_ns = mtime_ns
+    stub.indexed_at = indexed_at
+    if added_at:
+        stub.added_at = added_at
+    stub.is_missing = False
+    stub.unripped = False
+    session.flush()
+    return stub

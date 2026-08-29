@@ -108,6 +108,7 @@ class Track(Base):
     is_missing: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, index=True
     )
+    unripped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     added_at: Mapped[str] = mapped_column(String, nullable=False)
     indexed_at: Mapped[str] = mapped_column(String, nullable=False)
 
@@ -221,6 +222,23 @@ class ScanState(Base):
     files_total_hint: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     current_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class CdIdentity(Base):
+    """Remembered MusicBrainz pick for one disc id (TOC)."""
+
+    __tablename__ = "cd_identities"
+
+    discid: Mapped[str] = mapped_column(String, primary_key=True)
+    release_mbid: Mapped[str] = mapped_column(String, nullable=False)
+    toc_json: Mapped[str] = mapped_column(Text, nullable=False)
+    confirmed_at: Mapped[str] = mapped_column(String, nullable=False)
+    album_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    album: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    artist: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    has_cover: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    tracks_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class RadioStationState(Base):

@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from musicweb.routes import (
     artist_images,
+    cd,
     diag,
     discovery,
     health,
@@ -26,3 +27,4 @@ router.include_router(playlists.router)
 router.include_router(listens.router)
 router.include_router(diag.router)
 router.include_router(radio.router)
+router.include_router(cd.router)
