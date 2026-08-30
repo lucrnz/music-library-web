@@ -817,3 +817,15 @@ Filesystem Folders browse is gone; library navigation is Artists, Albums, Search
 ```bash
 git show a128a5a8d6edd3208b3db8ba87c9a95499997409
 ```
+
+## 2026-08-23-l6tbksf2-desktop-companion-rename-done
+
+**Title:** Desktop companion command rename
+
+**Commit:** `022a1dfcca5cc240dee8b2fd3d02aeffdfa3ad20`
+
+The sidecar process is `musicweb companion` with `COMPANION_TOKEN`; exclusive audio stays the playback feature, not the process name. Open the delete commit for the CLI rename and the client token key.
+
+```bash
+git show 022a1dfcca5cc240dee8b2fd3d02aeffdfa3ad20
+```
