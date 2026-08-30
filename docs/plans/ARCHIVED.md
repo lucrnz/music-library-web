@@ -793,3 +793,15 @@ The radio client stays in session through official track changes and transient g
 ```bash
 git show 8f90b676ec0e89a5da5125f04df536fb1df0c1e6
 ```
+
+## 2026-08-22-yqsqqno3-play-all-menu-done
+
+**Title:** Play all (replace playlist)
+
+**Commit:** `b2bd016c39e94594ea32a5391a59839b77d568c8`
+
+**Play all** next to every **Add all to playlist** replaces the session playlist with that entity’s playable tracks and starts the first one. Open the delete commit for the replace-and-play primitive and the menu wiring.
+
+```bash
+git show b2bd016c39e94594ea32a5391a59839b77d568c8
+```
