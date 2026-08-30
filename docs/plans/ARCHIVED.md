@@ -901,3 +901,15 @@ A radio join is done after 8 seconds of uninterrupted playback, not when `play()
 ```bash
 git show 43c715a23c1b050511243a85bb98f85c809f943c
 ```
+
+## 2026-08-29-ilu7b06u-cd-review-fixes-done
+
+**Title:** CD review fixes
+
+**Commit:** `71b5bdc2ba6327d12e6a3245ded046aba5f2cee3`
+
+The CD software deck stays live WAV / third session / no queue stash. Compensating branches from the first implementation (FTS type-tags, PlaylistView dual-mode, watch tied to exclusive release) are gone. Open the delete commit for unripped stubs, rip merge, optical watch extract, persistent reader, and `CdTrackList`.
+
+```bash
+git show 71b5bdc2ba6327d12e6a3245ded046aba5f2cee3
+```
