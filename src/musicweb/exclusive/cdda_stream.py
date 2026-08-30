@@ -260,6 +260,9 @@ class ParanoiaSource:
 
     def __init__(self, device_id: str) -> None:
         self._device_id = device_id
+        self._cursor: int | None = None
+        self._test_seek: Callable[[int], None] | None = None
+        self._test_read: Callable[[int], bytes] | None = None
         self._cdda = _load_dylib(
             ("libcdio_cdda.2.dylib", "libcdio_cdda.dylib"), self._LIB_DIRS
         )
@@ -290,6 +293,24 @@ class ParanoiaSource:
         self._para_lib.cdio_paranoia_modeset(
             self._para, PARANOIA_MODE_OVERLAP | PARANOIA_MODE_VERIFY
         )
+
+    @classmethod
+    def test_double(
+        cls,
+        *,
+        seek: Callable[[int], None],
+        read_limited: Callable[[int], bytes],
+    ) -> ParanoiaSource:
+        source = object.__new__(cls)
+        source._device_id = ""
+        source._cursor = None
+        source._test_seek = seek
+        source._test_read = read_limited
+        source._cdda = None
+        source._para_lib = None
+        source._drive = None
+        source._para = object()
+        return source
 
     def _bind(self) -> None:
         cdda = self._cdda
@@ -328,12 +349,30 @@ class ParanoiaSource:
         ]
 
     def read_sector(self, lsn: int) -> bytes:
+        lsn = int(lsn)
         if self._para is None:
             return b"\x00" * SECTOR_BYTES
-        self._para_lib.cdio_paranoia_seek(self._para, int(lsn), SEEK_SET)
+        if self._cursor != lsn:
+            self._seek(lsn)
+        data = self._read_limited(lsn)
+        if data:
+            self._cursor = lsn + 1
+        return data or (b"\x00" * SECTOR_BYTES)
+
+    def _seek(self, lsn: int) -> None:
+        if self._test_seek is not None:
+            self._test_seek(lsn)
+            return
+        assert self._para_lib is not None
+        self._para_lib.cdio_paranoia_seek(self._para, lsn, SEEK_SET)
+
+    def _read_limited(self, lsn: int) -> bytes:
+        if self._test_read is not None:
+            return self._test_read(lsn)
+        assert self._para_lib is not None
         ptr = self._para_lib.cdio_paranoia_read_limited(self._para, None, 3)
         if not ptr:
-            return b"\x00" * SECTOR_BYTES
+            return b""
         return ctypes.string_at(ptr, SECTOR_BYTES)
 
     def close(self) -> None:

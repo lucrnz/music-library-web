@@ -23,8 +23,11 @@ from musicweb.exclusive.optical import (
     media_signature,
 )
 from musicweb.exclusive.optical_cdio import (
+    DRIVER_DEVICE,
+    DRIVER_OSX,
     TRACK_FORMAT_AUDIO,
     DarwinOpticalPort,
+    _decode_c_string,
     audio_toc_from_tracks,
 )
 from musicweb.exclusive.session import ClientSession, ExclusiveHub
@@ -115,6 +118,9 @@ class FakeCdio:
     def hwinfo_name(self, handle: Any) -> str | None:
         return "Apple SuperDrive"
 
+    def hwinfo_key(self, handle: Any) -> str | None:
+        return "Apple|SuperDrive"
+
     def first_track(self, handle: Any) -> int:
         return 1
 
@@ -155,23 +161,31 @@ class FakeOptical:
     def __init__(self) -> None:
         self.reads = 0
         self.drop_calls = 0
+        self.reader_open = False
+        self.throw_read = False
+        self.events: list[str] = []
         self.watch_gate = asyncio.Event()
         self.media = OpticalMedia(
             device_id="dev-cd",
             present=True,
             toc=TWO_TRACK_TOC,
             cd_text=TWO_TRACK_TEXT,
+            kind="audio",
         )
 
     def list_drives(self) -> list[OpticalDrive]:
         return [OpticalDrive(id="dev-cd", name="SuperDrive")]
 
     def read(self, device_id: str) -> OpticalMedia:
+        if self.throw_read:
+            raise RuntimeError("busy")
         self.reads += 1
         return self.media
 
     def eject(self, device_id: str) -> None:
-        raise OpticalError(UNSUPPORTED_HINT, code="unsupported")
+        self.events.append("eject")
+        if self.reader_open:
+            raise OpticalError("busy", code="busy")
 
     def missing_lib_hint(self) -> str | None:
         return None
@@ -180,10 +194,16 @@ class FakeOptical:
         return self.media
 
     def open_track(self, device_id: str, track_no: int):
-        return None
+        self.reader_open = True
+        return object()
 
     def drop_reader(self) -> None:
+        self.events.append("drop")
         self.drop_calls += 1
+        self.reader_open = False
+
+    def live_reader_device(self) -> str | None:
+        return "dev-cd" if self.reader_open else None
 
 
 def test_stub_lists_nothing_and_eject_is_error():
@@ -194,6 +214,22 @@ def test_stub_lists_nothing_and_eject_is_error():
     with pytest.raises(OpticalError, match="not supported") as exc:
         port.eject("/dev/rdisk2")
     assert exc.value.code == "unsupported"
+
+
+def test_libcdio_driver_ids_match_current():
+    assert DRIVER_OSX == 6
+    assert DRIVER_DEVICE == 11
+
+
+def test_cdtext_latin1_cafe_round_trips():
+    assert _decode_c_string("café".encode("latin-1")) == "café"
+
+
+def test_cdtext_msjis_japanese_not_replacement():
+    raw = "あいう".encode("cp932")
+    text = _decode_c_string(raw)
+    assert text == "あいう"
+    assert "\ufffd" not in text
 
 
 def test_audio_toc_drops_trailing_data_track():
@@ -213,12 +249,30 @@ def test_audio_toc_drops_trailing_data_track():
 def test_darwin_port_mocked_toc_and_cd_text():
     port = DarwinOpticalPort(lib=FakeCdio())
     drives = port.list_drives()
-    assert drives == [OpticalDrive(id="/dev/rdisk2", name="Apple SuperDrive")]
+    assert drives == [
+        OpticalDrive(
+            id="/dev/rdisk2",
+            name="Apple SuperDrive",
+            key="Apple|SuperDrive",
+        )
+    ]
+    assert drives[0].to_dict()["key"] == "Apple|SuperDrive"
     media = port.read("/dev/rdisk2")
     assert media.present is True
     assert media.toc == TWO_TRACK_TOC
     assert media.cd_text == TWO_TRACK_TEXT
     port.eject("/dev/rdisk2")
+
+
+def test_darwin_drive_key_falls_back_to_path():
+    lib = FakeCdio()
+    lib.hwinfo_name = lambda handle: None  # type: ignore[method-assign]
+    lib.hwinfo_key = lambda handle: None  # type: ignore[method-assign]
+    port = DarwinOpticalPort(lib=lib)
+    drives = port.list_drives()
+    assert drives == [
+        OpticalDrive(id="/dev/rdisk2", name="/dev/rdisk2", key="/dev/rdisk2")
+    ]
 
 
 def test_darwin_missing_lib_is_empty_with_hint():
@@ -359,3 +413,122 @@ def test_default_port_is_stub_off_darwin():
     from musicweb.exclusive.optical import get_optical_port
 
     assert isinstance(get_optical_port(), StubOpticalPort)
+
+
+def test_darwin_data_session_is_kind_data_not_gone():
+    lib = FakeCdio()
+    lib.track_format = lambda handle, track: 3  # type: ignore[method-assign]
+    port = DarwinOpticalPort(lib=lib)
+    media = port.read("/dev/rdisk2")
+    assert media.present is True
+    assert media.kind == "data"
+    assert media.toc is None
+
+
+def test_paranoia_missing_is_optical_error(monkeypatch: pytest.MonkeyPatch):
+    def boom(device_id: str):
+        raise OSError("libcdio-paranoia not found")
+
+    monkeypatch.setattr(
+        "musicweb.exclusive.optical_cdio.ParanoiaSource", boom
+    )
+    port = DarwinOpticalPort(lib=FakeCdio())
+    assert port.read("/dev/rdisk2").present is True
+    with pytest.raises(OpticalError) as exc:
+        port.open_track("/dev/rdisk2", 1)
+    assert exc.value.code == "libcdio_paranoia_missing"
+
+
+def test_watch_skips_read_while_reader_live():
+    hub = _hub()
+    fake = FakeOptical()
+    hub._optical = fake  # type: ignore[assignment]
+    ws = FakeWebSocket()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER, ws=ws)
+
+    async def _run() -> None:
+        await hub.handle_message(
+            sess, p.envelope(p.MSG_WATCH_OPTICAL, on=True, deviceId="dev-cd")
+        )
+        await asyncio.sleep(0.05)
+        hub.optical.open_track("dev-cd", 1)
+        fake.throw_read = True
+        before = [m for m in ws.sent if m.get("type") == p.MSG_OPTICAL_MEDIA]
+        await asyncio.sleep(1.1)
+        after = [m for m in ws.sent if m.get("type") == p.MSG_OPTICAL_MEDIA]
+        assert after == before
+        assert not any(m.get("present") is False for m in after)
+        await hub.handle_message(sess, p.envelope(p.MSG_WATCH_OPTICAL, on=False))
+
+    asyncio.run(_run())
+
+
+def test_eject_drops_reader_before_ioctl():
+    hub = _hub()
+    fake = FakeOptical()
+    hub._optical = fake  # type: ignore[assignment]
+    ws = FakeWebSocket()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER, ws=ws)
+    hub.optical.open_track("dev-cd", 1)
+    assert fake.reader_open is True
+
+    asyncio.run(
+        hub.handle_message(sess, p.envelope(p.MSG_EJECT_OPTICAL, deviceId="dev-cd"))
+    )
+    assert fake.events[:2] == ["drop", "eject"]
+    media = [m for m in ws.sent if m.get("type") == p.MSG_OPTICAL_MEDIA]
+    assert media
+    assert media[-1]["present"] is False
+    assert media[-1]["kind"] == "none"
+
+
+def test_rewatch_on_does_not_drop_live_reader():
+    hub = _hub()
+    fake = FakeOptical()
+    hub._optical = fake  # type: ignore[assignment]
+    ws = FakeWebSocket()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER, ws=ws)
+
+    async def _run() -> None:
+        await hub.handle_message(
+            sess, p.envelope(p.MSG_WATCH_OPTICAL, on=True, deviceId="dev-cd")
+        )
+        hub.optical.open_track("dev-cd", 1)
+        drops = fake.drop_calls
+        await hub.handle_message(
+            sess, p.envelope(p.MSG_WATCH_OPTICAL, on=True, deviceId="dev-cd")
+        )
+        assert fake.drop_calls == drops
+        assert fake.reader_open is True
+        await hub.handle_message(sess, p.envelope(p.MSG_WATCH_OPTICAL, on=False))
+
+    asyncio.run(_run())
+
+
+def test_open_track_paranoia_error_broadcasts():
+    hub = _hub()
+
+    class BoomPort(FakeOptical):
+        def open_track(self, device_id: str, track_no: int):
+            raise OpticalError(
+                "Install libcdio-paranoia: brew install libcdio libcdio-paranoia",
+                code="libcdio_paranoia_missing",
+            )
+
+    fake = BoomPort()
+    hub._optical = fake  # type: ignore[assignment]
+    ws = FakeWebSocket()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER, ws=ws)
+
+    async def _run() -> None:
+        await hub.handle_message(
+            sess, p.envelope(p.MSG_WATCH_OPTICAL, on=True, deviceId="dev-cd")
+        )
+        assert hub.open_cdda_track("dev-cd", 1) is None
+        await asyncio.sleep(0)
+        errors = [m for m in ws.sent if m.get("type") == p.MSG_OPTICAL_ERROR]
+        assert errors
+        assert errors[-1]["code"] == "libcdio_paranoia_missing"
+        await hub.handle_message(sess, p.envelope(p.MSG_WATCH_OPTICAL, on=False))
+
+    asyncio.run(_run())

@@ -5,6 +5,7 @@ from musicweb.exclusive.cdda_stream import (
     SECTOR_BYTES,
     CddaReader,
     MemorySectorSource,
+    ParanoiaSource,
     content_length,
     range_to_sectors,
     track_extent,
@@ -78,3 +79,19 @@ def test_track_extent_last_uses_leadout():
     assert track_extent(1, 2, [0, 7500], 15000, 1) == (0, 7500)
     assert track_extent(1, 2, [0, 7500], 15000, 2) == (7500, 7500)
     assert track_extent(1, 2, [0, 7500], 15000, 3) is None
+
+
+def test_paranoia_sequential_prime_seeks_once():
+    seeks: list[int] = []
+
+    def seek(lsn: int) -> None:
+        seeks.append(lsn)
+
+    def read_limited(lsn: int) -> bytes:
+        return bytes((lsn + i) % 256 for i in range(SECTOR_BYTES))
+
+    source = ParanoiaSource.test_double(seek=seek, read_limited=read_limited)
+    reader = CddaReader(first_lsn=100, sector_count=3, source=source)
+    chunk = reader.read_span(44, 44 + SECTOR_BYTES * 3 - 1)
+    assert len(chunk) == SECTOR_BYTES * 3
+    assert seeks == [100]

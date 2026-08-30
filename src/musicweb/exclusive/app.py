@@ -206,10 +206,13 @@ def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
             headers=headers,
         )
 
-    @app.api_route("/cdda/{device_id}/{track_no}", methods=["GET", "HEAD"])
-    async def get_cdda(device_id: str, track_no: int, request: Request) -> Response:
+    @app.api_route("/cdda/{track_no}", methods=["GET", "HEAD"])
+    async def get_cdda(track_no: int, request: Request) -> Response:
         _require_file_token(request)
         if track_no < 1:
+            raise HTTPException(status_code=404, detail="missing")
+        device_id = str(request.query_params.get("device") or "")
+        if not device_id:
             raise HTTPException(status_code=404, detail="missing")
         reader = hub.open_cdda_track(device_id, track_no)
         if reader is None:

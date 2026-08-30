@@ -210,6 +210,14 @@ def test_cors_header_table():
 
 def test_cdda_stub_is_404(tmp_path: Path):
     app = _file_app(tmp_path)
+    code, _, _ = _asgi(
+        app, "GET", "/cdda/1", "device=/dev/rdisk2&token=secret"
+    )
+    assert code == 404
+
+
+def test_cdda_path_device_is_404(tmp_path: Path):
+    app = _file_app(tmp_path)
     code, _, _ = _asgi(app, "GET", "/cdda/dev/rdisk2/1", "token=secret")
     assert code == 404
 
@@ -217,17 +225,17 @@ def test_cdda_stub_is_404(tmp_path: Path):
 def test_cdda_token_reject_matches_files(tmp_path: Path):
     app = _file_app(tmp_path)
     code_file, _, _ = _asgi(app, "GET", "/files/audio/a.bin")
-    code_cdda, _, _ = _asgi(app, "GET", "/cdda/rdisk2/1")
+    code_cdda, _, _ = _asgi(app, "GET", "/cdda/1")
     assert code_file == 401
     assert code_cdda == 401
 
 
 class _FakeCdio:
     def list_device_paths(self) -> list[str]:
-        return ["rdisk2"]
+        return ["/dev/rdisk2"]
 
     def open(self, device_id: str):
-        return object() if device_id == "rdisk2" else None
+        return object() if device_id == "/dev/rdisk2" else None
 
     def destroy(self, handle) -> None:
         return None
@@ -274,19 +282,18 @@ def test_cdda_wav_header_and_one_sector_range(tmp_path: Path):
 
     source = MemorySectorSource()
     port = DarwinOpticalPort(lib=_FakeCdio(), sector_source=source)
-    assert port.read("rdisk2").present is True
+    assert port.read("/dev/rdisk2").present is True
     hub = ExclusiveHub(companion_token="secret", data_dir=tmp_path)
     hub.start_player = lambda: None  # type: ignore[method-assign]
     hub.stop = lambda: None  # type: ignore[method-assign]
     hub._optical = port  # type: ignore[assignment]
-    hub._optical_last_device = "rdisk2"
     app = create_exclusive_app(hub)
 
     code, headers, body = _asgi(
         app,
         "GET",
-        "/cdda/rdisk2/1",
-        "token=secret",
+        "/cdda/1",
+        "device=/dev/rdisk2&token=secret",
         headers={"range": "bytes=0-43"},
     )
     assert code == 206
@@ -297,8 +304,8 @@ def test_cdda_wav_header_and_one_sector_range(tmp_path: Path):
     code, _, body = _asgi(
         app,
         "GET",
-        "/cdda/rdisk2/1",
-        "token=secret",
+        "/cdda/1",
+        "device=/dev/rdisk2&token=secret",
         headers={"range": "bytes=44-2395"},
     )
     assert code == 206

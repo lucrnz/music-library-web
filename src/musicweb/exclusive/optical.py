@@ -16,6 +16,9 @@ from musicweb.exclusive.cdda_stream import CddaReader, track_extent as _track_ex
 logger = logging.getLogger(__name__)
 
 LIBCDIO_INSTALL_HINT = "Install libcdio: brew install libcdio libcdio-paranoia"
+LIBCDIO_PARANOIA_HINT = (
+    "Install libcdio-paranoia: brew install libcdio libcdio-paranoia"
+)
 UNSUPPORTED_HINT = "Optical drives are not supported on this platform"
 
 
@@ -23,9 +26,10 @@ UNSUPPORTED_HINT = "Optical drives are not supported on this platform"
 class OpticalDrive:
     id: str
     name: str
+    key: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "name": self.name}
+        return {"id": self.id, "name": self.name, "key": self.key}
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,7 @@ class OpticalMedia:
     present: bool
     toc: DiscToc | None
     cd_text: CdText | None
+    kind: str = "none"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -71,6 +76,7 @@ class OpticalMedia:
             "present": self.present,
             "toc": self.toc.to_dict() if self.toc else None,
             "cd_text": self.cd_text.to_dict() if self.cd_text else None,
+            "kind": self.kind,
         }
 
 
@@ -96,6 +102,8 @@ class OpticalPort(Protocol):
 
     def drop_reader(self) -> None: ...
 
+    def live_reader_device(self) -> str | None: ...
+
 
 class StubOpticalPort:
     """Windows/Linux (and tests): no devices, eject is a safe error."""
@@ -108,7 +116,11 @@ class StubOpticalPort:
 
     def read(self, device_id: str) -> OpticalMedia:
         media = OpticalMedia(
-            device_id=device_id, present=False, toc=None, cd_text=None
+            device_id=device_id,
+            present=False,
+            toc=None,
+            cd_text=None,
+            kind="none",
         )
         self._last = media
         return media
@@ -126,6 +138,9 @@ class StubOpticalPort:
         return None
 
     def drop_reader(self) -> None:
+        return None
+
+    def live_reader_device(self) -> str | None:
         return None
 
 
@@ -153,6 +168,7 @@ def media_signature(media: OpticalMedia) -> tuple[Any, ...]:
     text = media.cd_text
     return (
         media.present,
+        media.kind,
         None
         if toc is None
         else (

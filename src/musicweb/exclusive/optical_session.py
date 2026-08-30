@@ -34,6 +34,7 @@ class OpticalSession:
         self._watch_task: asyncio.Task[None] | None = None
         self._watch_device: str | None = None
         self._last_device: str | None = None
+        self._broadcast: BroadcastFn | None = None
 
     @property
     def watch_task(self) -> asyncio.Task[None] | None:
@@ -43,13 +44,14 @@ class OpticalSession:
     def watch_device(self) -> str | None:
         return self._watch_device
 
-    def cancel_watch(self) -> None:
+    def cancel_watch(self, *, drop: bool = True) -> None:
         task = self._watch_task
         self._watch_task = None
         self._watch_device = None
         if task is not None and not task.done():
             task.cancel()
-        self.drop_reader()
+        if drop:
+            self.drop_reader()
 
     def drop_reader(self) -> None:
         try:
@@ -69,7 +71,24 @@ class OpticalSession:
                 allowed = device_id
         if not allowed or allowed != device_id:
             return None
-        return self.port.open_track(device_id, track_no)
+        try:
+            return self.port.open_track(device_id, track_no)
+        except OpticalError as exc:
+            self._schedule_error(exc)
+            return None
+
+    def _schedule_error(self, exc: OpticalError) -> None:
+        broadcast = self._broadcast
+        if broadcast is None:
+            return
+        msg = p.envelope(
+            p.MSG_OPTICAL_ERROR, message=exc.message, code=exc.code
+        )
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(broadcast(msg))
 
     async def list_drives(
         self,
@@ -79,6 +98,7 @@ class OpticalSession:
         live: LiveFn,
         broadcast: BroadcastFn,
     ) -> None:
+        self._broadcast = broadcast
         drives = await asyncio.to_thread(self.port.list_drives)
         hint = self.port.missing_lib_hint()
         if hint:
@@ -100,38 +120,35 @@ class OpticalSession:
         )
 
     async def watch(self, msg: dict[str, Any], *, broadcast: BroadcastFn) -> None:
+        self._broadcast = broadcast
         on = bool(msg.get("on"))
-        self.cancel_watch()
-        if not on:
+        if on:
+            self.cancel_watch(drop=False)
+            device_id = device_id_from(msg)
+            if not device_id:
+                raise ValueError("deviceId required")
+            self._watch_device = device_id
+            self._last_device = device_id
+            self._watch_task = asyncio.create_task(
+                self._watch_loop(device_id, broadcast)
+            )
             return
-        device_id = device_id_from(msg)
-        if not device_id:
-            raise ValueError("deviceId required")
-        self._watch_device = device_id
-        self._last_device = device_id
-        self._watch_task = asyncio.create_task(self._watch_loop(device_id, broadcast))
+        self.cancel_watch(drop=True)
 
     async def _watch_loop(self, device_id: str, broadcast: BroadcastFn) -> None:
         last_sig: object = object()
         try:
             while True:
+                live = self.port.live_reader_device()
+                if live == device_id:
+                    await asyncio.sleep(1.0)
+                    continue
                 try:
                     media = await asyncio.to_thread(self.port.read, device_id)
-                except Exception as exc:
+                except Exception:
                     logger.exception("optical watch read failed")
-                    await broadcast(
-                        p.envelope(
-                            p.MSG_OPTICAL_ERROR,
-                            message=str(exc),
-                            code="read",
-                        )
-                    )
-                    media = OpticalMedia(
-                        device_id=device_id,
-                        present=False,
-                        toc=None,
-                        cd_text=None,
-                    )
+                    await asyncio.sleep(1.0)
+                    continue
                 sig = media_signature(media)
                 if sig != last_sig:
                     last_sig = sig
@@ -150,6 +167,7 @@ class OpticalSession:
         live: LiveFn,
         broadcast: BroadcastFn,
     ) -> None:
+        self._broadcast = broadcast
         device_id = device_id_from(msg)
         if not device_id:
             raise ValueError("deviceId required")
@@ -167,9 +185,11 @@ class OpticalSession:
         send: SendFn,
         broadcast: BroadcastFn,
     ) -> None:
+        self._broadcast = broadcast
         device_id = device_id_from(msg)
         if not device_id:
             raise ValueError("deviceId required")
+        self.drop_reader()
         try:
             await asyncio.to_thread(self.port.eject, device_id)
         except OpticalError as exc:
@@ -178,8 +198,11 @@ class OpticalSession:
                 p.envelope(p.MSG_OPTICAL_ERROR, message=exc.message, code=exc.code),
             )
             return
-        self.drop_reader()
         gone = OpticalMedia(
-            device_id=device_id, present=False, toc=None, cd_text=None
+            device_id=device_id,
+            present=False,
+            toc=None,
+            cd_text=None,
+            kind="none",
         )
         await broadcast(p.envelope(p.MSG_OPTICAL_MEDIA, **gone.to_dict()))

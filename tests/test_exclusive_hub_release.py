@@ -539,6 +539,26 @@ def test_blob_put_jail_does_not_escape():
         assert "escape" not in child.name
 
 
+def test_status_url_redacts_token():
+    from urllib.parse import parse_qs, urlsplit
+
+    from musicweb.exclusive.mpv_player import MpvPlayer
+
+    hub, _fake = _hub_with_fake()
+    player = MpvPlayer()
+    player._url = (
+        "http://127.0.0.1:18765/cdda/1?device=/dev/rdisk2&token=secret"
+    )
+    hub._player = player  # type: ignore[assignment]
+    fields = hub._status_fields()
+    url = fields.get("url") or ""
+    assert "token=" not in url
+    parsed = urlsplit(url)
+    assert parsed.path == "/cdda/1"
+    assert parse_qs(parsed.query).get("device") == ["/dev/rdisk2"]
+    assert "token" not in parse_qs(parsed.query)
+
+
 def test_load_hog_false_without_device_does_not_raise():
     hub, fake = _hub_with_fake()
     ws = FakeWebSocket()

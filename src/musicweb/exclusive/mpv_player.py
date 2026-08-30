@@ -14,6 +14,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from musicweb.exclusive.coreaudio import (
     get_device_volume,
@@ -25,6 +26,41 @@ from musicweb.exclusive.volume import ExclusiveVolume, Restore
 logger = logging.getLogger(__name__)
 
 EventCallback = Callable[[str, dict[str, Any]], None]
+
+
+def redact_url_token(url: str | None) -> str | None:
+    """Strip the ``token`` query key so STATUS never carries the HMAC."""
+    if not url or "token=" not in url:
+        return url
+    parts = urlsplit(url)
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key != "token"
+    ]
+    return urlunsplit(
+        (parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)
+    )
+
+
+def redact_token_in_text(text: str) -> str:
+    """Replace ``token=…`` values so mpv logs never echo the HMAC."""
+    if "token=" not in text:
+        return text
+    out: list[str] = []
+    i = 0
+    needle = "token="
+    while True:
+        j = text.find(needle, i)
+        if j < 0:
+            out.append(text[i:])
+            return "".join(out)
+        out.append(text[i : j + len(needle)])
+        k = j + len(needle)
+        while k < len(text) and text[k] not in "& \t\r\n":
+            k += 1
+        out.append("REDACTED")
+        i = k
 
 
 class MpvPlayer:
@@ -282,7 +318,7 @@ class MpvPlayer:
             "paused": self._paused,
             "position": self._position,
             "duration": self._duration,
-            "url": self._url,
+            "url": redact_url_token(self._url),
             "volume_path": self._vol.path,
         }
 
@@ -319,7 +355,7 @@ class MpvPlayer:
                 self._stderr_buf.append(line)
                 text = line.decode("utf-8", errors="replace").rstrip()
                 if text:
-                    logger.warning("mpv: %s", text)
+                    logger.warning("mpv: %s", redact_token_in_text(text))
         except Exception:
             return
 
@@ -433,4 +469,4 @@ class MpvPlayer:
         if msg.get("event") == "log-message":
             text = msg.get("text") or ""
             if "error" in (msg.get("level") or "").lower():
-                logger.warning("mpv: %s", text.strip())
+                logger.warning("mpv: %s", redact_token_in_text(text.strip()))
