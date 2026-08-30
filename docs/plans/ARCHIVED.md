@@ -769,3 +769,15 @@ Opus 96 kbps and Opus 64 kbps are first-class stream profiles, with rough megaby
 ```bash
 git show 1e746234104251cdbec53f3e889f5a779a90056c
 ```
+
+## 2026-08-22-wu5kaiir-radio-honor-download-policy-done
+
+**Title:** Honor download policy on radio
+
+**Commit:** `e3aa32268ba113efdbeb2d3e956aea04121616bc`
+
+Tuned-in radio plays a local download instead of `/api/stream` when **When a download exists** says the file wins, seeking to the household station clock. Open the delete commit for radio delivery resolve and the status/Settings hints.
+
+```bash
+git show e3aa32268ba113efdbeb2d3e956aea04121616bc
+```
