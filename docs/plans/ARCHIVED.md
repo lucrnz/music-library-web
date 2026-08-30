@@ -937,3 +937,15 @@ An installed Mac Desktop PWA plays a Red Book audio CD through the companion as 
 ```bash
 git show 2cfeaf3cac6d9ee435f4ddf8087c7033f0cc8074
 ```
+
+## 2026-08-30-b0qghgnc-gate-cd-entry-chrome-done
+
+**Title:** Gate CD entry chrome until enabled and a drive is picked
+
+**Commit:** `3730b287c067d15ee09a6ddbdd09dbd5f7b16b65`
+
+The Queue CD icon and mobile tab stay hidden until Enable CD playback is on and a drive is picked. Disabling or unpicking leaves a live session; `/cd` bounces. Open the delete commit for `cdEntryAllowed()`, leave-on-disable, and the App `/cd` watch.
+
+```bash
+git show 3730b287c067d15ee09a6ddbdd09dbd5f7b16b65
+```
