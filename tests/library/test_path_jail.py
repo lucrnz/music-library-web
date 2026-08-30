@@ -21,12 +21,35 @@ def test_relative_stays_under_root(tmp_home):
 
 @pytest.mark.parametrize(
     "rel",
-    ["..", "../outside", "/etc/passwd", "~", "~/music", "..\\escape"],
+    [
+        "..",
+        "../outside",
+        "/etc/passwd",
+        "~",
+        "~/music",
+        "..\\escape",
+        "C:/Windows",
+        "C:\\Windows",
+        "//server/share",
+        "\\\\server\\share",
+        "D:foo",
+    ],
 )
 def test_escape_raises(tmp_home, rel):
     lib = Library(tmp_home.lib)
     with pytest.raises(PathEscapeError):
         lib.resolve(rel)
+
+
+def test_colon_in_relative_name_is_allowed(tmp_home):
+    dest = tmp_home.lib / "Album: Live" / "track.flac"
+    try:
+        dest.parent.mkdir()
+        dest.write_bytes(b"x")
+    except OSError:
+        pass
+    lib = Library(tmp_home.lib)
+    assert lib.resolve("Album: Live/track.flac") == dest.resolve()
 
 
 def test_present_audio_empty_or_missing_is_none(tmp_home):

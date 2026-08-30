@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from musicweb.scan.formats import is_indexable_audio
+
+_DRIVE_ABS = re.compile(r"^[A-Za-z]:")
 
 
 class PathEscapeError(ValueError):
@@ -25,8 +28,14 @@ class Library:
         if not rel or rel == ".":
             return self.root
 
-        # Disallow absolute and parent escapes before join
-        if rel.startswith("/") or rel.startswith("~"):
+        # Disallow absolute, UNC, drive-letter, and parent escapes before join
+        if (
+            rel.startswith("/")
+            or rel.startswith("~")
+            or rel.startswith("//")
+            or _DRIVE_ABS.match(rel)
+            or Path(rel).is_absolute()
+        ):
             raise PathEscapeError("Absolute paths are not allowed")
 
         candidate = (self.root / rel).resolve()

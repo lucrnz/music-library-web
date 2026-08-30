@@ -6,6 +6,8 @@ import logging
 import subprocess
 from pathlib import Path
 
+from musicweb.runtime.spawn import run as spawn_run
+
 logger = logging.getLogger(__name__)
 
 _PROBE_TIMEOUT_S = 15
@@ -14,7 +16,7 @@ _PROBE_TIMEOUT_S = 15
 def file_is_playable(path: Path) -> bool:
     """True when ffprobe exits 0 and reports an audio stream. Timeout 15s."""
     try:
-        proc = subprocess.run(
+        proc = spawn_run(
             [
                 "ffprobe",
                 "-v",

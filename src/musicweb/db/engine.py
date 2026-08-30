@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 _MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
 
+def sqlite_url(db_path: Path) -> str:
+    """SQLite URL with forward slashes (required on Windows absolute paths)."""
+    return f"sqlite:///{db_path.as_posix()}"
+
+
 class Database:
     """Holds the SQLAlchemy engine and session factory for the app lifetime."""
 
@@ -46,7 +51,7 @@ def make_engine(data_dir: Path) -> Engine:
     (data_dir / "covers" / "albums").mkdir(parents=True, exist_ok=True)
     (data_dir / "covers" / "artists").mkdir(parents=True, exist_ok=True)
     db_path = (data_dir / "library.db").resolve()
-    url = f"sqlite:///{db_path}"
+    url = sqlite_url(db_path)
     engine = create_engine(
         url,
         echo=False,

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+from musicweb.runtime.spawn import run as spawn_run
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ def probe_source_audio_tech(
 
     if rate is None or bits is None:
         try:
-            proc = subprocess.run(
+            proc = spawn_run(
                 [
                     "ffprobe",
                     "-v",

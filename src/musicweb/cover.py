@@ -12,6 +12,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from musicweb.runtime.spawn import run as spawn_run
+
 from musicweb.images import (
     FULL_SIZE,
     FULL_WEBP_QUALITY,
@@ -78,7 +80,7 @@ def _extract_embedded(audio_path: Path, dest: Path) -> bool:
         str(dest),
     ]
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=30, check=False)
+        proc = spawn_run(cmd, capture_output=True, timeout=30, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.debug("ffmpeg cover extract failed: %s", exc)
         return False

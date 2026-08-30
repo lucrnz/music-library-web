@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import re
-import subprocess
 from dataclasses import dataclass
+
+from musicweb.runtime.spawn import run as spawn_run
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 def _require_tool(name: str, args: list[str], *, hint: str) -> str:
     """Run a version-style check; return first stdout/stderr line for logging."""
     try:
-        proc = subprocess.run(
+        proc = spawn_run(
             [name, *args],
             capture_output=True,
             timeout=10,
@@ -36,7 +37,7 @@ def _require_tool(name: str, args: list[str], *, hint: str) -> str:
 def _ffmpeg_encoder_names() -> set[str]:
     """Parse `ffmpeg -encoders` into a set of encoder names."""
     try:
-        proc = subprocess.run(
+        proc = spawn_run(
             ["ffmpeg", "-hide_banner", "-encoders"],
             capture_output=True,
             timeout=15,
@@ -64,7 +65,7 @@ def _ffmpeg_encoder_names() -> set[str]:
 def _require_libsoxr() -> str:
     """Fail fast unless ffmpeg was built with libsoxr."""
     try:
-        proc = subprocess.run(
+        proc = spawn_run(
             ["ffmpeg", "-version"],
             capture_output=True,
             timeout=10,
@@ -78,7 +79,7 @@ def _require_libsoxr() -> str:
     if "--enable-libsoxr" not in text and "libsoxr" not in text.lower():
         # Secondary check: aresample filter docs list soxr
         try:
-            h = subprocess.run(
+            h = spawn_run(
                 ["ffmpeg", "-hide_banner", "-h", "filter=aresample"],
                 capture_output=True,
                 timeout=10,

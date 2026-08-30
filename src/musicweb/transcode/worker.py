@@ -29,6 +29,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from musicweb.runtime.spawn import popen
 from musicweb.transcode.probe import SourceAudioTech, probe_source_audio_tech
 from musicweb.transcode.profiles import (
     DEFAULT_PROFILE_TAG,
@@ -235,7 +236,7 @@ class Transcoder:
 
         logger.debug("Running %s: %s", label, " ".join(cmd))
         try:
-            proc = subprocess.Popen(
+            proc = popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
