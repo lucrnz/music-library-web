@@ -877,3 +877,15 @@ A household listen is 65% accumulated media time in one play cycle, same path fo
 ```bash
 git show d4ce109a8c592c51cf4cd91e44038934b01f9245
 ```
+
+## 2026-08-28-1wfw9m8e-stream-codec-resume-done
+
+**Title:** Stream codec change: keep seek, wait out the encode
+
+**Commit:** `9a1435e3ac868807e8d5a6b1243d410be51f1b35`
+
+Changing the Streaming codec keeps the current queue track at the current seek; Play during the following encode wait does not abort that load or start the song over. Open the delete commit for resume-on-codec-change, the in-flight wait, and the busy Play face.
+
+```bash
+git show 9a1435e3ac868807e8d5a6b1243d410be51f1b35
+```
