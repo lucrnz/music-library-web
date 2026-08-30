@@ -745,3 +745,15 @@ Tuned-in radio counts listens with the same media-time contract as on-demand and
 ```bash
 git show 6a32230961d0fb8fa3d8a611aedf85fbc9043141
 ```
+
+## 2026-08-22-q4i92vrz-download-concurrency-done
+
+**Title:** Client concurrent-download setting
+
+**Commit:** `bbcfc35f8e00e4c7633cb0ffb364e8ff5acf2ea3`
+
+A persisted per-device cap on how many download-manager jobs run at once; shrinking the cap demotes extras back to the queue and keeps partials. Open the delete commit for rank-to-keep, the pump, and the Settings picker.
+
+```bash
+git show bbcfc35f8e00e4c7633cb0ffb364e8ff5acf2ea3
+```
