@@ -805,3 +805,15 @@ git show 8f90b676ec0e89a5da5125f04df536fb1df0c1e6
 ```bash
 git show b2bd016c39e94594ea32a5391a59839b77d568c8
 ```
+
+## 2026-08-23-5qo2nl8e-remove-folders-view-done
+
+**Title:** Remove Folders browse
+
+**Commit:** `a128a5a8d6edd3208b3db8ba87c9a95499997409`
+
+Filesystem Folders browse is gone; library navigation is Artists, Albums, Search, Stats, and Downloads, with Artists as home. Open the delete commit for the SPA strip and the deleted browse/collect API.
+
+```bash
+git show a128a5a8d6edd3208b3db8ba87c9a95499997409
+```
