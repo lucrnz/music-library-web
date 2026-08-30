@@ -889,3 +889,15 @@ Changing the Streaming codec keeps the current queue track at the current seek; 
 ```bash
 git show 9a1435e3ac868807e8d5a6b1243d410be51f1b35
 ```
+
+## 2026-08-28-xcz20zn0-radio-join-hold-done
+
+**Title:** Radio join hold
+
+**Commit:** `43c715a23c1b050511243a85bb98f85c809f943c`
+
+A radio join is done after 8 seconds of uninterrupted playback, not when `play()` resolves. A sub-second play-then-stop stays in session and retries. Open the delete commit for the hold clock and Tune-in wiring.
+
+```bash
+git show 43c715a23c1b050511243a85bb98f85c809f943c
+```
