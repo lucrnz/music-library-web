@@ -335,7 +335,7 @@ async function fetchExclusiveFormats() {
 }
 
 /**
- * Boot: detect capability; if Mac PWA, load prefs + formats.
+ * Boot: detect capability; if Mac/Windows exclusive UI is allowed, load prefs + formats.
  * Call once from main.ts.
  */
 export async function initExclusiveAudio() {

@@ -41,6 +41,21 @@ function stubNav(opts: {
   });
 }
 
+function stubUnlock(devUnlockPwa: boolean, hostname: string) {
+  vi.stubGlobal("location", { hostname });
+  vi.stubGlobal("document", {
+    getElementById: (id: string) =>
+      id === "musicweb-config"
+        ? {
+            textContent: JSON.stringify({
+              publicOrigin: "",
+              devUnlockPwa,
+            }),
+          }
+        : null,
+  });
+}
+
 describe("companion capability", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -53,9 +68,9 @@ describe("companion capability", () => {
     expect(canUseCompanionDownloads()).toBe(true);
   });
 
-  it("Windows + standalone: companion only", () => {
+  it("Windows + standalone: exclusive, not CD", () => {
     stubNav({ uaDataPlatform: "Windows", displayMode: "standalone" });
-    expect(canShowExclusiveUi()).toBe(false);
+    expect(canShowExclusiveUi()).toBe(true);
     expect(canShowCdUi()).toBe(false);
     expect(canUseCompanionDownloads()).toBe(true);
     expect(isDesktopPlatform()).toBe(true);
@@ -94,5 +109,27 @@ describe("companion capability", () => {
     stubNav({ uaDataPlatform: "Linux", displayMode: "standalone" });
     expect(canShowExclusiveUi()).toBe(false);
     expect(canUseCompanionDownloads()).toBe(true);
+  });
+
+  it("Windows tab + unlock + loopback: exclusive, not CD", () => {
+    stubNav({ uaDataPlatform: "Windows", displayMode: "browser" });
+    stubUnlock(true, "127.0.0.1");
+    expect(canShowExclusiveUi()).toBe(true);
+    expect(canShowCdUi()).toBe(false);
+    expect(canUseCompanionDownloads()).toBe(true);
+  });
+
+  it("Windows tab + unlock + LAN host stays gated", () => {
+    stubNav({ uaDataPlatform: "Windows", displayMode: "browser" });
+    stubUnlock(true, "192.168.1.10");
+    expect(canShowExclusiveUi()).toBe(false);
+    expect(canShowCdUi()).toBe(false);
+  });
+
+  it("Mac tab + unlock + loopback: exclusive and CD", () => {
+    stubNav({ uaDataPlatform: "macOS", displayMode: "browser" });
+    stubUnlock(true, "localhost");
+    expect(canShowExclusiveUi()).toBe(true);
+    expect(canShowCdUi()).toBe(true);
   });
 });

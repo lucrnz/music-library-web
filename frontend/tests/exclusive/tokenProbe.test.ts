@@ -30,6 +30,7 @@ vi.mock("@/api", () => ({
 vi.mock("@/diag/log", () => ({ emit: vi.fn() }));
 vi.mock("@/exclusive/capability", () => ({
   canUseCompanionDownloads: () => false,
+  canShowCdUi: () => false,
 }));
 vi.mock("@/downloads/state", () => ({
   downloads: { enabled: false },

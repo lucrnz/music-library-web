@@ -203,6 +203,16 @@ class Settings(BaseSettings):
             "Default off."
         ),
     )
+    musicweb_dev_unlock_pwa: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "MUSICWEB_DEV_UNLOCK_PWA", "musicweb_dev_unlock_pwa"
+        ),
+        description=(
+            "Dev-only: inject a loopback PWA-install bypass into #musicweb-config. "
+            "Default off. Do not enable on a production host."
+        ),
+    )
 
     @field_validator("music_library_path", "musicweb_data_dir", mode="before")
     @classmethod

@@ -17,10 +17,19 @@ router = APIRouter()
 _SPA_RESERVED_PREFIXES = ("api/", "static/", "assets/")
 _SPA_RESERVED_EXACT = frozenset({"sw.js", "manifest.webmanifest"})
 
+def shell_config_json(*, public_origin: str, dev_unlock_pwa: bool) -> str:
+    """Compact JSON for ``#musicweb-config`` (must match frontend/index.html)."""
+    return json.dumps(
+        {"publicOrigin": public_origin, "devUnlockPwa": bool(dev_unlock_pwa)},
+        separators=(",", ":"),
+    )
+
+
+EMPTY_CONFIG_JSON = shell_config_json(public_origin="", dev_unlock_pwa=False)
 _EMPTY_CONFIG_TAG = (
     '<script type="application/json" id="musicweb-config">'
-    '{"publicOrigin":""}'
-    "</script>"
+    + EMPTY_CONFIG_JSON
+    + "</script>"
 )
 
 
@@ -32,9 +41,13 @@ def _spa_shell(request: Request) -> HTMLResponse:
     pub = _settings(request).public_origin
     public_origin = pub.origin if (pub.origin and pub.secure) else ""
     html = (require_frontend_dist() / "index.html").read_text(encoding="utf-8")
+    settings = _settings(request)
     replacement = (
         '<script type="application/json" id="musicweb-config">'
-        + json.dumps({"publicOrigin": public_origin})
+        + shell_config_json(
+            public_origin=public_origin,
+            dev_unlock_pwa=settings.musicweb_dev_unlock_pwa,
+        )
         + "</script>"
     )
     if _EMPTY_CONFIG_TAG not in html:

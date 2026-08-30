@@ -1,6 +1,9 @@
 /**
- * Exclusive UI is Mac installed PWA only (v1).
+ * Exclusive UI: installed Mac or Windows PWA (or loopback dev unlock).
+ * CD chrome stays Mac-only.
  */
+
+import { readShellConfig } from "@/shellConfig";
 
 type NavigatorWithExclusiveHints = Navigator & {
   userAgentData?: { platform?: string };
@@ -60,15 +63,38 @@ export function isInstalledPwa(): boolean {
   return false;
 }
 
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+export function isLoopbackOrigin(hostname?: string): boolean {
+  const host =
+    hostname ??
+    (typeof location !== "undefined" ? location.hostname : "");
+  return LOOPBACK_HOSTS.has(host);
+}
+
+/** Server injected `devUnlockPwa` and this page is loopback. */
+export function devPwaUnlocked(): boolean {
+  return readShellConfig().devUnlockPwa && isLoopbackOrigin();
+}
+
+/** Installed PWA, or the loopback-only dev unlock. */
+export function isInstalledOrDevPwa(): boolean {
+  return isInstalledPwa() || devPwaUnlocked();
+}
+
 /** Whether exclusive settings / hog UI may appear. */
 export function canShowExclusiveUi(): boolean {
-  return isMacPlatform() && isInstalledPwa();
+  return (
+    (isMacPlatform() || isWindowsPlatform()) && isInstalledOrDevPwa()
+  );
 }
 
 /** Installed Mac PWA may show CD playback chrome and settings. */
-export const canShowCdUi = canShowExclusiveUi;
+export function canShowCdUi(): boolean {
+  return isMacPlatform() && isInstalledOrDevPwa();
+}
 
 /** Installed desktop PWA may use companion-disk Downloads. */
 export function canUseCompanionDownloads(): boolean {
-  return isDesktopPlatform() && isInstalledPwa();
+  return isDesktopPlatform() && isInstalledOrDevPwa();
 }

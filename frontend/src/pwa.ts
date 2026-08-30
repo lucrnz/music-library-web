@@ -1,4 +1,5 @@
 import { emit } from "@/diag/log";
+import { readShellConfig } from "@/shellConfig";
 
 /**
  * Service worker registration for shell-only PWA.
@@ -11,16 +12,7 @@ let registrationPromise: Promise<ServiceWorkerRegistration | null> | null =
   null;
 
 function readPublicOrigin(): string {
-  const el = document.getElementById("musicweb-config");
-  if (!el) return "";
-  try {
-    const data: unknown = JSON.parse(el.textContent || "{}");
-    if (!data || typeof data !== "object") return "";
-    const publicOrigin = (data as { publicOrigin?: unknown }).publicOrigin;
-    return typeof publicOrigin === "string" ? publicOrigin.trim() : "";
-  } catch {
-    return "";
-  }
+  return readShellConfig().publicOrigin;
 }
 
 function errorMessage(err: unknown): string {

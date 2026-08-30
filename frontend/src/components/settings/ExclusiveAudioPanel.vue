@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Exclusive audio settings — Mac installed PWA only.
+ * Exclusive audio settings — installed Mac/Windows PWA (or loopback dev unlock).
  */
 import { computed } from "vue";
 import { formatExclusiveFace } from "@/exclusive/statusFace";
@@ -96,10 +96,11 @@ function onRefreshDevices() {
 
 <template>
     <div class="modal-section">
-      <div class="modal-section-title">Exclusive audio (macOS)</div>
+      <div class="modal-section-title">Exclusive audio</div>
       <p class="modal-hint">
-        Hog Core Audio through the Desktop companion on this Mac. Set the token
-        in Desktop companion, then enable exclusive and pick a device.
+        Hog the output device through the Desktop companion on this computer.
+        Set the token in Desktop companion, then enable exclusive and pick a
+        device.
       </p>
 
       <label class="toggle-row">
