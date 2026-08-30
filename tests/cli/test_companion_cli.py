@@ -74,9 +74,9 @@ def test_port_out_of_range():
     assert result.exit_code != 0
 
 
-def test_non_mac_skips_mpv(monkeypatch):
+def test_linux_skips_mpv(monkeypatch):
     monkeypatch.setattr("musicweb.cli.companion.load_env_file", lambda: None)
-    monkeypatch.setattr("musicweb.cli.companion.is_macos", lambda: False)
+    monkeypatch.setattr("musicweb.cli.companion.hog_supported", lambda: False)
     monkeypatch.setattr("musicweb.cli.companion.check_loopback_port", lambda _p: None)
     monkeypatch.setattr("musicweb.cli.companion.serve_loopback", lambda *_a, **_k: None)
     monkeypatch.setattr("musicweb.cli.companion.shutil.which", lambda _n: None)
@@ -90,7 +90,18 @@ def test_non_mac_skips_mpv(monkeypatch):
 
 def test_mac_requires_mpv(monkeypatch):
     monkeypatch.setattr("musicweb.cli.companion.load_env_file", lambda: None)
-    monkeypatch.setattr("musicweb.cli.companion.is_macos", lambda: True)
+    monkeypatch.setattr("musicweb.cli.companion.hog_supported", lambda: True)
+    monkeypatch.setattr("musicweb.cli.companion.check_loopback_port", lambda _p: None)
+    monkeypatch.setattr("musicweb.cli.companion.shutil.which", lambda _n: None)
+    monkeypatch.setenv("COMPANION_TOKEN", "secret")
+    result = runner.invoke(app, ["companion"])
+    assert result.exit_code == 1
+    assert "mpv not found" in result.stderr
+
+
+def test_windows_requires_mpv(monkeypatch):
+    monkeypatch.setattr("musicweb.cli.companion.load_env_file", lambda: None)
+    monkeypatch.setattr("musicweb.cli.companion.hog_supported", lambda: True)
     monkeypatch.setattr("musicweb.cli.companion.check_loopback_port", lambda _p: None)
     monkeypatch.setattr("musicweb.cli.companion.shutil.which", lambda _n: None)
     monkeypatch.setenv("COMPANION_TOKEN", "secret")
@@ -174,7 +185,7 @@ def test_configure_companion_logging_installs_time_filter():
 def _stub_companion_run(monkeypatch) -> dict:
     seen: dict = {}
     monkeypatch.setattr("musicweb.cli.companion.load_env_file", lambda: None)
-    monkeypatch.setattr("musicweb.cli.companion.is_macos", lambda: False)
+    monkeypatch.setattr("musicweb.cli.companion.hog_supported", lambda: False)
     monkeypatch.setattr("musicweb.cli.companion.check_loopback_port", lambda _p: None)
     monkeypatch.setattr(
         "musicweb.cli.companion.serve_loopback",

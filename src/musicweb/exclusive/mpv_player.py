@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 import shutil
-import socket
 import subprocess
+import sys
 import tempfile
 import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -18,10 +18,12 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from musicweb.exclusive.coreaudio import (
     get_device_volume,
-    is_macos,
     set_device_volume,
 )
+from musicweb.exclusive.mpv_ipc import IpcConn, IpcListenSpec, connect_ipc, ipc_listen_spec
+from musicweb.exclusive.platform import hog_supported
 from musicweb.exclusive.volume import ExclusiveVolume, Restore
+from musicweb.runtime.spawn import popen
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +77,8 @@ class MpvPlayer:
         self._mpv_path = mpv_path or shutil.which("mpv") or "mpv"
         self._on_event = on_event
         self._proc: subprocess.Popen[bytes] | None = None
-        self._sock: socket.socket | None = None
-        self._ipc_path: Path | None = None
+        self._sock: IpcConn | None = None
+        self._ipc: IpcListenSpec | None = None
         self._tmpdir: tempfile.TemporaryDirectory[str] | None = None
         self._reader: threading.Thread | None = None
         self._lock = threading.RLock()
@@ -134,15 +136,20 @@ class MpvPlayer:
     def start(self) -> None:
         if self._proc is not None or self._stub:
             return
-        if not is_macos():
+        if not hog_supported():
             logger.info("exclusive mpv hog stub: no-op on this platform")
             self._stub = True
             return
         if not shutil.which(self._mpv_path) and not Path(self._mpv_path).is_file():
             raise RuntimeError(f"mpv not found: {self._mpv_path}")
 
-        self._tmpdir = tempfile.TemporaryDirectory(prefix="musicweb-mpv-")
-        self._ipc_path = Path(self._tmpdir.name) / "ipc.sock"
+        if sys.platform == "win32":
+            pipe_name = f"musicweb-mpv-{os.getpid()}-{secrets.token_hex(4)}"
+            self._ipc = ipc_listen_spec(system="win32", pipe_name=pipe_name)
+        else:
+            self._tmpdir = tempfile.TemporaryDirectory(prefix="musicweb-mpv-")
+            sock_path = str(Path(self._tmpdir.name) / "ipc.sock")
+            self._ipc = ipc_listen_spec(system=sys.platform, posix_path=sock_path)
         # Exclusive is armed only via set_device (not a process-wide startup flag).
         cmd = [
             self._mpv_path,
@@ -153,12 +160,12 @@ class MpvPlayer:
             "--gapless-audio=no",
             "--pause",
             "--volume=100",
-            f"--input-ipc-server={self._ipc_path}",
+            f"--input-ipc-server={self._ipc.server_arg}",
             "--msg-level=all=error",
             "--no-terminal",
         ]
         logger.info("Starting mpv: %s", " ".join(cmd))
-        self._proc = subprocess.Popen(
+        self._proc = popen(
             cmd,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -360,28 +367,21 @@ class MpvPlayer:
             return
 
     def _connect_ipc(self, timeout: float) -> None:
-        assert self._ipc_path is not None
-        deadline = time.monotonic() + timeout
-        last_err: Exception | None = None
-        while time.monotonic() < deadline:
-            if self._proc is not None and self._proc.poll() is not None:
-                if self._stderr_thread is not None:
-                    self._stderr_thread.join(timeout=0.5)
-                err = b"".join(self._stderr_buf)
-                raise RuntimeError(
-                    f"mpv exited early: {err.decode('utf-8', errors='replace')}"
-                )
-            if self._ipc_path.exists():
-                try:
-                    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                    sock.connect(str(self._ipc_path))
-                    sock.settimeout(1.0)
-                    self._sock = sock
-                    return
-                except OSError as exc:
-                    last_err = exc
-            time.sleep(0.05)
-        raise RuntimeError(f"mpv IPC connect failed: {last_err}")
+        assert self._ipc is not None
+
+        def _alive() -> bool:
+            if self._proc is None:
+                return True
+            if self._proc.poll() is None:
+                return True
+            if self._stderr_thread is not None:
+                self._stderr_thread.join(timeout=0.5)
+            err = b"".join(self._stderr_buf)
+            raise RuntimeError(
+                f"mpv exited early: {err.decode('utf-8', errors='replace')}"
+            )
+
+        self._sock = connect_ipc(self._ipc, timeout=timeout, proc_alive=_alive)
 
     def _command(self, *args: Any) -> None:
         with self._lock:
@@ -398,7 +398,7 @@ class MpvPlayer:
         while not self._closed and self._sock is not None:
             try:
                 chunk = self._sock.recv(4096)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 break

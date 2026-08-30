@@ -16,8 +16,8 @@ import uvicorn
 
 from musicweb.config import load_env_file
 from musicweb.exclusive.app import create_exclusive_app
-from musicweb.exclusive.coreaudio import is_macos
 from musicweb.exclusive.paths import companion_data_dir
+from musicweb.exclusive.platform import hog_supported
 from musicweb.exclusive.protocol import DEFAULT_PORT, PROTOCOL_VERSION
 from musicweb.exclusive.session import ExclusiveHub
 
@@ -153,7 +153,7 @@ def serve_loopback(
 
 
 def _resolve_mpv(mpv: str | None) -> str | None:
-    if not is_macos():
+    if not hog_supported():
         print(
             "Warning: exclusive hog is a no-op stub on this platform; "
             "Downloads blob store still runs.",
@@ -237,13 +237,13 @@ def companion(
     mpv: str | None = typer.Option(
         None,
         "--mpv",
-        help="Path to mpv binary (macOS hog; ignored on Windows/Linux stub)",
+        help="Path to mpv binary (required for hog on macOS and Windows; ignored on the Linux stub)",
     ),
 ) -> None:
-    """Desktop companion: loopback hog (macOS) and Downloads blob store.
+    """Desktop companion: loopback hog (macOS / Windows) and Downloads blob store.
 
     Requires COMPANION_TOKEN in the project .env or the process environment.
-    Binds 127.0.0.1 only. mpv is required on macOS. On Windows/Linux exclusive
+    Binds 127.0.0.1 only. mpv is required on macOS and Windows. On Linux exclusive
     hog is a no-op stub so Downloads still start. DEBUG=true or 1 enables
     verbose logs, including exclusive volume path decisions (false / 0 / unset
     stay at INFO).

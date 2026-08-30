@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from musicweb.exclusive import mpv_player as mpv_mod
 from musicweb.exclusive.mpv_player import MpvPlayer
 from musicweb.exclusive.protocol import VOLUME_DIGITAL, VOLUME_HARDWARE
@@ -34,8 +36,8 @@ def _bind(
     return player, cmds, gets, sets
 
 
-def test_start_is_stub_off_macos(monkeypatch):
-    monkeypatch.setattr(mpv_mod, "is_macos", lambda: False)
+def test_start_is_stub_when_hog_unsupported(monkeypatch):
+    monkeypatch.setattr(mpv_mod, "hog_supported", lambda: False)
     player = MpvPlayer(mpv_path="not-a-real-mpv")
     player.start()
     assert player._stub is True
@@ -46,6 +48,15 @@ def test_start_is_stub_off_macos(monkeypatch):
     player.close()
     assert player._proc is None
     assert player.device is None
+
+
+def test_start_on_windows_missing_mpv_raises(monkeypatch):
+    monkeypatch.setattr(mpv_mod, "hog_supported", lambda: True)
+    monkeypatch.setattr(mpv_mod.shutil, "which", lambda _n: None)
+    player = MpvPlayer(mpv_path="not-a-real-mpv")
+    with pytest.raises(RuntimeError, match="mpv not found"):
+        player.start()
+    assert player._proc is None
 
 
 def test_set_device_adopts_pre_hog_volume(monkeypatch):
