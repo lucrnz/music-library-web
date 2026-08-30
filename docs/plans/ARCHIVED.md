@@ -841,3 +841,15 @@ With exclusive enabled, household radio plays through the companion hog. Exclusi
 ```bash
 git show 1badcd8f99cf172838df19241e2d5d274658e2ed
 ```
+
+## 2026-08-25-rzbyknqo-companion-downloads-done
+
+**Title:** Catalog used line and companion-disk Downloads
+
+**Commit:** `d8db748f27fad7222791108c3f4272eebf6ae230`
+
+OPFS catalog-used is honest. Installed desktop PWAs store download bytes on companion disk (IDB catalog, companion as a blob store) so HTML and exclusive play from that store. Open the delete commit for the companion blob API, download jobs, play policy, and OPFS migrate.
+
+```bash
+git show d8db748f27fad7222791108c3f4272eebf6ae230
+```
