@@ -14,7 +14,7 @@ Guiding choices that should outlive individual refactors.
 
 ### Single process, LAN-only
 
-No multi-tenant auth, reverse-proxy requirements, or cloud object storage. The deployment model is “machine on your network running uv.” Security model is **network trust**, not application identity.
+No multi-tenant auth, reverse-proxy requirements, or cloud object storage. The deployment model is “Windows or macOS machine on your network running uv.” Security model is **network trust**, not application identity.
 
 ### SQLite index separate from the media tree
 

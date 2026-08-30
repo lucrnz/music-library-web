@@ -53,7 +53,7 @@ Or:
 uv run python -m musicweb
 ```
 
-Bare `musicweb` and `musicweb serve` are the same. The process takes an **exclusive flock** on `$MUSICWEB_DATA_DIR/musicweb.lock` so only one server (or local write job) owns the data dir.
+Bare `musicweb` and `musicweb serve` are the same. The process takes an **exclusive data-dir lock** on `$MUSICWEB_DATA_DIR/musicweb.lock` (`fcntl` on POSIX, `msvcrt` on Windows) so only one server (or local write job) owns the data dir.
 
 Build the SPA before the first start (and after frontend changes). Missing `frontend/dist/index.html` fails `create_app` and `musicweb doctor`:
 
@@ -76,15 +76,15 @@ On start the process:
 2. Checks ffmpeg tool capabilities.
 3. Requires a built SPA at `frontend/dist/index.html`.
 4. Applies Alembic migrations to head (or stamps a pre-Alembic DB).
-5. Starts the private control Unix socket (`$MUSICWEB_DATA_DIR/musicweb.sock`).
+5. Starts the private control plane: Unix socket `$MUSICWEB_DATA_DIR/musicweb.sock` on POSIX, or loopback TCP plus `$MUSICWEB_DATA_DIR/musicweb.control` on Windows.
 6. Starts a non-blocking **quick** library scan.
 7. Prints listen address, LAN URL (when bound to all interfaces), and tool lines.
 
-Press **Ctrl+C** for a clean shutdown. Process-temp stream caches are deleted on exit and also emptied after about an hour with no HTTP client; the control socket is unlinked.
+Press **Ctrl+C** for a clean shutdown. Process-temp stream caches are deleted on exit and also emptied after about an hour with no HTTP client; the control endpoint file is unlinked.
 
 ## Library CLI
 
-Write jobs use the same multi-kind job runner as HTTP (`musicweb.jobs`). If the server is up and the control socket answers, jobs run **inside the server** and the CLI polls status. If no server, the CLI takes the exclusive data-dir lock and runs locally (migrating only when no server holds the lock).
+Write jobs use the same multi-kind job runner as HTTP (`musicweb.jobs`). If the server is up and the control endpoint answers, jobs run **inside the server** and the CLI polls status. If no server, the CLI takes the exclusive data-dir lock and runs locally (migrating only when no server holds the lock).
 
 | Command | Role |
 |---------|------|
@@ -128,7 +128,7 @@ Exact flags: `uv run musicweb logs --help`.
 
 ## Radio (debug)
 
-Debug DJ tools against a **live** `musicweb` process via the Unix control socket. There is no offline persist dump. Upcoming and banlist ids stay hidden unless you pass `--spoilers`. This is not an HTTP/WebSocket DJ.
+Debug DJ tools against a **live** `musicweb` process via the control plane. There is no offline persist dump. Upcoming and banlist ids stay hidden unless you pass `--spoilers`. This is not an HTTP/WebSocket DJ.
 
 ```sh
 uv run musicweb radio status

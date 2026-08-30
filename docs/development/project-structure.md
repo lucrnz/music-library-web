@@ -32,9 +32,9 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `diag/` | Diagnostic JSONL store, emit, join-key reader |
 | `exclusive/` | Desktop companion (loopback WS + mpv hog + blob store + `optical_session` + WAV); no library DB/lock |
 | `cd/` | MusicBrainz disc-id lookup, confirm bind/half-bind, `cd_identities` snapshot |
-| `runtime/` | Data-dir flock, bootstrap, exclusive maintenance, `run_library_job` |
+| `runtime/` | Data-dir lock, spawn wrappers, bootstrap, exclusive maintenance, `run_library_job` |
 | `jobs/` | Single-flight library job runner (`ScanState`, `_begin`, `_begin_phase`; scan finish stamps radio watermark). Kind dispatch calls `scan/jobs.py` (`run_scan` / `regen_*`) |
-| `control/` | Private UDS JSON control plane (health, job RPC, live radio debug RPC) for live CLI |
+| `control/` | Private JSON control plane (UDS on POSIX, loopback TCP on Windows) for live CLI |
 | `config.py` | Settings from env + source-level tuning constants |
 | `library.py` | Path jail (`resolve`) and present indexable audio (`present_audio`) under `MUSIC_LIBRARY_PATH` |
 | `metadata.py` | Tag / audio tech reading (mutagen) |

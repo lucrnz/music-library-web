@@ -26,7 +26,7 @@ pnpm --dir frontend test
 
 Chromium for the Icon smoke is a one-time machine install: `pnpm --dir frontend exec playwright install chromium`.
 
-There is no coverage reporter and no CI gate.
+There is no coverage reporter and no CI gate. The suite is expected to **collect** on Windows (importlib mode; portable data-dir lock). There is no Windows CI job.
 
 ## Layout
 

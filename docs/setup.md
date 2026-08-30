@@ -4,10 +4,12 @@ Operator on-ramp for running Musicweb on your network. For the full command refe
 
 ## Prerequisites
 
+The library server runs on **Windows and macOS** for the core loop (serve, scan, stream, radio HTTP, doctor, live CLI). Exclusive hog and CD playback stay macOS companion features. Support is best-effort; the project is NO WARRANTY.
+
 - **Python 3.11+** and [uv](https://github.com/astral-sh/uv)
 - **Node 20+** and [pnpm](https://pnpm.io/) (SPA lives under `frontend/`)
-- **ffmpeg** and **ffprobe** on `PATH`, ffmpeg built with **libsoxr**, **libopus**, and **flac** (the server and `musicweb doctor` refuse to start if those are missing)
-- A music library root (any folder layout). Packed lossless (FLAC/ALAC) is indexed by default. MP3/AAC in the tree are ignored unless `MUSICWEB_INDEX_LOSSY` is on.
+- **ffmpeg** and **ffprobe** on `PATH`, ffmpeg built with **libsoxr**, **libopus**, and **flac** (the server and `musicweb doctor` refuse to start if those are missing). On Windows use a **full** build (for example gyan “full”), not a slim package that omits libsoxr.
+- A music library root (any folder layout). Packed lossless (FLAC/ALAC) is indexed by default. MP3/AAC in the tree are ignored unless `MUSICWEB_INDEX_LOSSY` is on. On Windows, set `MUSIC_LIBRARY_PATH` to an absolute path (`C:\Music`).
 
 ## Configure
 

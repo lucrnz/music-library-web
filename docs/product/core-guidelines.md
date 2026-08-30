@@ -17,6 +17,8 @@ Musicweb is a **personal LAN library player**: browse and stream your own lossle
 
 Clients are **installed Chromium PWAs** unless noted. Feature availability (for example exclusive hog) can be narrower than the tier.
 
+**Server hosts.** The library server is intended to run on **Windows and macOS** for the core loop (serve, scan, stream, radio HTTP, doctor, live CLI). Support is best-effort; the project is NO WARRANTY. Exclusive hog and CD playback stay Mac companion features.
+
 | Tier | Who | What we do |
 |------|-----|------------|
 | **First-party** | Windows, macOS, Android — any Chromium PWA (Chrome, Brave, Edge, unbranded Chromium) | The focus. Current developer testing is Chromium/Brave. |

@@ -22,7 +22,7 @@ Documented names and defaults live in `.env.example` and `Settings` fields. Conc
 
 | Concern | Variable role |
 |---------|----------------|
-| Media tree root | Required in practice; absolute path preferred |
+| Media tree root | Required in practice; absolute path preferred (Windows example: `C:\Music`) |
 | Index MP3/AAC | Optional; default off. When true, scan indexes marked lossy sources |
 | Data directory | SQLite `library.db` + `covers/` tree (directory path, not a single file path) |
 | Bind address / port | Where the process **listens** (`LISTEN` / `PORT`) — not necessarily the URL clients type |
