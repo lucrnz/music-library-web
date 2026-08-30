@@ -853,3 +853,15 @@ OPFS catalog-used is honest. Installed desktop PWAs store download bytes on comp
 ```bash
 git show d8db748f27fad7222791108c3f4272eebf6ae230
 ```
+
+## 2026-08-26-4lekcz5o-album-meta-length-done
+
+**Title:** Album year, track count, and length
+
+**Commit:** `2dd54a1c8ffa281d277f6ad9b247c3570d08d060`
+
+Album surfaces show year, track count, and persisted duration without fetching tracks; now-playing and radio show the playing year. Open the delete commit for album-duration persist, `formatAlbumMeta`, and the user-facing hyphen pass.
+
+```bash
+git show 2dd54a1c8ffa281d277f6ad9b247c3570d08d060
+```
