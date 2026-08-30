@@ -925,3 +925,15 @@ The installed Mac Chromium PWA CD deck plays a SuperDrive or USB disc: query-sha
 ```bash
 git show 699c7e3fd08aedd902009266b3df8fa3846ba4d0
 ```
+
+## 2026-08-29-xlgrou2x-cd-playback-done
+
+**Title:** CD playback and disc identification
+
+**Commit:** `2cfeaf3cac6d9ee435f4ddf8087c7033f0cc8074`
+
+An installed Mac Desktop PWA plays a Red Book audio CD through the companion as a software deck and identifies via TOC / MusicBrainz plus CD-Text. Open the delete commit for the optical port, virtual WAV, `cd_identities`, and the CD session/identify UI.
+
+```bash
+git show 2cfeaf3cac6d9ee435f4ddf8087c7033f0cc8074
+```
