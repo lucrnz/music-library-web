@@ -697,3 +697,15 @@ Queued lossless downloads ask the server to encode in the background so wait is 
 ```bash
 git show 13dd4872d63f17ee6f04591618f349132d4a29f0
 ```
+
+## 2026-08-22-9r0gwy2z-desktop-radio-rail-done
+
+**Title:** Desktop radio in the now-playing rail
+
+**Commit:** `b2c8b48a4baa941e8bb004ed5e32c90a3149f50b`
+
+Desktop household radio occupies the existing now-playing right rail instead of replacing the library, and the desktop Radio tab goes away. Open the delete commit for rail occupant state, `RadioNowPlaying` room-in-rail, and the Queue radio opener.
+
+```bash
+git show b2c8b48a4baa941e8bb004ed5e32c90a3149f50b
+```
