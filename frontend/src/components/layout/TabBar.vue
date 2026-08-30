@@ -2,7 +2,7 @@
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Icon from "@/components/icons/Icon.vue";
-import { canShowCdUi } from "@/exclusive/capability";
+import { cdEntryAllowed } from "@/stores/cd";
 import { rememberLibraryRoute, ui } from "@/stores/ui";
 const route = useRoute();
     const router = useRouter();
@@ -31,7 +31,7 @@ const route = useRoute();
       router.push({ name: "radio" });
     }
 
-    const showCdTab = computed(() => canShowCdUi());
+    const showCdTab = computed(() => cdEntryAllowed());
 
     function goCd() {
       router.push({ name: "cd" });

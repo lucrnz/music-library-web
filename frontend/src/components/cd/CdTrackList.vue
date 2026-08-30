@@ -2,18 +2,17 @@
 import { computed } from "vue";
 import { coverUrl } from "@/api";
 import { formatTime } from "@/util";
-import { cd, toggleCdSession } from "@/stores/cd";
+import { cd, cdEntryAllowed, toggleCdSession } from "@/stores/cd";
 import { cdLoad } from "@/playback/cdLoad";
 import { player } from "@/stores/playerState";
 import { toggleRadioRail } from "@/stores/playerPrefs";
 import { activeSession } from "@/playback/session";
 import { useDesktopViewport } from "@/layout";
-import { canShowCdUi } from "@/exclusive/capability";
 import Icon from "@/components/icons/Icon.vue";
 import type { Track } from "@/models/track";
 
 const desktop = useDesktopViewport();
-const showChrome = computed(() => desktop.value && canShowCdUi());
+const showChrome = computed(() => desktop.value && cdEntryAllowed());
 const emptyCopy = computed(() =>
   cd.face === "no_disc" ? "No disc" : "Insert a disc",
 );

@@ -206,10 +206,15 @@ hydrate();
 bindOpticalLive(applyOpticalLive);
 bindOpticalHello(syncCdWatch);
 
+export function cdEntryAllowed(): boolean {
+  return canShowCdUi() && cd.enabled && !!cd.selectedDriveId;
+}
+
 export function setCdEnabled(on: boolean): void {
   cd.enabled = !!on;
   persist();
   setOpticalWantsSocket(cd.capable && cd.enabled);
+  if (!cd.enabled && activeSession() === "cd") become("none");
   syncCdWatch();
 }
 
@@ -222,6 +227,7 @@ export function setCdSelectedDriveId(id: string | null): void {
     cd.selectedDriveKey = drive?.key || id;
   }
   persist();
+  if (!cd.selectedDriveId && activeSession() === "cd") become("none");
   syncCdWatch();
 }
 
@@ -259,6 +265,7 @@ export function clearCdCursor(): void {
 }
 
 export function enterCdMode(): void {
+  if (!cdEntryAllowed()) return;
   if (activeSession() === "cd") {
     openCdRail();
     notifyCdEnter();

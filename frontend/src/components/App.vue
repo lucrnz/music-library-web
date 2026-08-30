@@ -6,8 +6,7 @@ import { ui } from "@/stores/ui";
 import { openCdRail, openRadioRail } from "@/stores/playerPrefs";
 import { player } from "@/stores/playerState";
 import { setTabOpen } from "@/stores/radio";
-import { canShowCdUi } from "@/exclusive/capability";
-import { enterCdMode } from "@/stores/cd";
+import { cdEntryAllowed, enterCdMode } from "@/stores/cd";
 import { activeSession } from "@/playback/session";
 import LibraryView from "@/components/library/LibraryView.vue";
 import PlaylistView from "@/components/playlist/PlaylistView.vue";
@@ -36,13 +35,13 @@ const route = useRoute();
     const onCd = computed(() => route.meta.pane === "cd");
     const showRadioPage = computed(() => onRadio.value && !desktop.value);
     const showCdPage = computed(
-      () => onCd.value && !desktop.value && canShowCdUi(),
+      () => onCd.value && !desktop.value && cdEntryAllowed(),
     );
     const showLibraryPanes = computed(
       () => desktop.value || (!onRadio.value && !showCdPage.value),
     );
     const showCdList = computed(
-      () => desktop.value && canShowCdUi() && activeSession() === "cd",
+      () => desktop.value && cdEntryAllowed() && activeSession() === "cd",
     );
     const customLibraryPane = computed(
       () => desktop.value && ui.libraryPaneWidthPx != null,
@@ -70,7 +69,7 @@ const route = useRoute();
     }
 
     function absorbDesktopCd() {
-      if (!canShowCdUi()) {
+      if (!cdEntryAllowed()) {
         void router.replace(lastLibraryLocation());
         return;
       }
@@ -88,10 +87,10 @@ const route = useRoute();
     );
 
     watch(
-      () => onCd.value,
-      (open) => {
+      () => ({ open: onCd.value, allowed: cdEntryAllowed() }),
+      ({ open, allowed }) => {
         if (!open) return;
-        if (!canShowCdUi()) {
+        if (!allowed) {
           void router.replace(lastLibraryLocation());
           return;
         }
@@ -104,7 +103,7 @@ const route = useRoute();
     watch(
       () => desktop.value && player.expanded && player.railFace === "cd",
       (open) => {
-        if (open && canShowCdUi()) enterCdMode();
+        if (open && cdEntryAllowed()) enterCdMode();
       },
     );
 

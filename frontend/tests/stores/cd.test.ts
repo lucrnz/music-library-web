@@ -85,8 +85,16 @@ describe("cd store prefs", () => {
 
   it("second desktop toggle leaves and does not rewrite the playlist", async () => {
     localStorage.setItem("musicweb.playlist.v1", '{"tracks":[{"id":"keep"}]}');
-    const { enterCdMode, leaveCdMode, toggleCdSession } = await import("@/stores/cd");
+    const {
+      enterCdMode,
+      leaveCdMode,
+      toggleCdSession,
+      setCdEnabled,
+      setCdSelectedDriveId,
+    } = await import("@/stores/cd");
     const { activeSession, onLeaveCd } = await import("@/playback/session");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
     onLeaveCd(() => leaveCdMode());
     enterCdMode();
     expect(activeSession()).toBe("cd");
@@ -97,11 +105,88 @@ describe("cd store prefs", () => {
   });
 
   it("re-enter while already cd keeps shuffle", async () => {
-    const { cd, enterCdMode } = await import("@/stores/cd");
+    const { cd, enterCdMode, setCdEnabled, setCdSelectedDriveId } = await import(
+      "@/stores/cd"
+    );
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
     enterCdMode();
     cd.shuffle = true;
     enterCdMode();
     expect(cd.shuffle).toBe(true);
+  });
+
+  it("cdEntryAllowed needs capable, enable, and a stored drive", async () => {
+    const {
+      cd,
+      cdEntryAllowed,
+      setCdEnabled,
+      setCdSelectedDriveId,
+      setCdLive,
+    } = await import("@/stores/cd");
+    expect(cdEntryAllowed()).toBe(false);
+    setCdEnabled(true);
+    expect(cdEntryAllowed()).toBe(false);
+    setCdSelectedDriveId("/dev/rdisk2");
+    expect(cdEntryAllowed()).toBe(true);
+    setCdLive({ drives: [] });
+    expect(cd.selectedDriveId).toBe("/dev/rdisk2");
+    expect(cdEntryAllowed()).toBe(true);
+    setCdEnabled(false);
+    expect(cdEntryAllowed()).toBe(false);
+    expect(cd.selectedDriveId).toBe("/dev/rdisk2");
+  });
+
+  it("disabling while session is cd leaves and keeps the drive", async () => {
+    const {
+      cd,
+      setCdEnabled,
+      setCdSelectedDriveId,
+      enterCdMode,
+      leaveCdMode,
+    } = await import("@/stores/cd");
+    const { activeSession, onLeaveCd } = await import("@/playback/session");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
+    onLeaveCd(() => leaveCdMode());
+    enterCdMode();
+    expect(activeSession()).toBe("cd");
+    setCdEnabled(false);
+    expect(activeSession()).toBe("none");
+    expect(cd.selectedDriveId).toBe("/dev/rdisk2");
+    expect(localStorage.getItem("musicweb.cd.driveId")).toBe("/dev/rdisk2");
+    onLeaveCd(null);
+  });
+
+  it("clearing the drive while session is cd leaves", async () => {
+    const { setCdEnabled, setCdSelectedDriveId, enterCdMode, leaveCdMode } =
+      await import("@/stores/cd");
+    const { activeSession, onLeaveCd } = await import("@/playback/session");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
+    onLeaveCd(() => leaveCdMode());
+    enterCdMode();
+    expect(activeSession()).toBe("cd");
+    setCdSelectedDriveId(null);
+    expect(activeSession()).toBe("none");
+    onLeaveCd(null);
+  });
+
+  it("enterCdMode without enable and drive does not occupy cd", async () => {
+    const { enterCdMode } = await import("@/stores/cd");
+    const { activeSession } = await import("@/playback/session");
+    enterCdMode();
+    expect(activeSession()).toBe("none");
+  });
+
+  it("disabling while session is none stays none", async () => {
+    const { setCdEnabled, setCdSelectedDriveId } = await import("@/stores/cd");
+    const { activeSession } = await import("@/playback/session");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
+    expect(activeSession()).toBe("none");
+    setCdEnabled(false);
+    expect(activeSession()).toBe("none");
   });
 
   it("does not auto-pick a drive", async () => {
@@ -238,8 +323,12 @@ describe("cd live media and watch", () => {
   });
 
   it("data kind is not_audio and does not identify", async () => {
-    const { cd, enterCdMode } = await import("@/stores/cd");
+    const { cd, enterCdMode, setCdEnabled, setCdSelectedDriveId } = await import(
+      "@/stores/cd"
+    );
     const { handleOpticalMessage } = await import("@/exclusive/opticalClient");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
     enterCdMode();
     handleOpticalMessage({
       type: "optical_media",
@@ -292,7 +381,10 @@ describe("cd live media and watch", () => {
   });
 
   it("already-cd enter does not re-identify", async () => {
-    const { cd, enterCdMode, setCdLive } = await import("@/stores/cd");
+    const { cd, enterCdMode, setCdLive, setCdEnabled, setCdSelectedDriveId } =
+      await import("@/stores/cd");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
     enterCdMode();
     setCdLive({
       mediaPresent: true,

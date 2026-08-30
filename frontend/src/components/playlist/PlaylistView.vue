@@ -23,9 +23,8 @@ import {
   stopPlayback,
 } from "@/stores/player";
 import { toggleRadioRail } from "@/stores/playerPrefs";
-import { toggleCdSession } from "@/stores/cd";
+import { cdEntryAllowed, toggleCdSession } from "@/stores/cd";
 import { activeSession } from "@/playback/session";
-import { canShowCdUi } from "@/exclusive/capability";
 import { downloads } from "@/downloads/state";
 import { downloadTracks } from "@/downloads/ui";
 import { confirmDialog, promptDialog } from "@/stores/dialog";
@@ -62,7 +61,7 @@ const route = useRoute();
       }
     }
 
-    const showCdButton = computed(() => canShowCdUi());
+    const showCdButton = computed(() => cdEntryAllowed());
 
     function toggleEdit() {
       pl.editing = !pl.editing;
