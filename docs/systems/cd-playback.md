@@ -4,7 +4,7 @@ Software deck for a Red Book audio CD on an installed Mac Desktop PWA with the D
 
 ## Gating
 
-Only an installed Mac Chromium PWA shows CD chrome and Settings. The companion may connect when CD is enabled (token required). Windows/Linux companions expose an empty optical list and 404 the WAV route so a later Windows reader is not a rewrite. Phones and browser tabs never show CD UI.
+Only an installed Mac Chromium PWA shows CD Settings. The desktop session toggle and the mobile CD tab appear only when Enable CD playback is on **and** a drive is picked; Drive missing does not hide them. Disabling CD, or having no pick, leaves a live CD session. The companion may connect when CD is enabled (token required). Windows/Linux companions expose an empty optical list and 404 the WAV route so a later Windows reader is not a rewrite. Phones and browser tabs never show CD UI.
 
 ## Settings and rematch
 
@@ -24,9 +24,9 @@ A disc with no Red Book audio session is face **Not an audio CD**, not No disc. 
 
 CD is a third occupant (`none` | `queue` | `radio` | `cd`). The on-demand queue is never occupied or stashed. Disc rows live on a CD cursor (`frontend/src/stores/cd.ts`). The disc list is `CdTrackList` (desktop right pane while CD is on; mobile `/cd`). `PlaylistView` is queue-only.
 
-The desktop CD icon is a **session toggle**: first press enters CD and opens the rail; second press leaves (`become("none")`), stops transport, stops watch, and restores the queue pane. Collapse / X only hides the now-playing rail and **keeps** the session. A collapsed desktop session or a Library tab shows `CdMini` (transport + Leave), never queue Play / Next.
+The desktop CD icon is absent until Enable CD playback is on and a drive is picked. Once shown it is a **session toggle**: first press enters CD and opens the rail; second press leaves (`become("none")`), stops transport, stops watch, and restores the queue pane. Collapse / X only hides the now-playing rail and **keeps** the session. A collapsed desktop session or a Library tab shows `CdMini` (transport + Leave), never queue Play / Next.
 
-A narrow window (`<900px`) does not leave. The CD tab opens `/cd` and enters. Switching to Library / Playlist / Radio keeps the session. Shrinking a desktop CD session hands off to `/cd` the way radio hands off to `/radio`. Leave from the CD room and from the mini. Library Play / Play-all and Radio Tune-in still leave. Stop / headset Stop = pause and stay in CD.
+A narrow window (`<900px`) does not leave. The CD tab (same Enable + drive gate) opens `/cd` and enters. `/cd` without that gate replaces to the last library URL. Switching to Library / Playlist / Radio keeps the session. Shrinking a desktop CD session hands off to `/cd` the way radio hands off to `/radio`. Leave from the CD room and from the mini. Library Play / Play-all and Radio Tune-in still leave. Stop / headset Stop = pause and stay in CD.
 
 Re-entering an already-cd session only opens the rail and ensures watch — it does not reset shuffle/repeat or re-identify.
 
