@@ -12,7 +12,7 @@ from musicweb.http_client import RateLimitedHttp, looks_like_image
 
 logger = logging.getLogger(__name__)
 
-MB_DISCID_URL = "https://musicbrainz.org/ws/2/discid/{discid}?inc=artists+recordings+release-groups+labels&fmt=json"
+MB_DISCID_URL = "https://musicbrainz.org/ws/2/discid/{discid}?inc=artists+recordings+release-groups+labels+discids&fmt=json"
 MB_RELEASE_URL = "https://musicbrainz.org/ws/2/release/{mbid}?inc=artists+recordings+labels&fmt=json"
 CAA_FRONT_URL = "https://coverartarchive.org/release/{mbid}/front"
 
@@ -35,6 +35,7 @@ class ReleaseMatch:
     label: str | None
     track_count: int
     tracks: list[MatchTrack] = field(default_factory=list)
+    medium_position: int = 1
 
     def to_picker_dict(self) -> dict[str, Any]:
         return {
@@ -57,8 +58,18 @@ class ReleaseMatch:
         }
 
 
+_shared_http: RateLimitedHttp | None = None
+
+
+def shared_http(user_agent: str) -> RateLimitedHttp:
+    global _shared_http
+    if _shared_http is None:
+        _shared_http = RateLimitedHttp(ARTIST_IMAGE_MIN_INTERVAL_MS, user_agent)
+    return _shared_http
+
+
 def default_http(user_agent: str) -> RateLimitedHttp:
-    return RateLimitedHttp(ARTIST_IMAGE_MIN_INTERVAL_MS, user_agent)
+    return shared_http(user_agent)
 
 
 def _artist_credit(payload: dict) -> str:
@@ -97,11 +108,48 @@ def _label(payload: dict) -> str | None:
     return None
 
 
-def _tracks_from_release(payload: dict, fallback_artist: str) -> list[MatchTrack]:
-    media = payload.get("media") or []
-    if not media or not isinstance(media[0], dict):
-        return []
-    rows = media[0].get("tracks") or []
+def _media_list(payload: dict) -> list[dict]:
+    raw = payload.get("media") or []
+    return [item for item in raw if isinstance(item, dict)]
+
+
+def _medium_track_count(medium: dict) -> int:
+    raw = medium.get("track-count")
+    if isinstance(raw, int):
+        return raw
+    tracks = medium.get("tracks") or []
+    return len(tracks) if isinstance(tracks, list) else 0
+
+
+def _medium_has_discid(medium: dict, discid: str) -> bool:
+    for disc in medium.get("discs") or []:
+        if isinstance(disc, dict) and str(disc.get("id") or "") == discid:
+            return True
+    return False
+
+
+def select_medium(
+    payload: dict,
+    *,
+    discid: str | None = None,
+    audio_count: int | None = None,
+) -> tuple[dict, int]:
+    media = _media_list(payload)
+    if not media:
+        return {}, 1
+    if discid:
+        for index, medium in enumerate(media):
+            if _medium_has_discid(medium, discid):
+                return medium, index + 1
+    if audio_count is not None:
+        for index, medium in enumerate(media):
+            if _medium_track_count(medium) == audio_count:
+                return medium, index + 1
+    return media[0], 1
+
+
+def _tracks_from_medium(medium: dict, fallback_artist: str) -> list[MatchTrack]:
+    rows = medium.get("tracks") or []
     out: list[MatchTrack] = []
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
@@ -129,20 +177,22 @@ def _tracks_from_release(payload: dict, fallback_artist: str) -> list[MatchTrack
     return out
 
 
-def release_from_payload(payload: dict) -> ReleaseMatch | None:
+def release_from_payload(
+    payload: dict,
+    *,
+    discid: str | None = None,
+    audio_count: int | None = None,
+) -> ReleaseMatch | None:
     mbid = str(payload.get("id") or "")
     title = str(payload.get("title") or "").strip()
     if not mbid or not title:
         return None
     artist = _artist_credit(payload)
-    tracks = _tracks_from_release(payload, artist)
-    track_count = len(tracks)
-    if not track_count:
-        media = payload.get("media") or []
-        if media and isinstance(media[0], dict):
-            raw = media[0].get("track-count")
-            if isinstance(raw, int):
-                track_count = raw
+    medium, position = select_medium(
+        payload, discid=discid, audio_count=audio_count
+    )
+    tracks = _tracks_from_medium(medium, artist)
+    track_count = len(tracks) or _medium_track_count(medium)
     return ReleaseMatch(
         release_mbid=mbid,
         title=title,
@@ -152,6 +202,7 @@ def release_from_payload(payload: dict) -> ReleaseMatch | None:
         label=_label(payload),
         track_count=track_count,
         tracks=tracks,
+        medium_position=position,
     )
 
 
@@ -160,6 +211,7 @@ def lookup_discid(
     *,
     user_agent: str | None,
     http: RateLimitedHttp | None = None,
+    audio_count: int | None = None,
 ) -> list[ReleaseMatch]:
     if not user_agent:
         return []
@@ -178,7 +230,9 @@ def lookup_discid(
     for item in payload.get("releases") or []:
         if not isinstance(item, dict):
             continue
-        match = release_from_payload(item)
+        match = release_from_payload(
+            item, discid=discid, audio_count=audio_count
+        )
         if match is not None:
             matches.append(match)
     return matches
@@ -189,6 +243,8 @@ def fetch_release(
     *,
     user_agent: str | None,
     http: RateLimitedHttp | None = None,
+    discid: str | None = None,
+    audio_count: int | None = None,
 ) -> ReleaseMatch | None:
     if not user_agent:
         return None
@@ -203,7 +259,9 @@ def fetch_release(
         return None
     if status != 200 or not isinstance(payload, dict):
         return None
-    return release_from_payload(payload)
+    return release_from_payload(
+        payload, discid=discid, audio_count=audio_count
+    )
 
 
 def fetch_cover(

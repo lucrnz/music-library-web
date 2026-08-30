@@ -111,18 +111,23 @@ def lookup(
     cd_text: dict[str, Any] | None,
     user_agent: str | None,
     http: Any | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Never writes. Returns discid + matches and optional applied snapshot."""
     ident = compute_discid(toc)
-    applied = snapshot_dto(session, ident)
-    if applied is not None:
-        return {
-            "discid": ident,
-            "matches": [],
-            "applied": applied,
-            "cd_text": cd_text,
-        }
-    matches = lookup_discid(ident, user_agent=user_agent, http=http)
+    if not force:
+        applied = snapshot_dto(session, ident)
+        if applied is not None:
+            return {
+                "discid": ident,
+                "matches": [],
+                "applied": applied,
+                "cd_text": cd_text,
+            }
+    expected = toc.last_audio_track - toc.first_track + 1
+    matches = lookup_discid(
+        ident, user_agent=user_agent, http=http, audio_count=expected
+    )
     return {
         "discid": ident,
         "matches": [m.to_picker_dict() for m in matches],
@@ -180,11 +185,17 @@ def _present_count(session: Session, album_id: str) -> int:
     )
 
 
+def _later_medium(match: ReleaseMatch) -> bool:
+    return int(getattr(match, "medium_position", 1) or 1) > 1
+
+
 def _try_bind(
     session: Session, match: ReleaseMatch, toc: TocIn
 ) -> tuple[Album, list[dict[str, Any]]] | None:
     from musicweb.db.names import artist_id_for
 
+    if _later_medium(match):
+        return None
     title_norm = normalize_name(display_name(match.title, match.title))
     artist_id = artist_id_for(normalize_name(display_name(match.artist, match.artist)))
     album_id = album_id_for(artist_id, title_norm)
@@ -295,12 +306,14 @@ def _half_bind(
         )
         for n in range(toc.first_track, toc.last_audio_track + 1)
     ]
+    later = _later_medium(match)
     rows: list[dict[str, Any]] = []
     for spec in specs:
-        present = _present_slot(session, album.id, spec.track_no)
-        if present is not None:
-            rows.append(_track_payload(present, spec, toc))
-            continue
+        if not later:
+            present = _present_slot(session, album.id, spec.track_no)
+            if present is not None:
+                rows.append(_track_payload(present, spec, toc))
+                continue
         stub = _upsert_stub(
             session,
             album=album,
@@ -337,9 +350,21 @@ def confirm(
     http: Any | None = None,
     now: str | None = None,
 ) -> dict[str, Any]:
-    match = fetch_release(release_mbid, user_agent=user_agent, http=http)
+    expected = toc.last_audio_track - toc.first_track + 1
+    match = fetch_release(
+        release_mbid,
+        user_agent=user_agent,
+        http=http,
+        discid=discid,
+        audio_count=expected,
+    )
     if match is None:
-        hits = lookup_discid(discid, user_agent=user_agent, http=http)
+        hits = lookup_discid(
+            discid,
+            user_agent=user_agent,
+            http=http,
+            audio_count=expected,
+        )
         match = next((m for m in hits if m.release_mbid == release_mbid), None)
     if match is None:
         raise ValueError("unknown release")

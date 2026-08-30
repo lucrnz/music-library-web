@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api", tags=["cd"])
 class IdentifyIn(BaseModel):
     toc: dict[str, Any]
     cd_text: dict[str, Any] | None = None
+    force: bool = False
 
 
 class ConfirmIn(BaseModel):
@@ -54,6 +55,7 @@ def post_identify(
         toc=_toc(body.toc),
         cd_text=body.cd_text,
         user_agent=_user_agent(request),
+        force=body.force,
     )
 
 

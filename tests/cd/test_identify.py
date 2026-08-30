@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 
 from musicweb.cd.identify import TocIn, compute_discid, confirm, get_applied, lookup
+from musicweb.cd.musicbrainz import default_http, lookup_discid, shared_http
 from musicweb.db.models import CdIdentity, Track
 from musicweb.db.repositories import tracks as tracks_repo
 from musicweb.scan.identity import ensure_album, ensure_artist
@@ -259,6 +260,137 @@ def test_confirm_half_bind_reuses_present_slot(db):
         assert hole is not None
         assert hole.unripped is True
         assert hole.is_missing is True
+
+
+def _two_media_release(
+    mbid: str,
+    discid_one: str,
+    discid_two: str,
+    *,
+    title: str = "Owned",
+    artist: str = "Owner",
+) -> dict:
+    return {
+        "id": mbid,
+        "title": title,
+        "date": "2000-05-02",
+        "artist-credit": [{"name": artist, "joinphrase": ""}],
+        "media": [
+            {
+                "position": 1,
+                "track-count": 2,
+                "discs": [{"id": discid_one}],
+                "tracks": [
+                    {"number": "1", "title": "D1T1", "length": 100000},
+                    {"number": "2", "title": "D1T2", "length": 100000},
+                ],
+            },
+            {
+                "position": 2,
+                "track-count": 2,
+                "discs": [{"id": discid_two}],
+                "tracks": [
+                    {"number": "1", "title": "D2T1", "length": 100000},
+                    {"number": "2", "title": "D2T2", "length": 100000},
+                ],
+            },
+        ],
+    }
+
+
+def test_lookup_picks_matching_medium(db):
+    disc_two = "second-disc-id"
+    rel = _two_media_release("mb-box", "first-disc-id", disc_two)
+    http = FakeHttp(releases=[rel])
+    matches = lookup_discid(disc_two, user_agent=UA, http=http, audio_count=2)
+    assert len(matches) == 1
+    assert matches[0].medium_position == 2
+    assert [t.title for t in matches[0].tracks] == ["D2T1", "D2T2"]
+
+
+def test_confirm_later_medium_stubs_not_disc1(db):
+    disc_two = DISCID
+    rel = _two_media_release("mb-box", "first-disc-id", disc_two)
+    http = FakeHttp(releases=[rel], release_by_id={"mb-box": rel})
+    with db.session() as session:
+        artist = ensure_artist(session, "Owner")
+        album = ensure_album(session, artist, "Owned", 2000)
+        for n in (1, 2):
+            session.add(
+                Track(
+                    id=f"lib-{n}",
+                    fingerprint=f"sha-{n}",
+                    fingerprint_algo="sha256",
+                    rel_path=f"{n}.flac",
+                    title=f"Lib {n}",
+                    artist_name="Owner",
+                    album_artist_name="Owner",
+                    artist_id=artist.id,
+                    album_id=album.id,
+                    album_artist_id=artist.id,
+                    track_no=n,
+                    disc_no=1,
+                    size_bytes=1,
+                    mtime_ns=1,
+                    is_missing=False,
+                    added_at="t",
+                    indexed_at="t",
+                )
+            )
+        session.flush()
+        dto = confirm(
+            session,
+            discid=disc_two,
+            release_mbid="mb-box",
+            toc=TOC,
+            user_agent=UA,
+            cover_store=FakeCover(),
+            http=http,
+        )
+        session.commit()
+        ids = {t["id"] for t in dto["tracks"]}
+        assert ids.isdisjoint({"lib-1", "lib-2"})
+        assert [t["title"] for t in dto["tracks"]] == ["D2T1", "D2T2"]
+        stubs = [session.get(Track, t["id"]) for t in dto["tracks"]]
+        assert all(s is not None and s.unripped for s in stubs)
+
+
+def test_force_lookup_skips_snapshot(db):
+    rel = _release("mb-force")
+    http = FakeHttp(releases=[rel], release_by_id={"mb-force": rel})
+    with db.session() as session:
+        confirm(
+            session,
+            discid=DISCID,
+            release_mbid="mb-force",
+            toc=TOC,
+            user_agent=UA,
+            cover_store=FakeCover(),
+            http=http,
+        )
+        session.commit()
+        remembered = lookup(session, toc=TOC, cd_text=None, user_agent=UA, http=http)
+        assert remembered["applied"] is not None
+        assert remembered["matches"] == []
+        forced = lookup(
+            session, toc=TOC, cd_text=None, user_agent=UA, http=http, force=True
+        )
+        assert forced["applied"] is None
+        assert len(forced["matches"]) == 1
+
+
+def test_shared_mb_client_reused_and_throttled():
+    import time
+
+    from musicweb.http_client import RateLimitedHttp
+
+    assert default_http("ua-a") is shared_http("ua-a")
+    assert default_http("ua-b") is default_http("ua-a")
+    client = RateLimitedHttp(40, "ua")
+    client._last_at = time.monotonic()
+    start = time.monotonic()
+    client._throttle()
+    assert time.monotonic() - start >= 0.03
 
 
 def test_confirm_does_not_overwrite_cover(db):

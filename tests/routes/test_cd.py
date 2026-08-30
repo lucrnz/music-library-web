@@ -62,6 +62,29 @@ def test_get_unknown_404(db):
         assert exc.value.status_code == 404
 
 
+def test_identify_route_passes_force(db, monkeypatch):
+    seen: dict[str, object] = {}
+
+    def _lookup(*_a, **kwargs):
+        seen.update(kwargs)
+        return {
+            "discid": "x",
+            "matches": [{"release_mbid": "r1"}],
+            "applied": None,
+            "cd_text": None,
+        }
+
+    monkeypatch.setattr("musicweb.routes.cd.lookup", _lookup)
+    with db.session() as session:
+        out = post_identify(
+            IdentifyIn(toc=TOC.__dict__, cd_text=None, force=True),
+            _request(),
+            db=session,
+        )
+        assert out["matches"][0]["release_mbid"] == "r1"
+        assert seen.get("force") is True
+
+
 def test_confirm_route_returns_dto(db, monkeypatch):
     dto = {
         "discid": "d1",
