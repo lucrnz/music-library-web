@@ -100,38 +100,62 @@ def is_macos() -> bool:
 
 def list_output_devices() -> list[AudioDevice]:
     """Enumerate output devices with rate/depth caps ∩ allowlist."""
-    if not is_macos():
-        _log_stub("Core Audio device list")
-        return []
-    try:
-        return _list_devices_coreaudio()
-    except Exception as exc:
-        logger.exception("Core Audio probe failed: %s", exc)
-        return _list_devices_mpv_fallback()
+    if is_macos():
+        try:
+            return _list_devices_coreaudio()
+        except Exception as exc:
+            logger.exception("Core Audio probe failed: %s", exc)
+            return _list_devices_mpv_fallback()
+    if sys.platform == "win32":
+        from musicweb.exclusive.wasapi import list_wasapi_devices
+
+        try:
+            return list_wasapi_devices()
+        except Exception as exc:
+            logger.exception("WASAPI probe failed: %s", exc)
+            return []
+    _log_stub("Core Audio device list")
+    return []
 
 
 def set_device_volume(device_id: str, volume_0_100: float) -> bool:
     """Best-effort hardware volume. Returns True if applied."""
-    if not is_macos():
-        _log_stub("Core Audio set volume")
-        return False
-    try:
-        return _set_hardware_volume(device_id, volume_0_100)
-    except Exception as exc:
-        logger.debug("hardware volume failed: %s", exc)
-        return False
+    if is_macos():
+        try:
+            return _set_hardware_volume(device_id, volume_0_100)
+        except Exception as exc:
+            logger.debug("hardware volume failed: %s", exc)
+            return False
+    if sys.platform == "win32":
+        from musicweb.exclusive.wasapi import set_wasapi_volume
+
+        try:
+            return set_wasapi_volume(device_id, volume_0_100)
+        except Exception as exc:
+            logger.debug("WASAPI volume failed: %s", exc)
+            return False
+    _log_stub("Core Audio set volume")
+    return False
 
 
 def get_device_volume(device_id: str) -> float | None:
     """Best-effort hardware volume 0–100. None if unreadable."""
-    if not is_macos():
-        _log_stub("Core Audio get volume")
-        return None
-    try:
-        return _get_hardware_volume(device_id)
-    except Exception as exc:
-        logger.debug("hardware volume read failed: %s", exc)
-        return None
+    if is_macos():
+        try:
+            return _get_hardware_volume(device_id)
+        except Exception as exc:
+            logger.debug("hardware volume read failed: %s", exc)
+            return None
+    if sys.platform == "win32":
+        from musicweb.exclusive.wasapi import get_wasapi_volume
+
+        try:
+            return get_wasapi_volume(device_id)
+        except Exception as exc:
+            logger.debug("WASAPI volume read failed: %s", exc)
+            return None
+    _log_stub("Core Audio get volume")
+    return None
 
 
 def coreaudio_device_key(device_id: str) -> str:

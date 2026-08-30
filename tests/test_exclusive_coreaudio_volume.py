@@ -241,6 +241,7 @@ def test_wrappers_non_mac(monkeypatch):
     monkeypatch.setattr(
         "musicweb.exclusive.coreaudio.is_macos", lambda: False
     )
+    monkeypatch.setattr("musicweb.exclusive.coreaudio.sys.platform", "linux")
     assert set_device_volume("coreaudio/x", 80) is False
     assert get_device_volume("coreaudio/x") is None
 
