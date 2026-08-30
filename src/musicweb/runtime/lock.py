@@ -1,10 +1,15 @@
-"""Exclusive data-dir flock for single local writer (serve or offline CLI)."""
+"""Exclusive data-dir lock for single local writer (serve or offline CLI)."""
 
 from __future__ import annotations
 
-import fcntl
+import sys
 from pathlib import Path
 from types import TracebackType
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 
 class DataDirLockError(RuntimeError):
@@ -15,29 +20,57 @@ def lock_path(data_dir: Path) -> Path:
     return Path(data_dir) / "musicweb.lock"
 
 
+def _open_lock_file(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = open(path, "a+b")
+    try:
+        if path.stat().st_size == 0:
+            fd.write(b"\n")
+            fd.flush()
+        fd.seek(0)
+    except Exception:
+        fd.close()
+        raise
+    return fd
+
+
+def _lock_ex_nb(fd) -> None:
+    if sys.platform == "win32":
+        msvcrt.locking(fd.fileno(), msvcrt.LK_NBLCK, 1)
+        return
+    fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock(fd) -> None:
+    if sys.platform == "win32":
+        fd.seek(0)
+        msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+
+
 def is_data_dir_locked(data_dir: Path) -> bool:
     """
-    True if another process holds exclusive flock on the data-dir lock file.
+    True if another process holds the exclusive data-dir lock.
 
-    Probes with LOCK_EX|LOCK_NB and releases immediately if acquired.
-    Brief race window is acceptable for migrate/doctor checks only.
+    Probes with a non-blocking exclusive lock and releases immediately if
+    acquired. Brief race window is acceptable for migrate/doctor checks only.
     """
     path = lock_path(data_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = open(path, "a+", encoding="utf-8")
+    fd = _open_lock_file(path)
     try:
         try:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            _lock_ex_nb(fd)
+        except (BlockingIOError, OSError):
             return True
-        fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+        _unlock(fd)
         return False
     finally:
         fd.close()
 
 
 class DataDirLock:
-    """Hold an exclusive non-blocking flock for the process lifetime of a write path."""
+    """Hold an exclusive non-blocking lock for the process lifetime of a write path."""
 
     def __init__(self, data_dir: Path) -> None:
         self._path = lock_path(data_dir)
@@ -50,11 +83,10 @@ class DataDirLock:
     def acquire(self) -> None:
         if self._fd is not None:
             return
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        fd = open(self._path, "a+", encoding="utf-8")
+        fd = _open_lock_file(self._path)
         try:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            _lock_ex_nb(fd)
+        except (BlockingIOError, OSError):
             fd.close()
             raise DataDirLockError(
                 f"Another musicweb process holds the data directory lock "
@@ -67,7 +99,7 @@ class DataDirLock:
         if fd is None:
             return
         try:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+            _unlock(fd)
         finally:
             fd.close()
             self._fd = None
