@@ -10,13 +10,15 @@ import type { ExclusiveFaceSnapshot } from "@/exclusive/statusFace";
 function lossyTrack(
   overrides: Partial<NonNullable<PlayStatusState["track"]>> = {},
 ): NonNullable<PlayStatusState["track"]> {
+  const { bitDepth = null, ...rest } = overrides;
   return {
     isLossy: true,
     sourceCodec: "mp3",
     bitrateKbps: 320,
     sampleRateHz: 44100,
     bitrateMode: "vbr",
-    ...overrides,
+    bitDepth,
+    ...rest,
   };
 }
 
@@ -94,6 +96,7 @@ describe("buildPlaybackDetailsRows lossy", () => {
         bitrateKbps: null,
         sampleRateHz: 44100,
         bitrateMode: "vbr",
+        bitDepth: 16,
       },
     }, [
       {
@@ -154,6 +157,7 @@ describe("buildPlaybackDetailsRows lossy", () => {
           bitrateKbps: null,
           sampleRateHz: 96000,
           bitrateMode: null,
+          bitDepth: 24,
         },
       },
       [],
@@ -252,6 +256,7 @@ describe("formatPrimaryStatus", () => {
           bitrateKbps: null,
           sampleRateHz: 96000,
           bitrateMode: null,
+          bitDepth: 24,
         },
       },
       [],
@@ -293,6 +298,7 @@ describe("formatPrimaryStatus", () => {
         bitrateKbps: null,
         sampleRateHz: 44100,
         bitrateMode: null,
+        bitDepth: 16,
       },
     };
     const face = formatPrimaryStatus(state, catalog);
