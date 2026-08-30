@@ -1,4 +1,4 @@
-"""Private Unix control plane (JSON frames over UDS)."""
+"""Private control plane (JSON frames over UDS or loopback TCP)."""
 
 from musicweb.control.client import ControlClient
 from musicweb.control.server import ControlServer

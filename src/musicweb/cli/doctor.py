@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 
 from musicweb.config import load_settings
+from musicweb.control.client import ControlClient
+from musicweb.control.endpoint import socket_path, tcp_endpoint_path
 from musicweb.pwa_shell import frontend_dist_dir
 from musicweb.runtime.bootstrap import bootstrap_services
 from musicweb.runtime.lock import is_data_dir_locked
@@ -39,6 +41,20 @@ def doctor() -> None:
     print(
         f"INFO data-dir lock: {'held (server or writer likely running)' if locked else 'free'}"
     )
+
+    sock = socket_path(settings.musicweb_data_dir)
+    control = tcp_endpoint_path(settings.musicweb_data_dir)
+    present: list[str] = []
+    if sock.is_file():
+        present.append("sock")
+    if control.is_file():
+        present.append("tcp")
+    if not present:
+        print("INFO control endpoint: absent")
+    else:
+        healthy = ControlClient(settings.musicweb_data_dir).health()
+        state = "healthy" if healthy else "not healthy"
+        print(f"INFO control endpoint: {', '.join(present)} present; {state}")
 
     try:
         report = check_dependencies()

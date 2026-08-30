@@ -1,14 +1,21 @@
-"""Unix domain control server (health + library job + radio debug RPC)."""
+"""Control server (health + library job + radio debug RPC)."""
 
 from __future__ import annotations
 
 import logging
 import socket
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from musicweb.control.endpoint import (
+    default_transport,
+    socket_path,
+    tcp_endpoint_path,
+    write_tcp_endpoint,
+)
 from musicweb.control.protocol import (
     ControlRequest,
     ControlResponse,
@@ -28,16 +35,31 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
-def socket_path(data_dir: Path) -> Path:
-    return Path(data_dir) / "musicweb.sock"
+__all__ = ["ControlServer", "socket_path"]
 
 
 class ControlServer:
-    """Background UDS accept loop; dispatches to LibraryJobRunner and radio."""
+    """Background accept loop; dispatches to LibraryJobRunner and radio."""
 
-    def __init__(self, data_dir: Path, jobs: LibraryJobRunner) -> None:
-        self._path = socket_path(data_dir)
+    def __init__(
+        self,
+        data_dir: Path,
+        jobs: LibraryJobRunner,
+        *,
+        transport: str = "auto",
+    ) -> None:
+        resolved = default_transport() if transport == "auto" else transport
+        if resolved not in ("uds", "tcp"):
+            raise ValueError(f"invalid control transport: {transport}")
+        if resolved == "uds" and sys.platform == "win32":
+            raise RuntimeError("Unix control sockets are not available on Windows")
+        self._transport = resolved
+        self._data_dir = Path(data_dir)
+        self._path = (
+            socket_path(self._data_dir)
+            if resolved == "uds"
+            else tcp_endpoint_path(self._data_dir)
+        )
         self._jobs = jobs
         self._sock: socket.socket | None = None
         self._thread: threading.Thread | None = None
@@ -64,12 +86,18 @@ class ControlServer:
                 self._path.unlink()
             except OSError:
                 pass
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.bind(str(self._path))
-        try:
-            self._path.chmod(0o600)
-        except OSError:
-            pass
+        if self._transport == "tcp":
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(("127.0.0.1", 0))
+            host, port = sock.getsockname()[:2]
+            write_tcp_endpoint(self._path, host, port)
+        else:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.bind(str(self._path))
+            try:
+                self._path.chmod(0o600)
+            except OSError:
+                pass
         sock.listen(8)
         sock.settimeout(0.5)
         self._sock = sock
@@ -78,7 +106,7 @@ class ControlServer:
             target=self._serve_loop, name="musicweb-control", daemon=True
         )
         self._thread.start()
-        logger.info("Control socket listening at %s", self._path)
+        logger.info("Control listening (%s) at %s", self._transport, self._path)
 
     def stop(self) -> None:
         self._stop.set()
