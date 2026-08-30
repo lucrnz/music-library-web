@@ -3,15 +3,17 @@
  */
 import { showToast } from "@/stores/ui";
 import { watch } from "vue";
-import { cd, enterCdMode } from "@/stores/cd";
+import { coverUrl } from "@/api";
+import { cd, enterCdMode, refreshCdFace } from "@/stores/cd";
 import { exclusiveAudio, isExclusiveArmed, isExclusiveEnabled } from "@/stores/exclusiveAudio";
+import { subscribeOutputVolume } from "@/stores/playerPrefs";
 import { bindCdRuntime } from "@/cd/runtime";
 import { player, setPlayNotice, setPlaySourceState } from "@/stores/playerState";
 import { activeSession } from "@/playback/session";
 import { cdTrackUrl } from "@/playback/cdDelivery";
 import { createCompanionSink } from "@/playback/sinks/companionSink";
 import { PlayBlockError } from "@/playBlock";
-import { ejectOptical } from "@/exclusive/opticalClient";
+import { ejectOptical, watchOptical } from "@/exclusive/opticalClient";
 import { discard, onEnded, onTime, startCycle } from "@/listens/bridge";
 import { isUnknownCdId } from "@/cd/identify";
 
@@ -33,10 +35,14 @@ function bindHandlers(): void {
         if (cd.face === "reading") cd.face = "playing";
       }
       onTime({ currentTime: t, duration: d > 0 ? d : null, playing: !player.paused });
+      updateCdPositionState();
     },
     onPauseState(paused) {
       if (activeSession() !== "cd") return;
       player.paused = paused;
+      if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
+        navigator.mediaSession.playbackState = paused ? "paused" : "playing";
+      }
     },
     onEnded() {
       if (activeSession() !== "cd") return;
@@ -46,7 +52,12 @@ function bindHandlers(): void {
     onError(err) {
       setPlayNotice(err.message);
       showToast(err.message);
-      cd.face = "idle";
+      cdStopTransport();
+      if (cd.enabled && cd.selectedDriveId && activeSession() === "cd") {
+        watchOptical(false);
+        watchOptical(true, cd.selectedDriveId);
+      }
+      refreshCdFace();
     },
   });
 }
@@ -79,8 +90,10 @@ export async function cdLoad(index: number): Promise<void> {
   try {
     discard();
     await sink.load(url, { hog: hogFlag() });
+    sink.setVolume(player.volume);
     loadedIndex = index;
     loadedUrl = url;
+    writeCdMediaSession();
     if (!isUnknownCdId(track.id)) {
       startCycle({
         trackId: track.id,
@@ -185,7 +198,11 @@ export async function reloadCdAtPosition(): Promise<void> {
   const wasPaused = player.paused;
   try {
     await sink.load(loadedUrl, { hog: hogFlag() });
-    if (pos > 0) cdSeek(pos);
+    sink.setVolume(player.volume);
+    if (pos > 0) {
+      await waitForSinkDuration();
+      if (sink.duration > 0) cdSeek(pos);
+    }
     if (wasPaused) cdPause();
   } catch (err) {
     const block = err instanceof PlayBlockError ? err : new PlayBlockError("exclusive_failed");
@@ -193,8 +210,67 @@ export async function reloadCdAtPosition(): Promise<void> {
   }
 }
 
+function waitForSinkDuration(): Promise<void> {
+  if (sink.duration > 0) return Promise.resolve();
+  const wait = sink.waitForDuration?.() ?? Promise.resolve();
+  return Promise.race([
+    wait,
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 3000);
+    }),
+  ]);
+}
+
+export function startCdListenIfLoaded(row: {
+  id: string;
+  duration: number | null;
+}): void {
+  if (loadedIndex < 0 || loadedIndex !== cd.index) return;
+  if (isUnknownCdId(row.id)) return;
+  discard();
+  startCycle({
+    trackId: row.id,
+    durationSec: row.duration,
+    profile: "cdda",
+    playSource: "cd",
+    origin: "cd",
+  });
+}
+
+function writeCdMediaSession(): void {
+  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+  if (activeSession() !== "cd") return;
+  const track = cd.index >= 0 ? cd.tracks[cd.index] : null;
+  const artwork = track?.albumId
+    ? coverUrl(track, "full", false)
+    : "/static/img/audio-cd.svg";
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: track?.title || "Audio CD",
+    artist: track?.artist || "",
+    album: track?.album || "Audio CD",
+    artwork: [{ src: artwork, sizes: "512x512", type: "image/png" }],
+  });
+  navigator.mediaSession.playbackState = player.paused ? "paused" : "playing";
+}
+
+function updateCdPositionState(): void {
+  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+  if (activeSession() !== "cd") return;
+  if (!(player.duration > 0)) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: player.duration,
+      position: Math.min(player.currentTime, player.duration),
+      playbackRate: 1,
+    });
+  } catch {
+    /* ignore engines that reject position */
+  }
+}
+
 export function installCdMediaSession(): void {
   if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+  writeCdMediaSession();
   navigator.mediaSession.setActionHandler("play", () => {
     cdResume();
   });
@@ -217,6 +293,9 @@ export function installCdMediaSession(): void {
 
 export function initCdListeners(): void {
   bindCdRuntime(installCdMediaSession, cdStopTransport);
+  subscribeOutputVolume((v) => {
+    if (activeSession() === "cd") sink.setVolume(v);
+  });
   watch(
     () => [
       exclusiveAudio.enabled,
@@ -225,6 +304,19 @@ export function initCdListeners(): void {
     ],
     () => {
       if (activeSession() === "cd") void reloadCdAtPosition();
+    },
+  );
+  watch(
+    () => exclusiveAudio.connection,
+    () => {
+      if (activeSession() !== "cd") return;
+      if (
+        exclusiveAudio.connection === "disconnected" ||
+        exclusiveAudio.connection === "rejected"
+      ) {
+        cdStopTransport();
+        refreshCdFace();
+      }
     },
   );
 }

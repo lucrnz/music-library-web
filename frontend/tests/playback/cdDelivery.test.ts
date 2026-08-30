@@ -9,7 +9,8 @@ describe("cdTrackUrl", () => {
     expect(url.protocol).toBe("http:");
     expect(url.hostname).toBe("127.0.0.1");
     expect(url.port).toBe("18765");
-    expect(url.pathname).toBe("/cdda/%2Fdev%2Frdisk2/3");
+    expect(url.pathname).toBe("/cdda/3");
+    expect(url.searchParams.get("device")).toBe("/dev/rdisk2");
     expect(url.searchParams.get("token")).toBe("tok");
   });
 

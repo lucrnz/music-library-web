@@ -35,7 +35,12 @@ export interface PlayStatusState {
   cdFace?: CdRoomFace | null;
   track?: Pick<
     Track,
-    "isLossy" | "sourceCodec" | "bitrateKbps" | "sampleRateHz" | "bitrateMode"
+    | "isLossy"
+    | "sourceCodec"
+    | "bitrateKbps"
+    | "sampleRateHz"
+    | "bitrateMode"
+    | "bitDepth"
   > | null;
 }
 
@@ -122,7 +127,7 @@ function exclusiveSessionOn(
 ): boolean {
   return (
     !!exclusiveSnap?.enabled &&
-    (session === "queue" || session === "radio")
+    (session === "queue" || session === "radio" || session === "cd")
   );
 }
 
@@ -148,6 +153,7 @@ export function formatPrimaryStatus(
       reading: "Reading",
       playing: "Playing",
       pick: "Pick a release",
+      not_audio: "Not an audio CD",
     };
     const label = face && face in labels ? labels[face] : "Audio CD";
     return { interactive: true, text: label, icon: "cd" };
@@ -254,6 +260,10 @@ function exclusiveDetailRows(
     appendLossySourceRows(rows, state.track);
     return rows;
   }
+  if (state.playProfileId === "cdda") {
+    appendCddaRows(rows, state.track);
+    return rows;
+  }
   if (state.playProfileId) {
     const meta = resolveAnyProfile(
       state.playProfileId,
@@ -286,6 +296,27 @@ function exclusiveDetailRows(
     }
   }
   return rows;
+}
+
+function appendCddaRows(
+  rows: PlaybackDetailRow[],
+  track: PlayStatusState["track"],
+): void {
+  rows.push({ key: "source", label: "Source", value: "CD" });
+  const depth = Number(track?.bitDepth) || 16;
+  rows.push({
+    key: "bit_depth",
+    label: "Bit depth",
+    value: `${depth}-bit`,
+  });
+  const rate = formatSampleRate(track?.sampleRateHz || 44100);
+  if (rate) {
+    rows.push({
+      key: "sample_rate",
+      label: "Sample rate",
+      value: rate,
+    });
+  }
 }
 
 function appendLossySourceRows(
@@ -372,6 +403,24 @@ export function buildPlaybackDetailsRows(
 
   if (state.track?.isLossy) {
     appendLossySourceRows(rows, state.track);
+    return rows;
+  }
+
+  if (state.playProfileId === "cdda") {
+    const depth = Number(state.track?.bitDepth) || 16;
+    rows.push({
+      key: "bit_depth",
+      label: "Bit depth",
+      value: `${depth}-bit`,
+    });
+    const rate = formatSampleRate(state.track?.sampleRateHz || 44100);
+    if (rate) {
+      rows.push({
+        key: "sample_rate",
+        label: "Sample rate",
+        value: rate,
+      });
+    }
     return rows;
   }
 

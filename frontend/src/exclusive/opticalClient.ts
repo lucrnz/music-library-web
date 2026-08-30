@@ -16,6 +16,7 @@ import {
 export interface OpticalDriveLive {
   id: string;
   name: string;
+  key: string;
 }
 
 export interface OpticalTocLive {
@@ -31,9 +32,12 @@ export interface OpticalCdTextLive {
   tracks: string[];
 }
 
+export type OpticalMediaKind = "audio" | "none" | "data";
+
 export interface OpticalLivePatch {
   drives?: OpticalDriveLive[];
   mediaPresent?: boolean;
+  mediaKind?: OpticalMediaKind;
   toc?: OpticalTocLive | null;
   cdText?: OpticalCdTextLive | null;
   lastError?: string | null;
@@ -41,9 +45,11 @@ export interface OpticalLivePatch {
 
 type SendFn = (msg: Record<string, unknown>) => boolean;
 type LiveFn = (partial: OpticalLivePatch) => void;
+type HelloFn = () => void;
 
 let sendFn: SendFn | null = null;
 let applyLive: LiveFn | null = null;
+let onHelloExtra: HelloFn | null = null;
 let wantsSocket = false;
 
 export function bindOpticalSend(fn: SendFn): void {
@@ -52,6 +58,10 @@ export function bindOpticalSend(fn: SendFn): void {
 
 export function bindOpticalLive(fn: LiveFn): void {
   applyLive = fn;
+}
+
+export function bindOpticalHello(fn: HelloFn): void {
+  onHelloExtra = fn;
 }
 
 export function setOpticalWantsSocket(on: boolean): void {
@@ -67,6 +77,7 @@ export function handleOpticalMessage(msg: {
   drives?: unknown;
   device_id?: unknown;
   present?: unknown;
+  kind?: unknown;
   toc?: unknown;
   cd_text?: unknown;
   message?: string;
@@ -76,9 +87,9 @@ export function handleOpticalMessage(msg: {
   if (type === MSG_OPTICAL_DRIVES) {
     const list = Array.isArray(msg.drives) ? msg.drives : [];
     const drives: OpticalDriveLive[] = list.map((raw) => {
-      const rec = raw as { id?: string; name?: string };
+      const rec = raw as { id?: string; name?: string; key?: string };
       const id = String(rec.id || "");
-      return { id, name: rec.name || id };
+      return { id, name: rec.name || id, key: String(rec.key || id) };
     }).filter((d) => d.id);
     applyLive?.({ drives, lastError: null });
     return true;
@@ -86,8 +97,10 @@ export function handleOpticalMessage(msg: {
   if (type === MSG_OPTICAL_MEDIA) {
     const toc = parseToc(msg.toc);
     const cdText = parseCdText(msg.cd_text);
+    const present = !!msg.present;
     applyLive?.({
-      mediaPresent: !!msg.present,
+      mediaPresent: present,
+      mediaKind: parseKind(msg.kind, present, toc),
       toc,
       cdText,
     });
@@ -121,6 +134,18 @@ export function ejectOptical(deviceId: string): boolean {
 
 export function onCompanionHello(): void {
   if (opticalWantsSocket()) requestListOpticalDrives();
+  onHelloExtra?.();
+}
+
+function parseKind(
+  raw: unknown,
+  present: boolean,
+  toc: OpticalTocLive | null,
+): OpticalMediaKind {
+  if (raw === "audio" || raw === "none" || raw === "data") return raw;
+  if (present && toc) return "audio";
+  if (present) return "data";
+  return "none";
 }
 
 function parseToc(raw: unknown): OpticalTocLive | null {

@@ -18,7 +18,9 @@ import type { NowPlayingFullExpose } from "@/components/player/NowPlayingFull.vu
 import RadioMini from "@/components/radio/RadioMini.vue";
 import RadioNowPlaying from "@/components/radio/RadioNowPlaying.vue";
 import CdNowPlaying from "@/components/cd/CdNowPlaying.vue";
+import CdMini from "@/components/cd/CdMini.vue";
 import { radioChromeActive } from "@/stores/radio";
+import { activeSession } from "@/playback/session";
 import { formatPlayingSubtitle } from "@/util";
 
 const root = ref<HTMLElement | null>(null);
@@ -33,7 +35,9 @@ const root = ref<HTMLElement | null>(null);
 
     const route = useRoute();
     const onRadio = computed(() => route.meta.pane === "radio");
+    const onCd = computed(() => route.meta.pane === "cd");
     const radioOn = computed(() => radioChromeActive());
+    const cdOn = computed(() => activeSession() === "cd");
     const desktopRadioRail = computed(
       () =>
         desktopViewport.value &&
@@ -53,11 +57,21 @@ const root = ref<HTMLElement | null>(null);
         player.railFace === "queue",
     );
     const visible = computed(() => {
+      if (cdOn.value) {
+        if (onCd.value && !desktopViewport.value) return false;
+        return true;
+      }
       if (desktopRadioRail.value || desktopCdRail.value) return true;
       if (onRadio.value && !desktopViewport.value) return false;
-      if (route.meta.pane === "cd" && !desktopViewport.value) return false;
+      if (onCd.value && !desktopViewport.value) return false;
       return radioOn.value || Boolean(pl.current) || pl.length > 0;
     });
+    const showCdMini = computed(
+      () =>
+        cdOn.value &&
+        !desktopCdRail.value &&
+        !(onCd.value && !desktopViewport.value),
+    );
     const track = computed(() => pl.current);
     const title = computed(() => (track.value ? track.value.title : "—"));
     const lossyKind = computed(() => kindForTrack(track.value));
@@ -151,8 +165,9 @@ const root = ref<HTMLElement | null>(null);
       <div v-if="player.playNotice" class="player-notice" role="status">
         {{ player.playNotice }}
       </div>
-      <RadioMini v-if="radioOn && !desktopViewport" />
-      <div v-else-if="!radioOn" class="player-mini">
+      <CdMini v-if="showCdMini" />
+      <RadioMini v-else-if="radioOn && !desktopViewport" />
+      <div v-else-if="!radioOn && !cdOn" class="player-mini">
         <img class="mini-cover" :src="coverThumb" alt="" />
         <button
           type="button"
@@ -205,7 +220,7 @@ const root = ref<HTMLElement | null>(null);
         layout="bar"
       />
       <NowPlayingFull
-        v-else-if="desktopQueueRail || !radioOn"
+        v-else-if="!cdOn && (desktopQueueRail || !radioOn)"
         ref="fullRef"
         :title="title"
         :subtitle="subtitle"

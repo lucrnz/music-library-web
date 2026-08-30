@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { downloadAllOutcome } from "@/components/library/artistMenuItems";
 import { artistArtOverlays, menuHasPreferred } from "@/artistArt/state";
 import { buildArtistMenuItems } from "@/components/library/artistMenuItems";
+import { become } from "@/playback/session";
 import type { Artist } from "@/models/artist";
 
 function artist(partial: Partial<Artist> = {}): Artist {
@@ -88,5 +89,18 @@ describe("buildArtistMenuItems", () => {
       playAll: () => {},
     });
     expect(items.map((i) => i.id)).toEqual(["add-all", "play-all"]);
+  });
+
+  it("omits add all while session is cd", () => {
+    become("cd");
+    const items = buildArtistMenuItems({
+      artist: artist(),
+      includePhoto: false,
+      addAll: () => {},
+      playAll: () => {},
+    });
+    expect(items.map((i) => i.id)).not.toContain("add-all");
+    expect(items.map((i) => i.id)).toContain("play-all");
+    become("none");
   });
 });

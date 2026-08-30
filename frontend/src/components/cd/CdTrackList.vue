@@ -2,10 +2,11 @@
 import { computed } from "vue";
 import { coverUrl } from "@/api";
 import { formatTime } from "@/util";
-import { cd, enterCdMode } from "@/stores/cd";
+import { cd, toggleCdSession } from "@/stores/cd";
 import { cdLoad } from "@/playback/cdLoad";
 import { player } from "@/stores/playerState";
-import { toggleCdRail, toggleRadioRail } from "@/stores/playerPrefs";
+import { toggleRadioRail } from "@/stores/playerPrefs";
+import { activeSession } from "@/playback/session";
 import { useDesktopViewport } from "@/layout";
 import { canShowCdUi } from "@/exclusive/capability";
 import Icon from "@/components/icons/Icon.vue";
@@ -17,19 +18,12 @@ const emptyCopy = computed(() =>
   cd.face === "no_disc" ? "No disc" : "Insert a disc",
 );
 
-function onCdButton() {
-  if (player.expanded && player.railFace === "cd") {
-    toggleCdRail();
-    return;
-  }
-  enterCdMode();
-}
-
 function onRowClick(index: number) {
   void cdLoad(index);
 }
 
 function trackCover(track: Track) {
+  if (!track.albumId) return "/static/img/audio-cd.svg";
   return coverUrl(track, "thumb", false);
 }
 
@@ -56,8 +50,8 @@ function trackSub(track: Track) {
           class="icon-btn"
           title="CD"
           aria-label="CD"
-          :aria-pressed="player.expanded && player.railFace === 'cd' ? 'true' : 'false'"
-          @click="onCdButton"
+          :aria-pressed="activeSession() === 'cd' ? 'true' : 'false'"
+          @click="toggleCdSession"
         ><Icon name="cd" /></button>
       </div>
     </div>

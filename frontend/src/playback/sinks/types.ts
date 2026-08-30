@@ -26,6 +26,7 @@ export interface PlaybackSink {
   stop: () => void;
   seek: (seconds: number) => void;
   setVolume: (v0to1: number) => void;
+  waitForDuration?: () => Promise<void>;
   paused: boolean;
   currentTime: number;
   duration: number;

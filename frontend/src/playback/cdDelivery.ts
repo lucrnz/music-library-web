@@ -9,8 +9,8 @@ export function cdTrackUrl(
   if (!port || !token.trim() || !deviceId || !trackNo) {
     throw new PlayBlockError("cd_not_ready");
   }
-  const path = `/cdda/${encodeURIComponent(deviceId)}/${trackNo}`;
-  const url = new URL(path, `http://127.0.0.1:${port}`);
+  const url = new URL(`/cdda/${trackNo}`, `http://127.0.0.1:${port}`);
+  url.searchParams.set("device", deviceId);
   url.searchParams.set("token", token);
   return url.href;
 }

@@ -301,4 +301,67 @@ describe("formatPrimaryStatus", () => {
       "Downloaded",
     );
   });
+
+  it("cd not_audio face is Not an audio CD", () => {
+    const face = formatPrimaryStatus({
+      session: "cd",
+      playSource: "cd",
+      cdFace: "not_audio",
+    });
+    expect(face.text).toBe("Not an audio CD");
+    expect(face.icon).toBe("cd");
+  });
+
+  it("cdda details list Source CD and 16/44.1", () => {
+    const track = {
+      isLossy: false,
+      sourceCodec: "cdda",
+      bitrateKbps: null,
+      sampleRateHz: 44100,
+      bitrateMode: null,
+      bitDepth: 16,
+    };
+    const rows = buildPlaybackDetailsRows({
+      session: "cd",
+      playSource: "cd",
+      playProfileId: "cdda",
+      track,
+    });
+    expect(value(rows, "source")).toBe("CD");
+    expect(value(rows, "bit_depth")).toBe("16-bit");
+    expect(value(rows, "sample_rate")).toBe("44.1 kHz");
+  });
+
+  it("exclusive-on cdda details include hog device and 16/44.1", () => {
+    const exclusive: ExclusiveFaceSnapshot = {
+      enabled: true,
+      connection: "connected",
+      role: "controller",
+      preferenceId: "dev",
+      liveId: "dev",
+      devices: [{ id: "dev", name: "DAC" }],
+    };
+    const rows = buildPlaybackDetailsRows(
+      {
+        session: "cd",
+        playSource: "cd",
+        playProfileId: "cdda",
+        track: {
+          isLossy: false,
+          sourceCodec: "cdda",
+          bitrateKbps: null,
+          sampleRateHz: 44100,
+          bitrateMode: null,
+          bitDepth: 16,
+        },
+      },
+      [],
+      { exclusiveSnap: exclusive },
+    );
+    expect(value(rows, "output")).toBe("Exclusive");
+    expect(value(rows, "device")).toBe("DAC");
+    expect(value(rows, "source")).toBe("CD");
+    expect(value(rows, "bit_depth")).toBe("16-bit");
+    expect(value(rows, "sample_rate")).toBe("44.1 kHz");
+  });
 });

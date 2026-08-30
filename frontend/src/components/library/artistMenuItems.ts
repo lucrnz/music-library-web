@@ -11,6 +11,7 @@ import { confirmDialog } from "@/stores/dialog";
 import { showToast } from "@/stores/ui";
 import type { ActionItem } from "@/components/menu/actionItem";
 import type { Artist } from "@/models/artist";
+import { queueActionsAllowed } from "@/playback/session";
 
 export function downloadAllOutcome(
   remaining: number,
@@ -58,20 +59,21 @@ export function buildArtistMenuItems({
   playAll: () => void | Promise<void>;
   downloadAll?: () => void | Promise<void>;
 }): ActionItem[] {
-  const items: ActionItem[] = [
-    {
+  const items: ActionItem[] = [];
+  if (queueActionsAllowed()) {
+    items.push({
       id: "add-all",
       label: "Add all to playlist",
       icon: "plus",
       run: () => addAll(),
-    },
-    {
-      id: "play-all",
-      label: "Play all",
-      icon: "play",
-      run: () => playAll(),
-    },
-  ];
+    });
+  }
+  items.push({
+    id: "play-all",
+    label: "Play all",
+    icon: "play",
+    run: () => playAll(),
+  });
 
   if (downloadAll) {
     items.push({

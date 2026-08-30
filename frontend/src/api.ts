@@ -308,8 +308,13 @@ export async function fetchAlbum(albumId: string): Promise<Album> {
 export async function identifyCd(
   toc: import("@/cd/types").CdTocPayload,
   cdText: import("@/cd/types").CdTextPayload | null,
+  opts?: { force?: boolean },
 ): Promise<import("@/cd/types").CdIdentifyResponse> {
-  return apiPost("/api/cd/identify", { toc, cd_text: cdText });
+  return apiPost("/api/cd/identify", {
+    toc,
+    cd_text: cdText,
+    force: !!opts?.force,
+  });
 }
 
 export async function confirmCd(

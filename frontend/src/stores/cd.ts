@@ -5,19 +5,23 @@
 import { reactive } from "vue";
 import { canShowCdUi } from "@/exclusive/capability";
 import {
+  bindOpticalHello,
   bindOpticalLive,
   setOpticalWantsSocket,
   watchOptical,
 } from "@/exclusive/opticalClient";
+import type { OpticalMediaKind } from "@/exclusive/opticalClient";
 import type { CdMatch } from "@/cd/types";
 import { notifyCdEnter, notifyCdMediaGone } from "@/cd/runtime";
 import { become, activeSession } from "@/playback/session";
 import { exclusiveAudio } from "@/stores/exclusiveAudio";
 import type { Track } from "@/models/track";
-import { openCdRail } from "@/stores/playerPrefs";
+import { openCdRail, setExpanded, setRailFace } from "@/stores/playerPrefs";
+import { player } from "@/stores/playerState";
 
 const KEY_ENABLED = "musicweb.cd.enabled";
 const KEY_DRIVE = "musicweb.cd.driveId";
+const KEY_DRIVE_KEY = "musicweb.cd.driveKey";
 
 export type CdRoomFace =
   | "no_disc"
@@ -29,11 +33,13 @@ export type CdRoomFace =
   | "detecting"
   | "reading"
   | "playing"
-  | "pick";
+  | "pick"
+  | "not_audio";
 
 export interface CdDrive {
   id: string;
   name: string;
+  key: string;
 }
 
 export interface CdToc {
@@ -53,8 +59,10 @@ export interface CdState {
   capable: boolean;
   enabled: boolean;
   selectedDriveId: string | null;
+  selectedDriveKey: string | null;
   drives: CdDrive[];
   mediaPresent: boolean;
+  mediaKind: OpticalMediaKind;
   toc: CdToc | null;
   cdText: CdTextInfo | null;
   lastError: string | null;
@@ -72,8 +80,10 @@ export const cd = reactive<CdState>({
   capable: false,
   enabled: false,
   selectedDriveId: null,
+  selectedDriveKey: null,
   drives: [],
   mediaPresent: false,
+  mediaKind: "none",
   toc: null,
   cdText: null,
   lastError: null,
@@ -87,6 +97,34 @@ export const cd = reactive<CdState>({
   pickerOpen: false,
 });
 
+function normalizeDrives(drives: CdDrive[]): CdDrive[] {
+  return drives.map((d) => ({
+    id: d.id,
+    name: d.name || d.id,
+    key: d.key || d.id,
+  }));
+}
+
+function rematchSelectedDrive(drives: CdDrive[]): void {
+  const lastId = cd.selectedDriveId;
+  const lastKey = cd.selectedDriveKey;
+  if (lastId && drives.some((d) => d.id === lastId)) {
+    const match = drives.find((d) => d.id === lastId);
+    if (match && !lastKey) {
+      cd.selectedDriveKey = match.key;
+      persist();
+    }
+    return;
+  }
+  if (lastKey) {
+    const keyed = drives.filter((d) => d.key === lastKey);
+    if (keyed.length === 1) {
+      cd.selectedDriveId = keyed[0].id;
+      persist();
+    }
+  }
+}
+
 function persist(): void {
   try {
     localStorage.setItem(KEY_ENABLED, cd.enabled ? "1" : "0");
@@ -96,6 +134,12 @@ function persist(): void {
   try {
     if (cd.selectedDriveId) localStorage.setItem(KEY_DRIVE, cd.selectedDriveId);
     else localStorage.removeItem(KEY_DRIVE);
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (cd.selectedDriveKey) localStorage.setItem(KEY_DRIVE_KEY, cd.selectedDriveKey);
+    else localStorage.removeItem(KEY_DRIVE_KEY);
   } catch {
     /* ignore */
   }
@@ -113,15 +157,32 @@ function hydrate(): void {
   } catch {
     cd.selectedDriveId = null;
   }
+  try {
+    cd.selectedDriveKey = localStorage.getItem(KEY_DRIVE_KEY) || null;
+  } catch {
+    cd.selectedDriveKey = null;
+  }
   setOpticalWantsSocket(cd.capable && cd.enabled);
 }
 
 function applyOpticalLive(partial: Parameters<typeof setCdLive>[0]): void {
-  const presentChanged = "mediaPresent" in partial;
+  const prevPresent = cd.mediaPresent;
+  const prevKind = cd.mediaKind;
   setCdLive(partial);
-  if (!presentChanged) return;
+  const presentChanged =
+    "mediaPresent" in partial && cd.mediaPresent !== prevPresent;
+  const kindChanged = "mediaKind" in partial && cd.mediaKind !== prevKind;
+  if (!presentChanged && !kindChanged) return;
   if (activeSession() !== "cd") return;
-  if (cd.mediaPresent && cd.toc) {
+  if (cd.mediaKind === "data") {
+    notifyCdMediaGone();
+    clearCdCursor();
+    cd.pickerOpen = false;
+    cd.matches = [];
+    cd.face = "not_audio";
+    return;
+  }
+  if (cd.mediaPresent && cd.toc && cd.mediaKind === "audio") {
     void import("@/cd/identifyFlow").then((m) => m.runIdentify());
   } else {
     notifyCdMediaGone();
@@ -132,29 +193,54 @@ function applyOpticalLive(partial: Parameters<typeof setCdLive>[0]): void {
   }
 }
 
+function syncCdWatch(): void {
+  if (activeSession() !== "cd") return;
+  if (cd.enabled && cd.selectedDriveId) {
+    watchOptical(true, cd.selectedDriveId);
+  } else {
+    watchOptical(false);
+  }
+}
+
 hydrate();
 bindOpticalLive(applyOpticalLive);
+bindOpticalHello(syncCdWatch);
 
 export function setCdEnabled(on: boolean): void {
   cd.enabled = !!on;
   persist();
   setOpticalWantsSocket(cd.capable && cd.enabled);
+  syncCdWatch();
 }
 
 export function setCdSelectedDriveId(id: string | null): void {
   cd.selectedDriveId = id || null;
+  if (!id) {
+    cd.selectedDriveKey = null;
+  } else {
+    const drive = cd.drives.find((d) => d.id === id);
+    cd.selectedDriveKey = drive?.key || id;
+  }
   persist();
+  syncCdWatch();
 }
 
 export function setCdLive(partial: {
   drives?: CdDrive[];
   mediaPresent?: boolean;
+  mediaKind?: OpticalMediaKind;
   toc?: CdToc | null;
   cdText?: CdTextInfo | null;
   lastError?: string | null;
 }): void {
-  if (partial.drives) cd.drives = partial.drives;
+  if (partial.drives) {
+    const prevId = cd.selectedDriveId;
+    cd.drives = normalizeDrives(partial.drives);
+    rematchSelectedDrive(cd.drives);
+    if (cd.selectedDriveId !== prevId) syncCdWatch();
+  }
   if ("mediaPresent" in partial) cd.mediaPresent = !!partial.mediaPresent;
+  if ("mediaKind" in partial) cd.mediaKind = partial.mediaKind ?? "none";
   if ("toc" in partial) cd.toc = partial.toc ?? null;
   if ("cdText" in partial) cd.cdText = partial.cdText ?? null;
   if ("lastError" in partial) cd.lastError = partial.lastError ?? null;
@@ -173,6 +259,14 @@ export function clearCdCursor(): void {
 }
 
 export function enterCdMode(): void {
+  if (activeSession() === "cd") {
+    openCdRail();
+    notifyCdEnter();
+    if (cd.enabled && cd.selectedDriveId) {
+      watchOptical(true, cd.selectedDriveId);
+    }
+    return;
+  }
   become("cd");
   cd.shuffle = false;
   cd.repeat = "off";
@@ -181,17 +275,29 @@ export function enterCdMode(): void {
   if (cd.enabled && cd.selectedDriveId) {
     watchOptical(true, cd.selectedDriveId);
   }
-  if (cd.mediaPresent && cd.toc) {
+  if (cd.mediaPresent && cd.toc && cd.mediaKind === "audio") {
     void import("@/cd/identifyFlow").then((m) => m.runIdentify());
   } else {
     refreshCdFace();
   }
 }
 
+export function toggleCdSession(): void {
+  if (activeSession() === "cd") {
+    become("none");
+    return;
+  }
+  enterCdMode();
+}
+
 export function leaveCdMode(): void {
   watchOptical(false);
   clearCdCursor();
   refreshCdFace();
+  if (player.railFace === "cd") {
+    setRailFace("queue");
+    setExpanded(false);
+  }
 }
 
 export async function confirmPickerMatch(releaseMbid: string): Promise<void> {
@@ -205,12 +311,7 @@ export function dismissPicker(): void {
 }
 
 export function reopenPicker(): void {
-  if (cd.matches.length) {
-    cd.pickerOpen = true;
-    cd.face = "pick";
-    return;
-  }
-  void import("@/cd/identifyFlow").then((m) => m.runIdentify());
+  void import("@/cd/identifyFlow").then((m) => m.runIdentify({ force: true }));
 }
 
 export function refreshCdFace(): void {
@@ -233,8 +334,15 @@ export function refreshCdFace(): void {
     cd.face = "needs_libcdio";
     return;
   }
-  if (cd.selectedDriveId && cd.drives.length && !cd.drives.some((d) => d.id === cd.selectedDriveId)) {
+  if (
+    cd.selectedDriveId
+    && !cd.drives.some((d) => d.id === cd.selectedDriveId)
+  ) {
     cd.face = "drive_missing";
+    return;
+  }
+  if (cd.mediaKind === "data") {
+    cd.face = "not_audio";
     return;
   }
   if (!cd.mediaPresent) {

@@ -89,4 +89,85 @@ describe("applyCdDto", () => {
     expect(cd.tracks[0]?.album).toBe("Demo");
     expect(cd.tracks[0]?.artist).toBe("Band");
   });
+
+  it("keeps the current track number and does not start a listen without transport", async () => {
+    const { become } = await import("@/playback/session");
+    const { applyCdDto } = await import("@/cd/identifyFlow");
+    const { cd, setCdTracks } = await import("@/stores/cd");
+    const listens = await import("@/listens/bridge");
+    const start = vi.spyOn(listens, "startCycle");
+    become("cd");
+    setCdTracks(
+      [1, 2, 3, 4].map((n) => ({
+        id: `cd:unknown:${n}`,
+        path: null,
+        title: `Track ${n}`,
+        artist: "Unknown Artist",
+        album: "Audio CD",
+        albumId: null,
+        artistId: null,
+        albumArtist: "Unknown Artist",
+        albumArtistId: null,
+        track: n,
+        disc: 1,
+        year: null,
+        duration: 1,
+        durationMs: 1000,
+        isMissing: false,
+        sampleRateHz: 44100,
+        bitDepth: 16,
+        isLossy: false,
+        sourceCodec: "cdda",
+        bitrateKbps: null,
+        bitrateMode: null,
+      })),
+      3,
+    );
+    applyCdDto({
+      ...applied,
+      tracks: [1, 2, 3, 4].map((n) => ({
+        id: `lib-${n}`,
+        track_no: n,
+        title: `T${n}`,
+        artist: "Band",
+        duration_ms: 1000,
+      })),
+    });
+    expect(cd.index).toBe(3);
+    expect(cd.tracks[3]?.id).toBe("lib-4");
+    expect(start).not.toHaveBeenCalled();
+    start.mockRestore();
+    become("none");
+  });
+});
+
+describe("runIdentify force", () => {
+  it("Change disc with empty matches still force-identifies", async () => {
+    const api = await import("@/api");
+    const spy = vi.spyOn(api, "identifyCd").mockResolvedValue({
+      discid: "D",
+      matches: [],
+      applied: null,
+      cd_text: null,
+    });
+    const { become } = await import("@/playback/session");
+    const { cd, reopenPicker, setCdLive } = await import("@/stores/cd");
+    become("cd");
+    setCdLive({
+      mediaPresent: true,
+      mediaKind: "audio",
+      toc: {
+        first_track: 1,
+        last_audio_track: 2,
+        leadout_lba: 15000,
+        offsets: [0, 7500],
+      },
+    });
+    cd.matches = [];
+    reopenPicker();
+    await vi.waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls.at(-1)?.[2]).toEqual({ force: true });
+    spy.mockRestore();
+    become("none");
+  });
 });

@@ -24,6 +24,7 @@ import {
   noteServerUnreachable,
 } from "@/stores/connectivity";
 import { ui } from "@/stores/ui";
+import { queueActionsAllowed } from "@/playback/session";
 import Icon from "@/components/icons/Icon.vue";
 import LibraryTreePane from "@/components/tree/LibraryTreePane.vue";
 import {
@@ -410,7 +411,7 @@ watch(
           @click="onHeaderMenuClick"
         ><Icon name="more-vert" /></button>
         <button
-          v-if="showAddAll"
+          v-if="showAddAll && queueActionsAllowed()"
           type="button"
           class="pill"
           @click="addAll"

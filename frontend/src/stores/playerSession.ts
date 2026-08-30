@@ -6,6 +6,7 @@ import { canUseRemoteMedia, onConnectivityChange } from "@/connectivity";
 import { resolveCoverUrl } from "@/downloads/resolve";
 import { downloads } from "@/downloads/state";
 import { PLACEHOLDER_COVER } from "@/util";
+import { activeSession } from "@/playback/session";
 import { pl } from "@/stores/playlist";
 import { player } from "@/stores/playerState";
 
@@ -41,6 +42,7 @@ export function initPlayerSession() {
  * Resolve local/remote covers into player state + Media Session.
  */
 export async function updateMediaSession() {
+  if (activeSession() === "cd") return;
   const t = pl.current;
   if (!t) {
     coverResolveGen += 1;

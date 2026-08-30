@@ -4,6 +4,7 @@
 import { confirmCd, identifyCd } from "@/api";
 import { decideIdentify, unknownTrackId } from "@/cd/identify";
 import type { CdApplied, CdTextPayload, CdTocPayload } from "@/cd/types";
+import { startCdListenIfLoaded } from "@/playback/cdLoad";
 import { activeSession } from "@/playback/session";
 import {
   cd,
@@ -80,56 +81,60 @@ export function sentinelTracksFromMedia(): Track[] {
 
 export function applyCdDto(dto: CdApplied): void {
   const toc = tocPayload(cd.toc);
-  setCdTracks(
-    dto.tracks.map((t) => {
-      const durSec =
-        t.duration_ms != null
-          ? t.duration_ms / 1000
-          : toc
-            ? durationSec(toc, t.track_no)
-            : null;
-      return {
-        id: t.id,
-        path: null,
-        title: t.title,
-        artist: t.artist,
-        album: dto.album || "Audio CD",
-        albumId: dto.has_cover ? dto.album_id : null,
-        artistId: null,
-        albumArtist: dto.artist || t.artist,
-        albumArtistId: null,
-        track: t.track_no,
-        disc: 1,
-        year: dto.year,
-        duration: durSec,
-        durationMs: t.duration_ms,
-        isMissing: false,
-        sampleRateHz: 44100,
-        bitDepth: 16,
-        isLossy: false,
-        sourceCodec: "cdda",
-        bitrateKbps: null,
-        bitrateMode: null,
-      };
-    }),
-  );
+  const prevTrackNo = cd.index >= 0 ? cd.tracks[cd.index]?.track : null;
+  const rows = dto.tracks.map((t) => {
+    const durSec =
+      t.duration_ms != null
+        ? t.duration_ms / 1000
+        : toc
+          ? durationSec(toc, t.track_no)
+          : null;
+    return {
+      id: t.id,
+      path: null,
+      title: t.title,
+      artist: t.artist,
+      album: dto.album || "Audio CD",
+      albumId: dto.album_id || null,
+      artistId: null,
+      albumArtist: dto.artist || t.artist,
+      albumArtistId: null,
+      track: t.track_no,
+      disc: 1,
+      year: dto.year,
+      duration: durSec,
+      durationMs: t.duration_ms,
+      isMissing: false,
+      sampleRateHz: 44100,
+      bitDepth: 16,
+      isLossy: false,
+      sourceCodec: "cdda",
+      bitrateKbps: null,
+      bitrateMode: null,
+    };
+  });
+  const keep = rows.findIndex((row) => row.track === prevTrackNo);
+  setCdTracks(rows, keep >= 0 ? keep : 0);
   cd.lastDiscid = dto.discid;
   cd.pickerOpen = false;
   cd.face = "idle";
+  const row = cd.index >= 0 ? cd.tracks[cd.index] : null;
+  if (activeSession() === "cd" && row) startCdListenIfLoaded(row);
 }
 
 let identifyGen = 0;
 
-export async function runIdentify(): Promise<void> {
+export async function runIdentify(opts?: { force?: boolean }): Promise<void> {
   const toc = tocPayload(cd.toc);
   if (!toc || activeSession() !== "cd") return;
   const gen = ++identifyGen;
-  setCdTracks(sentinelTracksFromMedia());
+  const prevIndex = cd.index;
+  setCdTracks(sentinelTracksFromMedia(), prevIndex);
   cd.face = "detecting";
   cd.pickerOpen = false;
   const text = cdTextPayload(cd.cdText);
   try {
-    const identified = await identifyCd(toc, text);
+    const identified = await identifyCd(toc, text, opts);
     if (gen !== identifyGen || activeSession() !== "cd") return;
     cd.lastDiscid = identified.discid;
     const decision = decideIdentify({

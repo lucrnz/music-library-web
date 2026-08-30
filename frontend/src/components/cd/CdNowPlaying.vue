@@ -3,7 +3,7 @@ import { computed } from "vue";
 import NowPlayingView from "@/components/player/NowPlayingView.vue";
 import { exclusiveStatusSnapshot } from "@/stores/exclusiveAudio";
 import CdMatchPicker from "@/components/cd/CdMatchPicker.vue";
-import { cd, reopenPicker } from "@/stores/cd";
+import { cd, reopenPicker, toggleCdSession } from "@/stores/cd";
 import {
   cdCycleRepeat,
   cdEject,
@@ -15,7 +15,8 @@ import {
 } from "@/playback/cdLoad";
 import { exclusiveAudio } from "@/stores/exclusiveAudio";
 import { player } from "@/stores/playerState";
-import { setExpanded } from "@/stores/playerPrefs";
+import { setExpanded, setOutputVolume } from "@/stores/playerPrefs";
+import { coverUrl } from "@/api";
 import { activeSession } from "@/playback/session";
 import type { PlayStatusState } from "@/playbackStatus";
 import { useDesktopViewport } from "@/layout";
@@ -42,17 +43,19 @@ const subtitle = computed(() => {
   if (!t) {
     if (cd.face === "no_disc") return "No disc";
     if (cd.face === "drive_missing") return "Drive missing";
+    if (cd.face === "not_audio") return "Not an audio CD";
+    if (cd.face === "companion_offline") return "Companion offline";
     if (cd.face === "needs_setting") return "Enable CD playback in Settings";
     if (cd.face === "needs_libcdio") return "Install libcdio";
     return "Insert a disc";
   }
   return [t.artist, t.album].filter(Boolean).join(" · ");
 });
-const cover = computed(() =>
-  current.value?.albumId
-    ? `/api/cover/${current.value.albumId}?size=${compact.value ? "thumb" : "full"}`
-    : "/static/img/audio-cd.svg",
-);
+const cover = computed(() => {
+  const t = current.value;
+  if (t?.albumId) return coverUrl(t, compact.value ? "thumb" : "full", false);
+  return "/static/img/audio-cd.svg";
+});
 const playState = computed((): PlayStatusState => ({
   session: activeSession() === "cd" ? "cd" : "none",
   playSource: activeSession() === "cd" ? "cd" : "none",
@@ -98,6 +101,7 @@ function collapse() {
     :current-time="player.currentTime"
     :duration="player.duration"
     :volume="player.volume"
+    @volume="setOutputVolume"
     @collapse="collapse"
     @seek-fraction="(f) => cdSeek(f * (player.duration || 0))"
   >
@@ -133,6 +137,13 @@ function collapse() {
           class="pill"
           @click="reopenPicker"
         >Change disc…</button>
+        <button
+          type="button"
+          class="pill"
+          title="Leave CD"
+          aria-label="Leave CD"
+          @click="toggleCdSession"
+        >Leave</button>
       </div>
     </template>
   </NowPlayingView>

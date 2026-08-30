@@ -72,6 +72,17 @@ describe("session become", () => {
     onLeaveQueue(null);
   });
 
+  it("leaving cd for none does not rewrite playlist storage", () => {
+    localStorage.setItem("musicweb.playlist.v1", '{"tracks":[{"id":"keep"}]}');
+    const leaveCd = vi.fn();
+    onLeaveCd(leaveCd);
+    become("cd");
+    become("none");
+    expect(leaveCd).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("musicweb.playlist.v1")).toContain("keep");
+    onLeaveCd(null);
+  });
+
   it("same session is a no-op", () => {
     const leaveQueue = vi.fn();
     onLeaveQueue(leaveQueue);

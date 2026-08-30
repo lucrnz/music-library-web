@@ -22,7 +22,9 @@ import {
   playIndex,
   stopPlayback,
 } from "@/stores/player";
-import { toggleCdRail, toggleRadioRail } from "@/stores/playerPrefs";
+import { toggleRadioRail } from "@/stores/playerPrefs";
+import { toggleCdSession } from "@/stores/cd";
+import { activeSession } from "@/playback/session";
 import { canShowCdUi } from "@/exclusive/capability";
 import { downloads } from "@/downloads/state";
 import { downloadTracks } from "@/downloads/ui";
@@ -305,8 +307,8 @@ const route = useRoute();
             class="icon-btn"
             title="CD"
             aria-label="CD"
-            :aria-pressed="player.expanded && player.railFace === 'cd' ? 'true' : 'false'"
-            @click="toggleCdRail"
+            :aria-pressed="activeSession() === 'cd' ? 'true' : 'false'"
+            @click="toggleCdSession"
           ><Icon name="cd" /></button>
           <button
             v-if="downloads.enabled && pl.length"

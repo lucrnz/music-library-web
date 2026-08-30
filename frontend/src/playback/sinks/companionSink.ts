@@ -33,6 +33,13 @@ export function createCompanionSink(): PlaybackSink {
   let duration = 0;
   let hasLoad = false;
   let unsub: (() => void) | null = null;
+  const durationWaiters: Array<() => void> = [];
+
+  function flushDurationWaiters(): void {
+    if (!(duration > 0) || !durationWaiters.length) return;
+    const pending = durationWaiters.splice(0, durationWaiters.length);
+    for (const resolve of pending) resolve();
+  }
 
   function ensureListen(): void {
     if (unsub) return;
@@ -42,6 +49,7 @@ export function createCompanionSink(): PlaybackSink {
         currentTime = Number(evt.t) || 0;
         const d = Number(evt.d);
         if (Number.isFinite(d) && d > 0) duration = d;
+        flushDurationWaiters();
         handlers.onTime?.(currentTime, duration);
       } else if (evt.type === "pause") {
         paused = !!evt.paused;
@@ -115,6 +123,12 @@ export function createCompanionSink(): PlaybackSink {
     setVolume(v0to1) {
       const v = Math.min(1, Math.max(0, Number(v0to1) || 0));
       companionSetVolume(v * 100);
+    },
+    waitForDuration() {
+      if (duration > 0) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        durationWaiters.push(resolve);
+      });
     },
     get paused() {
       return paused;

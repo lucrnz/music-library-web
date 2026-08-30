@@ -109,14 +109,16 @@ const route = useRoute();
     );
 
     watch(desktop, (isDesktop, wasDesktop) => {
+      if (!wasDesktop || isDesktop) return;
       if (
-        wasDesktop &&
-        !isDesktop &&
         player.expanded &&
         player.railFace === "radio" &&
         !onRadio.value
       ) {
         void router.push({ name: "radio" });
+      }
+      if (activeSession() === "cd" && !onCd.value) {
+        void router.push({ name: "cd" });
       }
     });
 
