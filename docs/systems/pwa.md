@@ -31,6 +31,8 @@ Operators set the canonical browser origin via env. Settings expose a single `Pu
 
 **Host string must match exactly** — `http://localhost:8765` and `http://127.0.0.1:8765` are different origins. Configure the same host clients type in the address bar.
 
+`MUSICWEB_DEV_UNLOCK_PWA` (default off) is a library-server flag that injects `devUnlockPwa` into `#musicweb-config`. The SPA treats it as an installed PWA **only on loopback**. It is for local Playwright and similar; not a product Settings toggle. See [environment.md](../development/environment.md) and [testing.md](../development/testing.md).
+
 ### Quiet updates
 
 A new service worker activates without an in-app “reload” banner. Cache version is derived automatically; no manual `shell-vN` bump.

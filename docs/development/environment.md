@@ -27,6 +27,7 @@ Documented names and defaults live in `.env.example` and `Settings` fields. Conc
 | Data directory | SQLite `library.db` + `covers/` tree (directory path, not a single file path) |
 | Bind address / port | Where the process **listens** (`LISTEN` / `PORT`) — not necessarily the URL clients type |
 | Public origin (PWA) | Canonical URL clients should **open** for install and day-to-day use; optional |
+| Dev PWA unlock | Optional; `MUSICWEB_DEV_UNLOCK_PWA`. Default off. Injected into `#musicweb-config` as `devUnlockPwa`. The client honors it **only on loopback** (`127.0.0.1` / `localhost` / `[::1]`) and only as a substitute for the installed-PWA check. Not a Settings toggle. Do not enable on a production host. |
 | Last.fm API key | Optional; artist portraits |
 | fanart.tv API key | Optional; artist portraits |
 | MusicBrainz contact email | Optional but required for the MB User-Agent path used by MB + fanart MBID lookup |

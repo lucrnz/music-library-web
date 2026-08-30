@@ -21,7 +21,7 @@ Music library web server: FastAPI + SQLite index + Vue 3 SPA (Vite + pnpm). Stre
 - Process-temp stream cache is wiped on shutdown and after about an hour with no HTTP client; do not treat it as durable storage.
 - Migrations: add new Alembic revisions under `src/musicweb/db/migrations/versions/`; do not hand-edit applied history. Startup migrates; optional CLI is `alembic upgrade head`.
 - Frontend versions change only in `frontend/package.json`. Do not add a second bundler or generate the service worker in Node without a new decision.
-- Platform support is first-party / second-party / out of scope. Follow [docs/product/core-guidelines.md](docs/product/core-guidelines.md). The library server is intended to run on Windows and macOS for the core loop; exclusive hog and CD stay Mac-only. Do not treat iOS, Safari, or Firefox as supported clients.
+- Platform support is first-party / second-party / out of scope. Follow [docs/product/core-guidelines.md](docs/product/core-guidelines.md). The library server is intended to run on Windows and macOS for the core loop; exclusive hog is Windows and macOS, CD stays Mac-only. Do not treat iOS, Safari, or Firefox as supported clients.
 
 ## Deep dives
 

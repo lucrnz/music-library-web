@@ -29,7 +29,7 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 
 Listen counting is **not** stream or prepare HTTP. Household stats live in `docs/systems/playback-stats.md`.
 
-When exclusive audio is **enabled** on an installed Mac PWA, the Streaming picker is hidden. Downloads quality and **When a download exists** still apply: exclusive may play a companion-disk download, or stream an exclusive FLAC tag (lossy: `source` into mpv). Leftover OPFS stays HTML-only. `exclusive_lossy` is only the case where there is no local file and no source URL. Exclusive-lossy details list source-format rows; exclusive prepare does not POST `source`. See `docs/systems/exclusive-audio.md`.
+When exclusive audio is **enabled** on an installed desktop PWA (macOS or Windows), the Streaming picker is hidden. Downloads quality and **When a download exists** still apply: exclusive may play a companion-disk download, or stream an exclusive FLAC tag (lossy: `source` into mpv). Leftover OPFS stays HTML-only. `exclusive_lossy` is only the case where there is no local file and no source URL. Exclusive-lossy details list source-format rows; exclusive prepare does not POST `source`. See `docs/systems/exclusive-audio.md`.
 
 ## Delivery source
 

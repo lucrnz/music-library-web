@@ -9,7 +9,7 @@ Musicweb is a personal LAN library player: stream your own lossless collection t
 - **Mobile-first browse** — artists, albums, and search on phone and desktop
 - **Offline downloads** on the device, with separate stream and download quality preferences
 - **Installable PWA shell** when you open a secure-context origin
-- **Optional exclusive playback on macOS** — hog the output device via a local companion for bit-transparent listening (Mac only for now)
+- **Optional exclusive playback** — hog the output device via a local companion for bit-transparent listening (macOS and Windows; CD stays Mac-only)
 
 ## Setup
 

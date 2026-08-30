@@ -1,24 +1,24 @@
-# Exclusive audio (macOS companion)
+# Exclusive audio (macOS / Windows companion)
 
-Optional **hog / exclusive** playback on a Mac client while the music library server stays remote (NAS or other host).
+Optional **hog / exclusive** playback on a Mac or Windows client while the music library server stays remote (NAS or other host). Support is best-effort; the project is NO WARRANTY. Linux hog stays a stub (the companion still serves Downloads there).
 
 ## Get started
 
 > **End-user guide.** Agents and developers: skip this section and continue at [Source of truth](#source-of-truth) below.
 
-Use this when Musicweb is already running on your network and you want exclusive output on a **Mac**. macOS only for now.
+Use this when Musicweb is already running on your network and you want exclusive output on a **Mac or Windows** PC.
 
-1. **Server reachable** — open Musicweb in a browser on the Mac and confirm the library loads.
-2. **Install the Mac PWA** — exclusive audio works from the **installed app**, not only a normal browser tab. You need a secure-context origin (`https://…` or `http://localhost` / `127.0.0.1`). See [Setup → PWA install and secure context](../setup.md#pwa-install-and-secure-context).
-3. **Install mpv** on the Mac so it is on your `PATH` (example: `brew install mpv`). You can pass `--mpv /path/to/mpv` if it is installed elsewhere.
+1. **Server reachable** — open Musicweb in a browser on that computer and confirm the library loads.
+2. **Install the desktop PWA** — exclusive audio works from the **installed app**, not only a normal browser tab. You need a secure-context origin (`https://…` or `http://localhost` / `127.0.0.1`). See [Setup → PWA install and secure context](../setup.md#pwa-install-and-secure-context).
+3. **Install mpv** so it is on your `PATH` (example: `brew install mpv` on macOS). You can pass `--mpv /path/to/mpv` if it is installed elsewhere. Windows needs a full mpv that can open WASAPI exclusive.
 4. **Shared secret** — generate a token and use the **same** value for the companion and the app:
 
    ```sh
    openssl rand -hex 16
    ```
 
-   Put it in the project `.env` (or the environment) as `COMPANION_TOKEN=…` on the Mac where you run the Desktop companion. You will paste the same string into the PWA in step 6.
-5. **Run the Desktop companion on the Mac** (this is **not** the library server; it does not take the data-dir lock):
+   Put it in the project `.env` (or the environment) as `COMPANION_TOKEN=…` on the computer where you run the Desktop companion. You will paste the same string into the PWA in step 6.
+5. **Run the Desktop companion on that same computer** (this is **not** the library server; it does not take the data-dir lock):
 
    ```sh
    uv run musicweb companion
@@ -28,14 +28,14 @@ Use this when Musicweb is already running on your network and you want exclusive
    Leave this process running. It listens on `127.0.0.1` only (default port **18765**).
 6. **PWA Settings → Desktop companion** — paste the same `COMPANION_TOKEN`, set the port if you changed it. The token field turns green when the companion accepts it (red if the secret is wrong or nothing is listening). Then **Exclusive audio** — enable exclusive.
 7. **Pick an output device** — first choice is manual; nothing is selected for you.
-8. **Play a track** — status should show **Ready ·** your device name, and audio should come from the Mac via the companion, not the browser element.
+8. **Play a track** — status should show **Ready ·** your device name, and audio should come from this computer via the companion, not the browser element.
 
-CLI flags and env notes: [development/commands.md](../development/commands.md#desktop-companion-macos).
+CLI flags and env notes: [development/commands.md](../development/commands.md#desktop-companion).
 
 ## Source of truth
 
 - Companion CLI: `src/musicweb/cli/companion.py`
-- Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `optical_session.py`, `mpv_player.py`, `coreaudio.py`, `volume.py`). CD uses the same mpv: hog if exclusive is on (hard-fail if unarmed), auto if exclusive is off (`load` hog flag). Exclusive-off CD still watches the tray. Compact status while CD is on is the CD face, not exclusive Ready. Mid-play exclusive toggle reloads the CD URL. See [cd-playback.md](cd-playback.md).
+- Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `optical_session.py`, `mpv_player.py`, `mpv_ipc.py`, `coreaudio.py`, `wasapi.py`, `volume.py`). CD uses the same mpv: hog if exclusive is on (hard-fail if unarmed), auto if exclusive is off (`load` hog flag). Exclusive-off CD still watches the tray. Compact status while CD is on is the CD face, not exclusive Ready. Mid-play exclusive toggle reloads the CD URL. See [cd-playback.md](cd-playback.md).
 - Profile tags + catalog: `src/musicweb/transcode/profiles.py`
 - HTTP: `GET /api/exclusive-formats`, existing `GET /api/stream` + `POST /api/transcode/prepare` with tags
 - Client: `frontend/src/exclusive/` (including `statusFace.ts`, `companionClient.ts`), `stores/exclusiveAudio.ts`, `playback/exclusiveDelivery.ts`, `playback/sinks/`, `radio/audio.ts`, `stores/player.ts`, `playbackStatus.ts`
@@ -46,18 +46,18 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#de
 
 ## Architecture (prose)
 
-1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks play exclusive via a local download or an mpv `source` stream — do not remux MP3/AAC through a companion FLAC tag. Household radio on this Mac uses the same exclusive delivery into mpv and seeks the station clock; Tune-in keeps hog armed (`stop` is transport-only). Unarmed exclusive Tune-in hard-fails (no HTML). See `docs/systems/radio.md`. **Windows/Linux hog is a no-op stub**; the companion still runs there for Downloads ([companion.md](companion.md)).
-2. **Mac PWA** (installed, standalone) enables exclusive mode, stores `COMPANION_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
-3. **Desktop companion** (`musicweb companion`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv), holds a **controller lock** (first successful hello).
+1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks play exclusive via a local download or an mpv `source` stream — do not remux MP3/AAC through a companion FLAC tag. Household radio on this computer uses the same exclusive delivery into mpv and seeks the station clock; Tune-in keeps hog armed (`stop` is transport-only). Unarmed exclusive Tune-in hard-fails (no HTML). See `docs/systems/radio.md`. **Linux hog is a no-op stub**; the companion still runs there for Downloads ([companion.md](companion.md)).
+2. **Desktop PWA** (installed, standalone, macOS or Windows) enables exclusive mode, stores `COMPANION_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
+3. **Desktop companion** (`musicweb companion`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv on macOS; WASAPI ∩ mpv on Windows), holds a **controller lock** (first successful hello). Windows JSON IPC is a named pipe.
 4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until the companion **accepts** a live device.
 5. On play, the PWA **ensures** the preferred device is live, then applies the same **When a download exists** policy as HTML. A companion locker file is a loopback GET into mpv. Otherwise lossless uses an **absolute** exclusive FLAC tag URL (`new URL(streamPath, location.origin).href`) so mpv hits the **same host the browser uses**; lossy streams `source`. Leftover OPFS files stay HTML-only until migrate Yes.
 
 ```
-[ remote musicweb ] --HTTP stream (FLAC tag or source)--> [ mpv on Mac ]
+[ remote musicweb ] --HTTP stream (FLAC tag or source)--> [ mpv on this computer ]
        ^                                                    ^
        | prepare / stream                                   | IPC / loopback file
        |                                                    |
-[ Mac PWA ] --ws://127.0.0.1:18765--> [ Desktop companion ]
+[ desktop PWA ] --ws://127.0.0.1:18765--> [ Desktop companion ]
 ```
 
 ## Tags and catalog
@@ -190,7 +190,7 @@ Mac volume keys usually do nothing while hogged. The in-app slider is exclusive 
 
 - Gapless
 - Media keys / menu bar app / Now Playing integration beyond existing browser Media Session
-- Windows hog / Core Audio exclusive (stub — companion still serves Downloads on Windows/Linux)
+- Linux hog (stub — companion still serves Downloads)
 - Bit-perfect “always store library originals” as the locker format
 - Electron / TypeScript / Vite / pnpm
 - Auth model change for exclusive tags

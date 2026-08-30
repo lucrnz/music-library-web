@@ -4,7 +4,7 @@ Operator on-ramp for running Musicweb on your network. For the full command refe
 
 ## Prerequisites
 
-The library server runs on **Windows and macOS** for the core loop (serve, scan, stream, radio HTTP, doctor, live CLI). Exclusive hog and CD playback stay macOS companion features. Support is best-effort; the project is NO WARRANTY.
+The library server runs on **Windows and macOS** for the core loop (serve, scan, stream, radio HTTP, doctor, live CLI). Exclusive hog is a Windows and macOS companion feature; CD playback stays macOS-only. Support is best-effort; the project is NO WARRANTY.
 
 - **Python 3.11+** and [uv](https://github.com/astral-sh/uv)
 - **Node 20+** and [pnpm](https://pnpm.io/) (SPA lives under `frontend/`)
@@ -53,5 +53,5 @@ Plain `http://192.168.x.x` is fine for tab streaming; it is **not** installable.
 |-------|-----|
 | Install, run, library CLI | [development/commands.md](./development/commands.md) |
 | Environment and config | [development/environment.md](./development/environment.md) |
-| Get started: exclusive audio (macOS, optional) | [systems/exclusive-audio.md](./systems/exclusive-audio.md#get-started) |
+| Get started: exclusive audio (macOS / Windows, optional) | [systems/exclusive-audio.md](./systems/exclusive-audio.md#get-started) |
 | Full documentation map | [README.md](./README.md) (this `docs/` tree) |

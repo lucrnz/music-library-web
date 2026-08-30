@@ -30,7 +30,7 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `main.py` | FastAPI app factory, lifespan, dist mounts, SPA shell wiring |
 | `cli/` | Typer entry (`serve`, `scan`, regen, `stats`, `doctor`, `companion`, `logs`, `radio`); argv only |
 | `diag/` | Diagnostic JSONL store, emit, join-key reader |
-| `exclusive/` | Desktop companion (loopback WS + mpv hog + blob store + `optical_session` + WAV); no library DB/lock |
+| `exclusive/` | Desktop companion (loopback WS + mpv hog via Core Audio / WASAPI + blob store + `optical_session` + WAV); no library DB/lock |
 | `cd/` | MusicBrainz disc-id lookup, confirm bind/half-bind, `cd_identities` snapshot |
 | `runtime/` | Data-dir lock, spawn wrappers, bootstrap, exclusive maintenance, `run_library_job` |
 | `jobs/` | Single-flight library job runner (`ScanState`, `_begin`, `_begin_phase`; scan finish stamps radio watermark). Kind dispatch calls `scan/jobs.py` (`run_scan` / `regen_*`) |

@@ -17,7 +17,7 @@ Musicweb is a **personal LAN library player**: browse and stream your own lossle
 
 Clients are **installed Chromium PWAs** unless noted. Feature availability (for example exclusive hog) can be narrower than the tier.
 
-**Server hosts.** The library server is intended to run on **Windows and macOS** for the core loop (serve, scan, stream, radio HTTP, doctor, live CLI). Support is best-effort; the project is NO WARRANTY. Exclusive hog and CD playback stay Mac companion features.
+**Server hosts.** The library server is intended to run on **Windows and macOS** for the core loop (serve, scan, stream, radio HTTP, doctor, live CLI). Support is best-effort; the project is NO WARRANTY. Exclusive hog is a Windows and macOS companion feature; CD playback stays Mac-only.
 
 | Tier | Who | What we do |
 |------|-----|------------|
@@ -46,7 +46,7 @@ Intentional policies (implementation in `transcode/`):
 - **Dither:** Shibata-style dither **only when reducing bit depth**. Never dither when increasing bit depth or when depth is unchanged. If sample rate and bit depth already match the stream profile, skip aresample entirely.
 - **Encoders:** best practical quality knobs for each codec (e.g. Opus VBR at the selected bitrate; true 24-bit FLAC when that profile is chosen). Lower Opus targets (96 and 64 kbps) are allowed marketing options for size and bandwidth on that same libopus path. They do not relax soxr/dither policy.
 - **Source library:** packed lossless is the default. MP3/AAC may be indexed when opted in; those files are marked and played as stored (on-demand **and** radio) — do not re-encode them.
-- **Radio tab:** one household station; Tune in joins the official clock via `/api/stream` + seek. On a Mac PWA with exclusive enabled, this tuner plays through the companion hog (locker / exclusive FLAC tag / lossy `source` as stored) and still seeks that clock. See `docs/systems/radio.md`.
+- **Radio tab:** one household station; Tune in joins the official clock via `/api/stream` + seek. On an installed desktop PWA (macOS or Windows) with exclusive enabled, this tuner plays through the companion hog (locker / exclusive FLAC tag / lossy `source` as stored) and still seeks that clock. See `docs/systems/radio.md`.
 - **CD playback:** narrower Desktop-PWA feature (Mac now). Software deck through the companion, no rip. See `docs/systems/cd-playback.md`.
 
 Tweaking small pipeline details for transparent delivery is preferred over simpler lower-quality paths.

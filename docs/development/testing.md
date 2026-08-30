@@ -28,6 +28,8 @@ Chromium for the Icon smoke is a one-time machine install: `pnpm --dir frontend 
 
 There is no coverage reporter and no CI gate. The suite is expected to **collect** on Windows (importlib mode; portable data-dir lock). There is no Windows CI job.
 
+`MUSICWEB_DEV_UNLOCK_PWA=1` on the **library server** injects `devUnlockPwa` into `#musicweb-config` so a loopback Chromium tab can see installed-PWA-gated desktop UI (exclusive, companion Settings). It is ignored off loopback. Use it for local Playwright against `http://127.0.0.1`. Do not commit a Playwright hog harness.
+
 ## Layout
 
 Existing pytest modules stay at `tests/test_*.py`. New backend tests live under `tests/<package>/` (for example `tests/scan/`, `tests/jobs/`). `testpaths = ["tests"]` already recurses; no `__init__.py` is required.

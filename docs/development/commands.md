@@ -140,13 +140,13 @@ Exact flags: `uv run musicweb radio --help`.
 
 ## Desktop companion
 
-Desktop companion: loopback sidecar for **hog / exclusive** Core Audio (macOS), the Downloads blob store, and **optical CD** (list/watch/eject + live virtual WAV). This is **not** the library server: it does **not** take `musicweb.lock`, open the DB, or migrate. Hog and optical are Mac-only; on Windows/Linux they are stubs so Downloads still start. Optional CD deps: `brew install libcdio libcdio-paranoia` (companion still starts without them). Identify needs `MUSICBRAINZ_CONTACT_EMAIL` (same as artist portraits). Verify flags in `pyproject.toml`, `.env.example`, and source. The locker directory is the OS app-support path and is **printed after the loopback bind succeeds**.
+Desktop companion: loopback sidecar for **hog / exclusive** (Core Audio on macOS, WASAPI exclusive on Windows), the Downloads blob store, and **optical CD** (list/watch/eject + live virtual WAV). This is **not** the library server: it does **not** take `musicweb.lock`, open the DB, or migrate. Hog is macOS and Windows; optical is Mac-only. On Linux hog and optical are stubs so Downloads still start without mpv. Optional CD deps: `brew install libcdio libcdio-paranoia` (companion still starts without them). Identify needs `MUSICBRAINZ_CONTACT_EMAIL` (same as artist portraits). Verify flags in `pyproject.toml`, `.env.example`, and source. The locker directory is the OS app-support path and is **printed after the loopback bind succeeds**.
 
 Requires:
 
 - `COMPANION_TOKEN` (non-empty) — from project `.env` (loaded like the server) or the process environment; paste the same value into the installed desktop PWA → Settings → Desktop companion
-- `mpv` on `PATH` (or `--mpv /path/to/mpv`) on **macOS** only
-- macOS for real exclusive/hog device behavior
+- `mpv` on `PATH` (or `--mpv /path/to/mpv`) on **macOS and Windows**
+- macOS or Windows for real exclusive/hog device behavior (Linux stays a Downloads stub)
 
 Optional: `DEBUG=true` or `DEBUG=1` for verbose companion logs, including exclusive volume path decisions. `false` / `0` / unset stay at INFO. Sourced from the same `.env` (or process environment). Loopback HTTP access logs stay off so `?token=` does not hit stdout.
 
@@ -158,7 +158,7 @@ uv run musicweb companion
 # verbose: DEBUG=true uv run musicweb companion
 ```
 
-Listens on **127.0.0.1 only**, default port **18765**, WebSocket at `ws://127.0.0.1:18765/ws`. The installed Mac PWA connects with the token; first session is controller, further tabs are read-only.
+Listens on **127.0.0.1 only**, default port **18765**, WebSocket at `ws://127.0.0.1:18765/ws`. The installed desktop PWA (macOS or Windows) connects with the token; first session is controller, further tabs are read-only.
 
 Operator get started (then design): `docs/systems/exclusive-audio.md`.
 
