@@ -757,3 +757,15 @@ A persisted per-device cap on how many download-manager jobs run at once; shrink
 ```bash
 git show bbcfc35f8e00e4c7633cb0ffb364e8ff5acf2ea3
 ```
+
+## 2026-08-22-r0qf4zo1-opus-size-estimates-done
+
+**Title:** Opus 64/96 profiles and Settings size estimates
+
+**Commit:** `1e746234104251cdbec53f3e889f5a779a90056c`
+
+Opus 96 kbps and Opus 64 kbps are first-class stream profiles, with rough megabytes-per-hour hints on Settings quality rows. Open the delete commit for server profile/estimate wiring and the Settings size hints.
+
+```bash
+git show 1e746234104251cdbec53f3e889f5a779a90056c
+```
