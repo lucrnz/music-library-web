@@ -733,3 +733,15 @@ git show 77f40cf08a6cf4555b2ddf64da20a3c20cc87fbb
 ```bash
 git show f69f49995b3a269824e60a6e0b043a02638ca946
 ```
+
+## 2026-08-22-p7mkxiii-radio-listen-stats-done
+
+**Title:** Radio listen stats (tuned-in only)
+
+**Commit:** `6a32230961d0fb8fa3d8a611aedf85fbc9043141`
+
+Tuned-in radio counts listens with the same media-time contract as on-demand and records `origin` (`queue` | `radio`). Rankings stay mixed. Open the delete commit for the origin column, client plumbing, and the radio listen cycle.
+
+```bash
+git show 6a32230961d0fb8fa3d8a611aedf85fbc9043141
+```
