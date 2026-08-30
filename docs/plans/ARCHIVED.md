@@ -709,3 +709,15 @@ Desktop household radio occupies the existing now-playing right rail instead of 
 ```bash
 git show b2c8b48a4baa941e8bb004ed5e32c90a3149f50b
 ```
+
+## 2026-08-22-cwd54gbl-radio-live-getters-done
+
+**Title:** Restore live radio audio getters
+
+**Commit:** `77f40cf08a6cf4555b2ddf64da20a3c20cc87fbb`
+
+Tuned-in seek bar and time follow the radio element clock; the 1 Hz station snapshot no longer reseeks every tick. Open the delete commit for live `RadioAudio` getters and the `radio.md` guardrail.
+
+```bash
+git show 77f40cf08a6cf4555b2ddf64da20a3c20cc87fbb
+```
