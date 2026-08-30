@@ -913,3 +913,15 @@ The CD software deck stays live WAV / third session / no queue stash. Compensati
 ```bash
 git show 71b5bdc2ba6327d12e6a3245ded046aba5f2cee3
 ```
+
+## 2026-08-29-rxjk2zsg-mac-cd-pwa-fixes-done
+
+**Title:** Mac PWA CD playback repair
+
+**Commit:** `699c7e3fd08aedd902009266b3df8fa3846ba4d0`
+
+The installed Mac Chromium PWA CD deck plays a SuperDrive or USB disc: query-shaped WAV URL, hardware-key rematch, idle watch, session toggle, honest transport, identify and listens. Open the delete commit for `cdDelivery` query URLs, rematch, `CdMini`, and identify medium pick.
+
+```bash
+git show 699c7e3fd08aedd902009266b3df8fa3846ba4d0
+```
