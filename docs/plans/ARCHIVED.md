@@ -673,3 +673,15 @@ One play-fail writer, stats out of the browse load machine, a one-way downloads 
 ```bash
 git show 9787073c7ee34b08beb96498830704aab70dc09e
 ```
+
+## 2026-08-22-07wbpb8n-volume-subscribers-done
+
+**Title:** Global output volume
+
+**Commit:** `d6b87da4a24cc5896a316eaa97b7c684ff1a44fb`
+
+One `player.volume` / `musicweb.volume` for the on-demand slider, the radio slider, and every subscribed sink, restored on boot. Radio no longer keeps a private volume watch after leaving `/radio`. Open the delete commit for the prefs volume registry and radio subscribe/detach.
+
+```bash
+git show d6b87da4a24cc5896a316eaa97b7c684ff1a44fb
+```
