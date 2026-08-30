@@ -865,3 +865,15 @@ Album surfaces show year, track count, and persisted duration without fetching t
 ```bash
 git show 2dd54a1c8ffa281d277f6ad9b247c3570d08d060
 ```
+
+## 2026-08-27-u3f0hfhe-listen-threshold-65-done
+
+**Title:** Lower listen threshold to 65%
+
+**Commit:** `d4ce109a8c592c51cf4cd91e44038934b01f9245`
+
+A household listen is 65% accumulated media time in one play cycle, same path for queue, radio, and every sink. Open the delete commit for `LISTEN_THRESHOLD` and the playback-stats contract.
+
+```bash
+git show d4ce109a8c592c51cf4cd91e44038934b01f9245
+```
