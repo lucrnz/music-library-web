@@ -829,3 +829,15 @@ The sidecar process is `musicweb companion` with `COMPANION_TOKEN`; exclusive au
 ```bash
 git show 022a1dfcca5cc240dee8b2fd3d02aeffdfa3ad20
 ```
+
+## 2026-08-25-f14zqeh3-exclusive-radio-done
+
+**Title:** Exclusive radio and exclusive-lossy honesty
+
+**Commit:** `1badcd8f99cf172838df19241e2d5d274658e2ed`
+
+With exclusive enabled, household radio plays through the companion hog. Exclusive lossy stays the library file as stored, with honest status and no exclusive-FLAC prepare. Open the delete commit for `exclusiveDelivery`, radio companion audio, and exclusive radio load/status.
+
+```bash
+git show 1badcd8f99cf172838df19241e2d5d274658e2ed
+```
