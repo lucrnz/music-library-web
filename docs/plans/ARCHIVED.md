@@ -781,3 +781,15 @@ Tuned-in radio plays a local download instead of `/api/stream` when **When a dow
 ```bash
 git show e3aa32268ba113efdbeb2d3e956aea04121616bc
 ```
+
+## 2026-08-22-xs9x99e4-radio-stubborn-rejoin-done
+
+**Title:** Radio stubborn rejoin
+
+**Commit:** `8f90b676ec0e89a5da5125f04df536fb1df0c1e6`
+
+The radio client stays in session through official track changes and transient glitches, and keeps joining the official current until audio is actually playing. Open the delete commit for stay-in-session and the rejoin loop.
+
+```bash
+git show 8f90b676ec0e89a5da5125f04df536fb1df0c1e6
+```
