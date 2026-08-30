@@ -6,7 +6,7 @@ Three jobs share one process (`uv run musicweb companion`) and one `COMPANION_TO
 
 1. **Exclusive hog** (macOS) — mpv + Core Audio. See [exclusive-audio.md](exclusive-audio.md).
 2. **Downloads blob store** — real-disk locker for the same Downloads feature the PWA catalogs in IndexedDB. See [downloads.md](downloads.md).
-3. **Optical + live virtual WAV** (macOS) — list/watch/eject a CD, serve a token-gated loopback WAV, `load` with an explicit hog flag. Watch lives on `optical_session.py` and is not torn down by `release_device`. One CDDA reader per track is reused across Ranges. Optional `libcdio` + `libcdio-paranoia`. Windows/Linux stub: empty list, WAV 404. See [cd-playback.md](cd-playback.md).
+3. **Optical + live virtual WAV** (macOS) — list/watch/eject a CD, serve a token-gated loopback WAV (`device` query, never a path segment), `load` with an explicit hog flag. Watch lives on `optical_session.py` and is not torn down by `release_device`. Watch does not TOC-poll a live reader. Paranoia reads sectors sequentially. STATUS redacts `token=`. One CDDA reader per track is reused across Ranges. Optional `libcdio` + `libcdio-paranoia`. Windows/Linux stub: empty list, WAV 404. See [cd-playback.md](cd-playback.md).
 
 ## Source of truth
 

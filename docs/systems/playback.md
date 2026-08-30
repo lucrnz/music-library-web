@@ -10,7 +10,7 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 - Exclusive URL / profile / block (no sink): `frontend/src/playback/exclusiveDelivery.ts`
 - Exclusive delivery builder: `frontend/src/playback/deliveryPolicy.ts` (`sink` + `profileFor`)
 - Shared prepare: `frontend/src/playback/prepare.ts` (`prepareTracks`)
-- Session handoff: `frontend/src/playback/session.ts` (`become("none" | "queue" | "radio" | "cd")`). CD does not go through `resolvePlayIntent` or `player.ts`; delivery is companion loopback via `playback/cdLoad.ts`. The disc list is `CdTrackList`, not `PlaylistView`. Queue mutations use `queueActionsAllowed()`. See [cd-playback.md](cd-playback.md).
+- Session handoff: `frontend/src/playback/session.ts` (`become("none" | "queue" | "radio" | "cd")`). CD does not go through `resolvePlayIntent` or `player.ts`; delivery is companion loopback via `playback/cdLoad.ts`. Compact status is the CD face. Playback details may list 16/44.1 and exclusive hog when exclusive is on. The disc list is `CdTrackList`, not `PlaylistView`. Queue mutations use `queueActionsAllowed()`. See [cd-playback.md](cd-playback.md).
 - Shared HTML element: `frontend/src/playback/sinks/htmlElement.ts`
 - Companion-stop decision: `needsCompanionStop` in `playback/playIntent.ts`
 - Quality prefs: `frontend/src/stores/settings.ts` (maps `/api/codecs` to camelCase once at hydrate; `setStreamCodec` / `setPlaybackPolicy` persist only)
@@ -55,7 +55,7 @@ Household radio **does** use `resolvePlaySource` with the same `playbackPolicy` 
 
 The **expanded** now-playing cover (mobile sheet, desktop panel) can 3D-flip to the album-artist photo. Eligible when `GET /api/artists/{id}` (mapped through `fromApiArtist`) reports `hasImage` or `hasPreferredImage` and `canReachServer()` is true; otherwise the cover is not a toggle. The peek resets on track change, collapse, or unmount. The lyrics overlay blocks the flip and does not change the face. An unreachable server disables the feature until the server is reachable again. Mini and compact-bar covers stay open-targets (expand now-playing); they do not flip. Helper: `frontend/src/components/player/coverFlip.ts`.
 
-Status line and Playback details take a `PlayStatusState` with required `session: "none" | "queue" | "radio"`. Exclusive face and exclusive detail rows apply when the exclusive snap is enabled and `session` is `"queue"` or `"radio"`. Radio injects `radioPlayState()` (`session: "radio"`) and `exclusiveStatusSnapshot()` when exclusive is on. `PlaybackStatusLine` uses `useDesktopViewport` from `layout.ts` for the desktop breakpoint.
+Status line and Playback details take a `PlayStatusState` with required `session: "none" | "queue" | "radio" | "cd"`. Exclusive face and exclusive detail rows apply when the exclusive snap is enabled and `session` is `"queue"`, `"radio"`, or `"cd"`. A CD session still uses the CD compact face (Reading / Detecting / Playing / …), not the exclusive Ready line. Radio injects `radioPlayState()` (`session: "radio"`) and `exclusiveStatusSnapshot()` when exclusive is on. `PlaybackStatusLine` uses `useDesktopViewport` from `layout.ts` for the desktop breakpoint.
 
 ## Resume position
 
