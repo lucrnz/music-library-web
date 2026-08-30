@@ -721,3 +721,15 @@ Tuned-in seek bar and time follow the radio element clock; the 1 Hz station snap
 ```bash
 git show 77f40cf08a6cf4555b2ddf64da20a3c20cc87fbb
 ```
+
+## 2026-08-22-fefoa1ds-radio-dj-cli-done
+
+**Title:** Radio debug DJ CLI
+
+**Commit:** `f69f49995b3a269824e60a6e0b043a02638ca946`
+
+`musicweb radio` inspects the live household station and performs debug DJ mutations over control RPC, not HTTP. Upcoming/banlist ids stay hidden unless `--spoilers`. Open the delete commit for the station DJ API, loop-safe notify, and the CLI.
+
+```bash
+git show f69f49995b3a269824e60a6e0b043a02638ca946
+```
