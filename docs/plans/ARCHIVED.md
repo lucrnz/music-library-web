@@ -685,3 +685,15 @@ One `player.volume` / `musicweb.volume` for the on-demand slider, the radio slid
 ```bash
 git show d6b87da4a24cc5896a316eaa97b7c684ff1a44fb
 ```
+
+## 2026-08-22-8bh1kwzw-download-prewarm-done
+
+**Title:** Download queue prewarm
+
+**Commit:** `13dd4872d63f17ee6f04591618f349132d4a29f0`
+
+Queued lossless downloads ask the server to encode in the background so wait is mostly transfer; active jobs stay urgent `GET /api/stream`. Open the delete commit for encode tiers, the prepare-window helper, and queue sync/forget.
+
+```bash
+git show 13dd4872d63f17ee6f04591618f349132d4a29f0
+```
