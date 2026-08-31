@@ -8,7 +8,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     ForeignKey,
-    Index,
     Integer,
     String,
     Text,
@@ -172,30 +171,6 @@ class PlaylistTrack(Base):
 
     playlist: Mapped[Playlist] = relationship(back_populates="items")
     track: Mapped[Track] = relationship()
-
-
-class ListenEvent(Base):
-    """One counted household listen (track × profile × play source × origin)."""
-
-    __tablename__ = "listen_events"
-    __table_args__ = (
-        Index("ix_listen_events_track_id_counted_at", "track_id", "counted_at"),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    track_id: Mapped[str] = mapped_column(
-        String(36),
-        ForeignKey("tracks.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    profile_tag: Mapped[str] = mapped_column(String, nullable=False)
-    play_source: Mapped[str] = mapped_column(String, nullable=False)
-    origin: Mapped[str] = mapped_column(
-        String, nullable=False, default="queue", server_default="queue"
-    )
-    counted_at: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    month_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
 
 
 class ScanState(Base):

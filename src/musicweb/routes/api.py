@@ -11,7 +11,6 @@ from musicweb.routes import (
     discovery,
     health,
     library_scan,
-    listens,
     media,
     playlists,
     radio,
@@ -24,7 +23,6 @@ router.include_router(discovery.router)
 router.include_router(media.router)
 router.include_router(artist_images.router)
 router.include_router(playlists.router)
-router.include_router(listens.router)
 router.include_router(diag.router)
 router.include_router(radio.router)
 router.include_router(cd.router)
