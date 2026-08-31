@@ -54,35 +54,6 @@
   }
 }
 
-.stats-view {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-}
-
-.stats-chips {
-  padding-top: 2px;
-}
-
-.stats-heading {
-  margin: 8px 12px 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.row-plays {
-  font-size: 13px;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  min-width: 2ch;
-  text-align: right;
-}
-
 .search-bar {
   padding: 0 12px 10px;
   flex-shrink: 0;

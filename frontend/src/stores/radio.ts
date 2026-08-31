@@ -6,7 +6,7 @@ import { reactive, watch } from "vue";
 import { fetchRadioNow } from "@/api";
 import { fromApiTrack, type Track } from "@/models/track";
 import { formatPlayingSubtitle } from "@/util";
-import { discard as discardListen } from "@/listens/bridge";
+
 import { become, onLeaveRadio } from "@/playback/session";
 import { player } from "@/stores/playerState";
 import { createRadioAudio } from "@/radio/audio";
@@ -287,7 +287,6 @@ export async function tuneIn(): Promise<void> {
     return;
   }
   become("radio");
-  discardListen();
   radio.chrome = "tuning";
   clearLoadedKeys();
   audio.setVolume(player.volume);

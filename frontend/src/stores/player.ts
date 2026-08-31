@@ -47,12 +47,6 @@ import { player, setPlayNotice } from "@/stores/playerState";
 import { exclusiveAudio } from "@/stores/exclusiveAudio";
 import { settings } from "@/stores/settings";
 import {
-  discard as discardListen,
-  onEnded as onListenEnded,
-  onRestart as onListenRestart,
-  onTime as onListenTime,
-} from "@/listens/bridge";
-import {
   activeSession,
   become,
   installOnDemandMediaSession,
@@ -157,11 +151,9 @@ function updatePositionState() {
 function onSinkEnded() {
   if (player.playSource === "none") return;
   const sink = getActiveSink();
-  onListenEnded();
   if (pl.repeat === "one") {
     sink.seek(0);
     Promise.resolve(sink.resume()).catch(console.error);
-    onListenRestart();
     return;
   }
   clearPlaybackPosition();
@@ -169,13 +161,7 @@ function onSinkEnded() {
 }
 
 function onSinkTime(t: number, d: number) {
-  const sink = getActiveSink();
   if (player.seeking) return;
-  onListenTime({
-    currentTime: t,
-    duration: d,
-    playing: !sink.paused,
-  });
   if (Number.isFinite(d) && d > 0) player.duration = d;
   if (pendingResume && still(pendingResume.gen)) {
     flushPendingResume();
@@ -232,7 +218,6 @@ function wireSinkHandlers() {
 
 export function stopPlayback() {
   become("none");
-  discardListen();
   setPlayNotice(null);
   nearEndPrepareSent = false;
   pendingResume = null;
@@ -384,7 +369,6 @@ export function playPrev() {
   const sink = getActiveSink();
   if (sink.currentTime > 3) {
     sink.seek(0);
-    onListenRestart();
     return;
   }
   const opts = queuePlayableOpts();

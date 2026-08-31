@@ -6,12 +6,6 @@ import { streamUrl } from "@/api";
 import { markTrackBroken } from "@/downloads/catalog";
 import { resolvePlaySource } from "@/downloads/resolve";
 import { downloads } from "@/downloads/state";
-import {
-  discard as discardListen,
-  onEnded as onListenEnded,
-  onTime as onListenTime,
-  startCycle as startListenCycle,
-} from "@/listens/bridge";
 import { SOURCE_TAG } from "@/lossyKind";
 import {
   PLAY_BLOCK_MESSAGES,
@@ -70,7 +64,6 @@ export function clearLoadedKeys(): void {
   lastLoadedLossy = null;
   revokeRadioLocalUrl();
   radio.playSource = "none";
-  discardListen();
 }
 
 export function maybeReseek(): void {
@@ -229,15 +222,6 @@ async function loadResolvedRadio(
     radio.chrome = "tuned";
     cancelRadioRejoin();
     joinHold.start();
-    if (resolved.profile) {
-      startListenCycle({
-        trackId: track.id,
-        durationSec: radio.track?.duration ?? null,
-        profile: resolved.profile,
-        playSource: resolved.source,
-        origin: "radio",
-      });
-    }
     writeRadioMediaSession();
   } catch (err) {
     if (gen !== radioGen) return;
@@ -260,7 +244,6 @@ export async function loadCurrent(): Promise<void> {
   if (!track?.id) return;
   cancelRadioJoinHold();
   if (radio.chrome === "tuned") radio.chrome = "tuning";
-  discardListen();
   const gen = ++radioGen;
   await loadResolvedRadio(track, gen, false);
 }
@@ -310,19 +293,7 @@ export function bindAudioHandlers(): void {
   });
   radioAudio.onEnded(() => {
     cancelRadioJoinHold();
-    onListenEnded();
     /* station clock owns advance */
-  });
-  radioAudio.sink.setHandlers({
-    onTime(t, d) {
-      if (radio.chrome !== "tuned") return;
-      if (radioAudio.loadInFlight || radioAudio.seekInFlight) return;
-      onListenTime({
-        currentTime: t,
-        duration: Number.isFinite(d) && d > 0 ? d : null,
-        playing: !radioAudio.paused && !radioAudio.ended,
-      });
-    },
   });
   radioAudio.onError(() => {
     if (radio.chrome !== "tuning" && radio.chrome !== "tuned") return;

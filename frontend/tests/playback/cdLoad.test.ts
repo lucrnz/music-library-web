@@ -1,4 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+function stubMacPwa() {
+  vi.stubGlobal("navigator", {
+    userAgentData: { platform: "macOS" },
+    userAgent: "Mozilla/5.0 Macintosh",
+    platform: "MacIntel",
+  });
+  vi.stubGlobal("window", {
+    matchMedia: (q: string) => ({ matches: q.includes("display-mode: standalone") }),
+  });
+}
 
 const {
   load,
@@ -71,6 +82,7 @@ import { cdStopTransport } from "@/playback/cdLoad";
 
 describe("cdLoad", () => {
   beforeEach(() => {
+    stubMacPwa();
     load.mockClear();
     seekFn.mockClear();
     setVolume.mockClear();
@@ -113,6 +125,10 @@ describe("cdLoad", () => {
     ]);
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("reloads hog when exclusive is toggled", async () => {
     const { cdLoad, initCdListeners, reloadCdAtPosition } = await import(
       "@/playback/cdLoad"
@@ -150,18 +166,4 @@ describe("cdLoad", () => {
     expect(seekFn).toHaveBeenCalledWith(12);
   });
 
-  it("starts a listen on apply only when that index is already loaded", async () => {
-    const listens = await import("@/listens/bridge");
-    const start = vi.spyOn(listens, "startCycle");
-    const { cdLoad, startCdListenIfLoaded } = await import("@/playback/cdLoad");
-    startCdListenIfLoaded({ id: "lib-1", duration: 1 });
-    expect(start).not.toHaveBeenCalled();
-    await cdLoad(0);
-    start.mockClear();
-    startCdListenIfLoaded({ id: "lib-1", duration: 1 });
-    expect(start).toHaveBeenCalledWith(
-      expect.objectContaining({ trackId: "lib-1", origin: "cd" }),
-    );
-    start.mockRestore();
-  });
 });

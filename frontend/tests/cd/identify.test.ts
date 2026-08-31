@@ -90,12 +90,10 @@ describe("applyCdDto", () => {
     expect(cd.tracks[0]?.artist).toBe("Band");
   });
 
-  it("keeps the current track number and does not start a listen without transport", async () => {
+  it("keeps the current track number on apply without transport", async () => {
     const { become } = await import("@/playback/session");
     const { applyCdDto } = await import("@/cd/identifyFlow");
     const { cd, setCdTracks } = await import("@/stores/cd");
-    const listens = await import("@/listens/bridge");
-    const start = vi.spyOn(listens, "startCycle");
     become("cd");
     setCdTracks(
       [1, 2, 3, 4].map((n) => ({
@@ -135,8 +133,6 @@ describe("applyCdDto", () => {
     });
     expect(cd.index).toBe(3);
     expect(cd.tracks[3]?.id).toBe("lib-4");
-    expect(start).not.toHaveBeenCalled();
-    start.mockRestore();
     become("none");
   });
 });

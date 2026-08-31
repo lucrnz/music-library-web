@@ -4,7 +4,6 @@
 import { confirmCd, identifyCd } from "@/api";
 import { decideIdentify, unknownTrackId } from "@/cd/identify";
 import type { CdApplied, CdTextPayload, CdTocPayload } from "@/cd/types";
-import { startCdListenIfLoaded } from "@/playback/cdLoad";
 import { activeSession } from "@/playback/session";
 import {
   cd,
@@ -118,8 +117,6 @@ export function applyCdDto(dto: CdApplied): void {
   cd.lastDiscid = dto.discid;
   cd.pickerOpen = false;
   cd.face = "idle";
-  const row = cd.index >= 0 ? cd.tracks[cd.index] : null;
-  if (activeSession() === "cd" && row) startCdListenIfLoaded(row);
 }
 
 let identifyGen = 0;

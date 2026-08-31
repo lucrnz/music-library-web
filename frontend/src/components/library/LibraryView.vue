@@ -35,7 +35,6 @@ import {
 } from "@/components/library/browseChrome";
 import EntityListHost from "@/components/library/EntityListHost.vue";
 import LibraryChrome from "@/components/library/LibraryChrome.vue";
-import StatsView from "@/components/stats/StatsView.vue";
 import {
   type LibraryAlbum,
   type LibraryBody,
@@ -200,13 +199,8 @@ const { coldStartTree, watchNavigation } = useBrowseLayout({
   route,
   isActivePane: () => route.meta.pane === "library",
   isTreeActive: () =>
-    ui.libraryLayout === "tree" &&
-    mode.value !== "search" &&
-    mode.value !== "stats",
+    ui.libraryLayout === "tree" && mode.value !== "search",
   onNavigate: () => {
-    if (mode.value === "stats") {
-      return;
-    }
     if (route.meta.pane !== "library") {
       if (!hasLoadedOnce.value) load();
       return;
@@ -233,9 +227,6 @@ watchNavigation(
 
 onMounted(() => {
   coldStartTree();
-  if (mode.value === "stats") {
-    return;
-  }
   load();
 });
 
@@ -394,9 +385,9 @@ watch(
 <template>
     <LibraryChrome
       :aria-label="source.flags.ariaLabel"
-      :title="mode === 'stats' ? 'Stats' : title"
+      :title="title"
       :subtitle="chromeSubtitle"
-      :show-back="showBack && !showTree && mode !== 'stats'"
+      :show-back="showBack && !showTree"
       :offline-banner="offlineBanner"
       :show-layout-toggle="showLayoutToggle"
       @back="goBack"
@@ -441,7 +432,6 @@ watch(
       </template>
 
       <LibraryTreePane v-if="showTree" :mode="mode" />
-      <StatsView v-else-if="mode === 'stats'" />
       <EntityListHost
         v-else
         :body="body"

@@ -42,12 +42,6 @@ const routes = [
     meta: { mode: "search", pane: "library", title: "Search" },
   },
   {
-    path: "/stats",
-    name: "stats",
-    component: Shell,
-    meta: { mode: "stats", pane: "library", title: "Stats" },
-  },
-  {
     path: "/downloads",
     name: "downloads",
     component: Shell,

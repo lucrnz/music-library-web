@@ -27,10 +27,8 @@ import { initDownloads } from "@/downloads/index";
 import { bindConnectivityStore } from "@/stores/connectivity";
 import { registerServiceWorker } from "@/pwa";
 import { initDiag } from "@/diag/log";
-import { initListens } from "@/listens/flush";
 
 initDiag();
-initListens();
 loadPlaylist();
 hydrateOutputVolume();
 initOutputVolume();

@@ -14,8 +14,6 @@ import { cdTrackUrl } from "@/playback/cdDelivery";
 import { createCompanionSink } from "@/playback/sinks/companionSink";
 import { PlayBlockError } from "@/playBlock";
 import { ejectOptical, watchOptical } from "@/exclusive/opticalClient";
-import { discard, onEnded, onTime, startCycle } from "@/listens/bridge";
-import { isUnknownCdId } from "@/cd/identify";
 
 const sink = createCompanionSink();
 let loadedIndex = -1;
@@ -34,7 +32,6 @@ function bindHandlers(): void {
         player.duration = d;
         if (cd.face === "reading") cd.face = "playing";
       }
-      onTime({ currentTime: t, duration: d > 0 ? d : null, playing: !player.paused });
       updateCdPositionState();
     },
     onPauseState(paused) {
@@ -46,7 +43,6 @@ function bindHandlers(): void {
     },
     onEnded() {
       if (activeSession() !== "cd") return;
-      onEnded();
       void cdNext();
     },
     onError(err) {
@@ -88,21 +84,11 @@ export async function cdLoad(index: number): Promise<void> {
   player.duration = 0;
   setPlaySourceState("cd", "cdda", null);
   try {
-    discard();
     await sink.load(url, { hog: hogFlag() });
     sink.setVolume(player.volume);
     loadedIndex = index;
     loadedUrl = url;
     writeCdMediaSession();
-    if (!isUnknownCdId(track.id)) {
-      startCycle({
-        trackId: track.id,
-        durationSec: track.duration,
-        profile: "cdda",
-        playSource: "cd",
-        origin: "cd",
-      });
-    }
   } catch (err) {
     const block = err instanceof PlayBlockError ? err : new PlayBlockError("exclusive_failed");
     setPlaySourceState("unavailable", "cdda", block.reason);
@@ -137,7 +123,6 @@ export function cdStopTransport(): void {
   player.paused = true;
   loadedIndex = -1;
   loadedUrl = "";
-  discard();
 }
 
 function nextIndex(delta: number): number {
@@ -219,22 +204,6 @@ function waitForSinkDuration(): Promise<void> {
       window.setTimeout(resolve, 3000);
     }),
   ]);
-}
-
-export function startCdListenIfLoaded(row: {
-  id: string;
-  duration: number | null;
-}): void {
-  if (loadedIndex < 0 || loadedIndex !== cd.index) return;
-  if (isUnknownCdId(row.id)) return;
-  discard();
-  startCycle({
-    trackId: row.id,
-    durationSec: row.duration,
-    profile: "cdda",
-    playSource: "cd",
-    origin: "cd",
-  });
 }
 
 function writeCdMediaSession(): void {

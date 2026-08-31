@@ -36,10 +36,6 @@ import {
   setPlaySourceState,
 } from "@/stores/playerState";
 import { getActiveStreamCodec, openSettings, settings } from "@/stores/settings";
-import {
-  discard as discardListen,
-  startCycle as startListenCycle,
-} from "@/listens/bridge";
 
 export const htmlSink = createHtmlAudioSink();
 export const companionSink = createCompanionSink();
@@ -71,7 +67,6 @@ export function failCtx(
 
 export function beginLoad() {
   playGen += 1;
-  discardListen();
   beginPlay();
   clearPlaySourceState();
   player.loadPending = true;
@@ -204,20 +199,6 @@ export function syncTransportFlags() {
   }
 }
 
-function maybeStartListenCycle(track: Track | null | undefined) {
-  const source = player.playSource;
-  const profile = player.playProfileId;
-  if ((source !== "streaming" && source !== "downloaded") || !profile) return;
-  if (!track?.id) return;
-  startListenCycle({
-    trackId: track.id,
-    durationSec: track.duration,
-    profile,
-    playSource: source,
-    origin: "queue",
-  });
-}
-
 async function attemptPlay(
   url: string,
   gen: number,
@@ -343,7 +324,6 @@ export async function loadResolved(
     { play_source: player.playSource, profile: player.playProfileId },
     "info",
   );
-  maybeStartListenCycle(track);
   syncTransportFlags();
   player.loadPending = false;
 }

@@ -13,7 +13,7 @@ export function libraryShowTree({
   mode: string;
 }): boolean {
   if (layout !== "tree") return false;
-  if (isSearch || mode === "search" || mode === "stats") return false;
+  if (isSearch || mode === "search") return false;
   return mode === "artists" || mode === "albums" || mode === "downloads";
 }
 
