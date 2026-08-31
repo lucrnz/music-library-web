@@ -949,3 +949,15 @@ The Queue CD icon and mobile tab stay hidden until Enable CD playback is on and 
 ```bash
 git show 3730b287c067d15ee09a6ddbdd09dbd5f7b16b65
 ```
+
+## 2026-08-31-xh0ooy7j-remove-listen-stats-done
+
+**Title:** Remove household listen stats
+
+**Commit:** `934257e48f34c9bac83dd009b7d7ebdc6eba9ba7`
+
+Dropped the 65% play-cycle, Stats browse mode, listen API, and `listen_events` table. Index-count `musicweb stats` stayed. Open the delete commit for the staged excision and the Alembic drop.
+
+```bash
+git show 934257e48f34c9bac83dd009b7d7ebdc6eba9ba7
+```
