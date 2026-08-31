@@ -51,14 +51,13 @@ This page describes **ownership boundaries** — where code lives and what each 
 | `radio/` | Household station clock, picker, tuner prepare (reuses Transcoder); snapshot serialize lives on `routes/radio.py` |
 | `lyrics/` | Local + LRCLIB lyrics fetch/parse |
 | `artist_images/` | Local + MusicBrainz / Last.fm / fanart.tv portrait cascade |
-| `routes/` | HTTP API routers (health, scan, discovery, `media.py` stream/cover, `artist_images.py` portraits, playlists, listens, radio, cd, diag) + SPA pages |
+| `routes/` | HTTP API routers (health, scan, discovery, `media.py` stream/cover, `artist_images.py` portraits, playlists, radio, cd, diag) + SPA pages |
 
 ## Ownership rules
 
 - **HTTP surface** lives under `routes/`. Aggregate router is `routes/api.py`; page/SPA fallback is `routes/pages.py`.
 - **Index writes** go through `jobs/` (orchestration) + `scan/` phases + repositories — routes and CLI must not invent parallel SQL paths or call enrichment phases directly.
-- **ORM models** live in `db/models.py`; query helpers in `db/repositories/` (including `listens.py`).
-- **Listen stats** HTTP is `routes/listens.py`; client cycle/outbox/chips are `frontend/src/listens/`. See `docs/systems/playback-stats.md`. Do not add `src/musicweb/listens/`.
+- **ORM models** live in `db/models.py`; query helpers in `db/repositories/`.
 - **Stream encode policy** (profiles, aresample/dither rules) lives under `transcode/`. Do not reimplement encode argv in routes.
 - **Present audio files** go through `Library.present_audio` (jail + exists + indexable). Stream maps `None` to 404. Enqueue, radio, scan lyrics/covers, and local artist-image folder lookup branch on `None`. Do not reimplement resolve-and-exists at those call sites. `resolve` stays for path jail used by `present_audio`.
 - **Settings secrets and paths** are env-driven; fetch intervals and feature toggles for artist images / lyrics are source constants in `config.py`.
@@ -77,5 +76,5 @@ This page describes **ownership boundaries** — where code lives and what each 
 - `docs/development/`: commands, environment, structure.
 - `docs/frontend/`: SPA conventions.
 - `docs/product/`: product and audio guidelines.
-- `docs/systems/`: cross-cutting design (scan, transcode, radio, PWA, downloads, playback, playback-stats, connectivity, CD playback).
+- `docs/systems/`: cross-cutting design (scan, transcode, radio, PWA, downloads, playback, connectivity, CD playback).
 - `docs/plans/`: in-flight multi-stage plans (`*-pending` only). Finished plans live in git history.

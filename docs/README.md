@@ -40,7 +40,6 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 - `docs/systems/cd-playback.md`: Mac PWA software CD deck (live WAV, unripped stubs, no rip UI).
 - `docs/systems/playback.md`: play source, quality prefs, prepare.
 - `docs/systems/radio.md`: household 24/7 station (encode + seek, not a live pipe).
-- `docs/systems/playback-stats.md`: household listen log and Stats browse mode.
 - `docs/systems/exclusive-audio.md`: operator get started (macOS / Windows), then design (Desktop companion / `musicweb companion`, hog, mpv, loopback WS).
 - `docs/systems/connectivity.md`: online / offline / server_down.
 - `docs/systems/diagnostics.md`: client/server event capture, Errors only vs Everything, `musicweb logs`.

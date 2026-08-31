@@ -38,9 +38,9 @@ Companion reads TOC + CD-Text (Latin-1, with an MS-JIS guess for Japanese pressi
 
 Lookup picks the medium whose disc id matches. If the medium position is greater than 1, confirm always writes unripped stubs and never reuses present disc-1 / `NULL` slots (no disc-1 theft). No `disc_no` column: a later rip of disc 2 still will not merge onto those stubs. Full bind still requires a name-keyed album whose present track count equals the disc **and** medium position 1. Otherwise half-bind: reuse a present slot at that track number on medium 1; create an `unripped` stub only for a hole. Confirm writes Cover Art Archive art only when the album has no cover yet.
 
-Apply keeps the current cursor when that track number is still present, and can start a listen cycle if the playing row just gained a real `tracks.id`.
+Apply keeps the current cursor when that track number is still present.
 
-Unripped stubs are first-class (`tracks.unripped`). They stay out of Artists/Albums/Search (`track_count` counts present files). Stats and the CD screen use them. Scan/FTS/`count_missing` do not string-match `fingerprint_algo`. A later rip attaches to an unripped hole at the same album + track number and never replaces a present file.
+Unripped stubs are first-class (`tracks.unripped`). They stay out of Artists/Albums/Search (`track_count` counts present files). The CD screen uses them; a later rip merge attaches to an unripped hole at the same album + track number and never replaces a present file. Scan/FTS/`count_missing` do not string-match `fingerprint_algo`.
 
 ## Audio
 
@@ -50,13 +50,9 @@ Companion STATUS `url` and mpv stderr never carry the raw query token.
 
 Eject stops transport and asks the companion to eject. Failure toasts; stay in the room if media is still present.
 
-## Listens
-
-Only MusicBrainz-identified plays (bound or unripped `tracks.id`). `origin=cd`, `play_source=cd`, profile `cdda`. Track N / CD-Text-only never start a listen cycle. Rankings stay mixed (no Stats chip). `count_missing` excludes unripped stubs.
-
 ## Out of scope
 
-Ripping UI / Import, showing unripped albums in Artists/Albums/Search, data-session / CD-ROM file playback, Windows/Linux optical implementation, household restream, analog MMC play-out, custom mpv `cdda://`, gapless whole-disc concat, manual tagger, lyrics/downloads/saved-playlist add for CD rows, DiskArbitration / IOKit location rewrite, `disc_no` on stubs and rip-merge of disc 2, Stats origin chip.
+Ripping UI / Import, showing unripped albums in Artists/Albums/Search, data-session / CD-ROM file playback, Windows/Linux optical implementation, household restream, analog MMC play-out, custom mpv `cdda://`, gapless whole-disc concat, manual tagger, lyrics/downloads/saved-playlist add for CD rows, DiskArbitration / IOKit location rewrite, `disc_no` on stubs and rip-merge of disc 2.
 
 ## Source of truth
 

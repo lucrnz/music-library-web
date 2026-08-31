@@ -21,11 +21,10 @@ Conceptual areas:
 | Artists / albums / tracks | Normalized discovery graph and track rows with fingerprints, paths, and source audio tech |
 | Track lyrics | Cached plain/synced lyrics status and text per track |
 | Playlists | Named lists of track IDs shared across LAN clients |
-| Listen events | Household play log for Stats rankings (not the media archive; not diagnostic JSONL) |
 | FTS | Full-text search over indexed track/artist/album text |
 | Scan state | Single-row progress for the background scanner |
 | Radio station / queue / banlist | Household radio clock bookkeeping — not a user-facing queue |
-| CD identities + unripped tracks | `cd_identities` snapshot (local GET / identify `applied`) plus `tracks.unripped` stubs for Stats and later rip merge. Not browseable. See `docs/systems/cd-playback.md`. |
+| CD identities + unripped tracks | `cd_identities` snapshot (local GET / identify `applied`) plus `tracks.unripped` stubs for later rip merge. Not browseable. See `docs/systems/cd-playback.md`. |
 
 ## Identity and durability
 
