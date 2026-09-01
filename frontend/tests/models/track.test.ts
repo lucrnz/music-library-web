@@ -25,6 +25,7 @@ describe("fromApiTrack", () => {
     expect(track.bitrateKbps).toBe(320);
     expect(track.bitrateMode).toBe("vbr");
     expect(track.sampleRateHz).toBe(44100);
+    expect(track.artistBrowsable).toBe(false);
   });
 
   it("keeps a null path for missing tracks", () => {

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from musicweb.db.repositories import artists as artists_repo
 from musicweb.db.repositories import playlists as playlists_repo
 from musicweb.db.session import get_db
 from musicweb.routes.serializers import track_dict
@@ -80,6 +81,11 @@ def playlist_tracks(playlist_id: str, db: Session = Depends(get_db)) -> dict:
     if pl is None:
         raise HTTPException(status_code=404, detail="Playlist not found")
     items = playlists_repo.list_tracks(db, playlist_id)
+    present = [item for item in items if item.track is not None]
+    browsable = artists_repo.ids_with_albums(
+        db,
+        [item.track.artist_id for item in present if item.track.artist_id],
+    )
     tracks = []
     for item in items:
         if item.track is None:
@@ -93,10 +99,15 @@ def playlist_tracks(playlist_id: str, db: Session = Depends(get_db)) -> dict:
                     "album": "",
                 }
             )
-        else:
-            d = track_dict(item.track)
-            d["position"] = item.position
-            tracks.append(d)
+            continue
+        d = track_dict(
+            item.track,
+            artist_browsable=bool(
+                item.track.artist_id and item.track.artist_id in browsable
+            ),
+        )
+        d["position"] = item.position
+        tracks.append(d)
     return {"id": pl.id, "name": pl.name, "items": tracks}
 
 

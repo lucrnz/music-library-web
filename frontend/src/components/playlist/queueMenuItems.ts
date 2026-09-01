@@ -56,7 +56,7 @@ export function buildQueueMenuItems({
       },
     });
   }
-  if (track.artistId) {
+  if (track.artistBrowsable && track.artistId) {
     items.push({
       id: "go-artist",
       label: "Go to artist",

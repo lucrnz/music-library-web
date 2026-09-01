@@ -14,6 +14,7 @@ export interface Artist {
   hasImage: boolean;
   hasPreferredImage: boolean;
   preferredRev: number;
+  isVa?: boolean;
 }
 
 function asRecord(raw: unknown): Record<string, unknown> | null {
@@ -52,6 +53,7 @@ export function fromApiArtist(raw: unknown): Artist {
       pick(rec, "hasPreferredImage", "has_preferred_image") ?? false
     ),
     preferredRev: asCount(pick(rec, "preferredRev", "preferred_rev") ?? 0),
+    isVa: !!(pick(rec, "isVa", "is_va") ?? false),
   };
 }
 

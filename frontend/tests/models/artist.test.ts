@@ -21,6 +21,12 @@ describe("fromApiArtist", () => {
     expect(artist.hasImage).toBe(true);
     expect(artist.hasPreferredImage).toBe(true);
     expect(artist.preferredRev).toBe(3);
+    expect(artist.isVa).toBe(false);
+  });
+
+  it("maps is_va", () => {
+    const artist = fromApiArtist({ id: "va", name: "Various Artists", is_va: true });
+    expect(artist.isVa).toBe(true);
   });
 
   it("defaults missing optional flags", () => {
@@ -31,6 +37,7 @@ describe("fromApiArtist", () => {
     expect(artist.hasImage).toBe(false);
     expect(artist.hasPreferredImage).toBe(false);
     expect(artist.preferredRev).toBe(0);
+    expect(artist.isVa).toBe(false);
   });
 });
 
@@ -46,6 +53,7 @@ describe("mapArtists", () => {
         hasImage: false,
         hasPreferredImage: false,
         preferredRev: 0,
+        isVa: false,
       },
     ]);
   });

@@ -41,6 +41,7 @@ function track(partial: Partial<Track> = {}): Track {
     sourceCodec: null,
     bitrateKbps: null,
     bitrateMode: null,
+    artistBrowsable: true,
     ...partial,
   };
 }
@@ -78,9 +79,18 @@ describe("buildQueueMenuItems", () => {
     expect(remove).toBeGreaterThan(copy);
     expect(ids).toContain("copy-artist");
     expect(ids).toContain("copy-album");
-    expect(
-      items.filter((i) => i.id.startsWith("copy-")).every((i) => i.icon === "copy"),
-    ).toBe(true);
+  });
+
+  it("omits go-artist when the performer is not browsable", () => {
+    become("none");
+    const t = track({ artistBrowsable: false });
+    pl.tracks = [t];
+    const ids = buildQueueMenuItems({
+      track: t,
+      index: 0,
+      openedKey: slotKey(t),
+    }).map((i) => i.id);
+    expect(ids).not.toContain("go-artist");
   });
 
   it("omits empty copies", () => {

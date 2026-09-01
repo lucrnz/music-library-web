@@ -33,19 +33,31 @@ def list_artists(
     }
 
 
+def _require_browsable_artist(db: Session, artist_id: str):
+    artist = artists_repo.get(db, artist_id)
+    if artist is None or artist.album_count == 0:
+        raise HTTPException(status_code=404, detail="Artist not found")
+    return artist
+
+
+def _track_dicts(db: Session, tracks: list) -> list[dict]:
+    browsable = artists_repo.ids_with_albums(
+        db, [t.artist_id for t in tracks if t.artist_id]
+    )
+    return [
+        track_dict(t, artist_browsable=bool(t.artist_id and t.artist_id in browsable))
+        for t in tracks
+    ]
+
+
 @router.get("/artists/{artist_id}")
 def get_artist(artist_id: str, db: Session = Depends(get_db)) -> dict:
-    artist = artists_repo.get(db, artist_id)
-    if artist is None:
-        raise HTTPException(status_code=404, detail="Artist not found")
-    return artist_dict(artist)
+    return artist_dict(_require_browsable_artist(db, artist_id))
 
 
 @router.get("/artists/{artist_id}/albums")
 def artist_albums(artist_id: str, db: Session = Depends(get_db)) -> dict:
-    artist = artists_repo.get(db, artist_id)
-    if artist is None:
-        raise HTTPException(status_code=404, detail="Artist not found")
+    artist = _require_browsable_artist(db, artist_id)
     rows = albums_repo.list_for_artist(db, artist_id)
     return {
         "artist": artist_dict(artist),
@@ -86,7 +98,7 @@ def album_tracks(album_id: str, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail="Album not found")
     return {
         "album": album_dict(album),
-        "items": [track_dict(t) for t in tracks_repo.list_for_album(db, album_id)],
+        "items": _track_dicts(db, tracks_repo.list_for_album(db, album_id)),
     }
 
 
@@ -95,7 +107,7 @@ def get_track(track_id: str, db: Session = Depends(get_db)) -> dict:
     track = tracks_repo.get(db, track_id)
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found")
-    return track_dict(track)
+    return _track_dicts(db, [track])[0]
 
 
 @router.get("/tracks/{track_id}/lyrics")
@@ -114,7 +126,7 @@ class TracksMetaRequest(BaseModel):
 
 @router.post("/tracks/meta")
 def tracks_meta(payload: TracksMetaRequest, db: Session = Depends(get_db)) -> dict:
-    return {"results": [track_dict(t) for t in tracks_repo.get_many(db, payload.ids)]}
+    return {"results": _track_dicts(db, tracks_repo.get_many(db, payload.ids))}
 
 
 @router.get("/search")
@@ -124,11 +136,10 @@ def search(
     db: Session = Depends(get_db),
 ) -> dict:
     track_ids = fts_search_track_ids(db, q, limit=limit)
-    tracks = [
-        track_dict(t)
-        for t in tracks_repo.get_many(db, track_ids)
-        if not t.is_missing
-    ]
+    tracks = _track_dicts(
+        db,
+        [t for t in tracks_repo.get_many(db, track_ids) if not t.is_missing],
+    )
     return {
         "q": q,
         "artists": [artist_dict(a) for a in artists_repo.search_by_name(db, q)],

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from musicweb.db.models import Album, Artist, TrackLyrics
+from musicweb.db.va import VA_ARTIST_ID
 
 
 class _AlbumTitle(Protocol):
@@ -34,7 +35,7 @@ class TrackPayload(Protocol):
     bitrate_mode: str | None
 
 
-def track_dict(track: TrackPayload) -> dict:
+def track_dict(track: TrackPayload, *, artist_browsable: bool = False) -> dict:
     return {
         "id": track.id,
         "path": track.rel_path if not track.is_missing else None,
@@ -57,6 +58,7 @@ def track_dict(track: TrackPayload) -> dict:
         "source_codec": track.source_codec,
         "bitrate_kbps": track.bitrate_kbps,
         "bitrate_mode": track.bitrate_mode,
+        "artist_browsable": bool(artist_browsable),
     }
 
 
@@ -70,6 +72,7 @@ def artist_dict(artist: Artist) -> dict:
         "has_image": bool(artist.has_image),
         "has_preferred_image": bool(artist.has_preferred_image),
         "preferred_rev": int(artist.preferred_rev or 0),
+        "is_va": artist.id == VA_ARTIST_ID,
     }
 
 

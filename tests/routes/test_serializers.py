@@ -1,6 +1,7 @@
 """API serializer shapes without HTTP."""
 
 from musicweb.db.models import Album, Artist, Track, TrackLyrics
+from musicweb.db.va import VA_ARTIST_ID, VA_DISPLAY_NAME
 from musicweb.routes.serializers import album_dict, artist_dict, lyrics_dict, track_dict
 
 
@@ -41,6 +42,7 @@ def test_track_dict_missing_path_is_null():
     body = track_dict(track)
     assert body["path"] is None
     assert body["is_missing"] is True
+    assert body["artist_browsable"] is False
 
 
 def test_artist_dict_includes_preferred_keys():
@@ -61,6 +63,33 @@ def test_artist_dict_includes_preferred_keys():
     assert body["preferred_rev"] == 4
     assert body["id"] == "art"
     assert body["name"] == "Artist"
+    assert body["is_va"] is False
+
+
+def test_artist_dict_is_va_for_canonical_id():
+    artist = Artist(
+        id=VA_ARTIST_ID,
+        name=VA_DISPLAY_NAME,
+        name_norm="various artists",
+        sort_name="various artists",
+        album_count=1,
+        track_count=1,
+    )
+    assert artist_dict(artist)["is_va"] is True
+
+
+def test_track_dict_artist_browsable_kwarg():
+    album = Album(
+        id="alb",
+        artist_id="art",
+        title="Album",
+        title_norm="album",
+        track_count=1,
+        has_cover=False,
+    )
+    track = _track()
+    track.album = album
+    assert track_dict(track, artist_browsable=True)["artist_browsable"] is True
 
 
 def test_album_dict_lossy_kind():

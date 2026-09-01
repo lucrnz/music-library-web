@@ -35,6 +35,7 @@ const track: Track = {
   sourceCodec: null,
   bitrateKbps: null,
   bitrateMode: null,
+  artistBrowsable: true,
 };
 
 describe("buildAlbumMenuItems", () => {
@@ -127,5 +128,15 @@ describe("buildNowPlayingMenuItems", () => {
         copyLyrics: () => {},
       }).map((i) => i.id),
     ).toEqual(["copy-title", "copy-artist", "copy-album", "go-album", "go-artist"]);
+  });
+
+  it("omits go-artist when the performer is not browsable", () => {
+    expect(
+      buildNowPlayingMenuItems({
+        track: { ...track, artistBrowsable: false },
+        offerCopyLyrics: false,
+        copyLyrics: () => {},
+      }).map((i) => i.id),
+    ).toEqual(["copy-title", "copy-artist", "copy-album", "go-album"]);
   });
 });

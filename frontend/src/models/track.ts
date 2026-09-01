@@ -28,6 +28,7 @@ export interface Track {
   sourceCodec: string | null;
   bitrateKbps: number | null;
   bitrateMode: string | null;
+  artistBrowsable?: boolean;
 }
 
 /**
@@ -120,6 +121,7 @@ export function fromApiTrack(raw: unknown): Track {
     sourceCodec: (pick(rec, "sourceCodec", "source_codec") as string | null | undefined) ?? null,
     bitrateKbps: _nullableNumber(pick(rec, "bitrateKbps", "bitrate_kbps")),
     bitrateMode: (pick(rec, "bitrateMode", "bitrate_mode") as string | null | undefined) ?? null,
+    artistBrowsable: !!(pick(rec, "artistBrowsable", "artist_browsable") ?? false),
   };
 }
 

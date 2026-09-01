@@ -110,7 +110,11 @@ export async function loadArtistDetail(id: string): Promise<LibraryPage> {
     title = artist.name || "Artist";
     headerArtist = artist;
   } catch {
-    /* keep default */
+    return page(
+      { title: "Artist", showBack: true },
+      { kind: "empty", message: "Artist not found" },
+      { headerArtist: null },
+    );
   }
   const chrome = { title, showBack: true };
   const albums = await fetchArtistAlbums(id);
