@@ -37,9 +37,9 @@ export function coverFlipArtistId(track: Track | null): string | null {
 }
 
 export function artistHasFlipPhoto(
-  artist: Partial<Pick<Artist, "hasImage" | "hasPreferredImage">>,
+  artist: Partial<Pick<Artist, "hasImage" | "hasPreferredImage" | "isVa">>,
 ): boolean {
-  return !!artist.hasImage || !!artist.hasPreferredImage;
+  return !!artist.hasImage || !!artist.hasPreferredImage || !!artist.isVa;
 }
 
 export function flipImageUrl(artist: Artist): string {

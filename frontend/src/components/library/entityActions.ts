@@ -18,7 +18,7 @@ export function entityActionsFor(
       case "artist":
         return buildArtistMenuItems({
           artist: target.artist,
-          includePhoto: ctx.includePhoto,
+          includePhoto: ctx.includePhoto && !target.artist.isVa,
           addAll: () => source.artistAddAll(target.artist.id),
           playAll: () => source.artistPlayAll(target.artist.id),
           downloadAll:

@@ -128,7 +128,7 @@ function onRowContextMenu(node: TreeNode, e: MouseEvent) {
 
 async function onThumbDrop(node: TreeNode, file: File) {
   const artist = artistFromNode(node);
-  if (!artist) return;
+  if (!artist || artist.isVa) return;
   const blob = await openCropFromFile(file);
   if (!blob) return;
   await submitPreferredCrop(artist, blob);

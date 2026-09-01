@@ -10,6 +10,7 @@ from musicweb.images.render import (
     placeholder_webp,
     render_square_webp,
 )
+from musicweb.images.va_portrait import va_portrait_webp
 from musicweb.images.webp_store import WebpAssetStore
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "full_thumb_webp_pair",
     "placeholder_webp",
     "render_square_webp",
+    "va_portrait_webp",
 ]

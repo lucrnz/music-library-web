@@ -60,6 +60,7 @@ describe("artistHasFlipPhoto", () => {
     expect(
       artistHasFlipPhoto({ hasImage: false, hasPreferredImage: false }),
     ).toBe(false);
+    expect(artistHasFlipPhoto({ isVa: true })).toBe(true);
   });
 });
 

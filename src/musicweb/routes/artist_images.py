@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from musicweb.artist_images.preferred import (
+    PreferredImageForbidden,
     PreferredImageTooLarge,
     PreferredImageUndecodable,
     apply_preferred_upload,
@@ -21,6 +22,8 @@ from musicweb.artist_images.resolve import (
 from musicweb.config import ARTIST_IMAGE_MAX_BYTES
 from musicweb.cover import placeholder_webp
 from musicweb.db.models import Artist
+from musicweb.db.va import VA_ARTIST_ID
+from musicweb.images import va_portrait_webp
 from musicweb.db.session import get_db
 from musicweb.routes.deps import artist_image_store, preferred_artist_image_store
 from musicweb.routes.serializers import artist_dict
@@ -51,6 +54,12 @@ async def artist_image(
     artist = db.get(Artist, artist_id)
     if artist is None:
         raise HTTPException(status_code=404, detail="Artist not found")
+    if artist_id == VA_ARTIST_ID:
+        return Response(
+            content=va_portrait_webp(size),
+            media_type="image/webp",
+            headers=_COVER_HEADERS,
+        )
 
     reconcile_artist_image_flags(
         artist,
@@ -78,12 +87,16 @@ async def artist_image_upload(
     artist = db.get(Artist, artist_id)
     if artist is None:
         raise HTTPException(status_code=404, detail="Artist not found")
+    if artist_id == VA_ARTIST_ID:
+        raise HTTPException(status_code=403, detail="VA has no preferred portrait")
 
     if file.size is not None and file.size > ARTIST_IMAGE_MAX_BYTES:
         raise HTTPException(status_code=413, detail="Image too large")
     data = await file.read(ARTIST_IMAGE_MAX_BYTES + 1)
     try:
         apply_preferred_upload(store, artist, data)
+    except PreferredImageForbidden as exc:
+        raise HTTPException(status_code=403, detail="VA has no preferred portrait") from exc
     except PreferredImageTooLarge as exc:
         raise HTTPException(status_code=413, detail="Image too large") from exc
     except PreferredImageUndecodable as exc:
@@ -101,5 +114,10 @@ def artist_image_delete(
     artist = db.get(Artist, artist_id)
     if artist is None:
         raise HTTPException(status_code=404, detail="Artist not found")
-    revert_preferred(store, artist)
+    if artist_id == VA_ARTIST_ID:
+        raise HTTPException(status_code=403, detail="VA has no preferred portrait")
+    try:
+        revert_preferred(store, artist)
+    except PreferredImageForbidden as exc:
+        raise HTTPException(status_code=403, detail="VA has no preferred portrait") from exc
     return artist_dict(artist)

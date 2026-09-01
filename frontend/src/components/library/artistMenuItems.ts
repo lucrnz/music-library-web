@@ -91,7 +91,7 @@ export function buildArtistMenuItems({
   });
   if (copy) items.push(copy);
 
-  if (includePhoto) {
+  if (includePhoto && !artist.isVa) {
     items.push({
       id: "change-photo",
       label: "Change artist photo",

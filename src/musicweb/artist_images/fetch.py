@@ -22,6 +22,7 @@ from musicweb.config import (
     Settings,
 )
 from musicweb.db.models import Artist
+from musicweb.db.va import VA_ARTIST_ID
 from musicweb.http_client import RateLimitedHttp, looks_like_image
 from musicweb.images import WebpAssetStore
 from musicweb.library import Library
@@ -64,6 +65,8 @@ class ArtistImageFetcher:
         self._providers = providers if providers is not None else default_remote_providers()
 
     def needs_fetch(self, artist: Artist, *, force: bool = False) -> bool:
+        if artist.id == VA_ARTIST_ID:
+            return False
         if not ARTIST_IMAGE_FETCH and not force:
             return False
         if force:
@@ -87,6 +90,8 @@ class ArtistImageFetcher:
         """Resolve image for one artist; updates DB fields on the ORM object."""
         if cancel and cancel():
             return FetchResult(ok=False, status="error", detail="canceled")
+        if artist.id == VA_ARTIST_ID:
+            return FetchResult(ok=False, status="skipped", detail="va")
 
         if force and self._store.has(artist.id):
             self._store.delete(artist.id)

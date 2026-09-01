@@ -10,6 +10,7 @@ from sqlalchemy import select
 from musicweb.artist_images import ArtistImageFetcher
 from musicweb.db.engine import Database
 from musicweb.db.models import Artist
+from musicweb.db.va import VA_ARTIST_ID
 from musicweb.scan.enrichment import iter_enrichment
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ def fetch_artist_images(
         artists = list(
             session.scalars(
                 select(Artist)
-                .where(Artist.album_count > 0)
+                .where(Artist.album_count > 0, Artist.id != VA_ARTIST_ID)
                 .order_by(Artist.sort_name, Artist.name)
             ).all()
         )

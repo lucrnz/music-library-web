@@ -47,8 +47,9 @@ const cover = computed(() =>
       e.preventDefault();
       emit("row-contextmenu", props.artist, e);
     }
+    const allowPhoto = computed(() => props.includePhoto && !props.artist.isVa);
     function onDragOver(e: DragEvent) {
-      if (!props.includePhoto) return;
+      if (!allowPhoto.value) return;
       if (!e.dataTransfer?.types.includes("Files")) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
@@ -59,7 +60,7 @@ const cover = computed(() =>
     }
     function onDrop(e: DragEvent) {
       (e.currentTarget as HTMLElement).classList.remove("thumb-drop-over");
-      if (!props.includePhoto) return;
+      if (!allowPhoto.value) return;
       e.preventDefault();
       e.stopPropagation();
       const file = e.dataTransfer?.files?.[0];

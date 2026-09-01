@@ -322,6 +322,7 @@ function trackCover(track: Track) {
 }
 
 async function onArtistThumbDrop(artist: Artist, file: File) {
+  if (artist.isVa) return;
   const blob = await openCropFromFile(file);
   if (!blob) return;
   await submitPreferredCrop(artist, blob);

@@ -65,6 +65,20 @@ describe("buildArtistMenuItems", () => {
     expect(menuHasPreferred(artist({ hasPreferredImage: true }))).toBe(true);
   });
 
+  it("drops photo items for Various Artists even when includePhoto is true", () => {
+    const items = buildArtistMenuItems({
+      artist: artist({ isVa: true, hasPreferredImage: true }),
+      includePhoto: true,
+      addAll: () => {},
+      playAll: () => {},
+    });
+    expect(items.map((i) => i.id)).toEqual([
+      "add-all",
+      "play-all",
+      "copy-artist",
+    ]);
+  });
+
   it("drops photo items when includePhoto is false", () => {
     const items = buildArtistMenuItems({
       artist: artist({ hasPreferredImage: true }),

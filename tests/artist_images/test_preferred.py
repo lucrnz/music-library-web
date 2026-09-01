@@ -6,11 +6,13 @@ import pytest
 from PIL import Image
 
 from musicweb.artist_images.preferred import (
+    PreferredImageForbidden,
     PreferredImageTooLarge,
     PreferredImageUndecodable,
     apply_preferred_upload,
     revert_preferred,
 )
+from musicweb.db.va import VA_ARTIST_ID, VA_DISPLAY_NAME
 from musicweb.config import ARTIST_IMAGE_MAX_BYTES
 from musicweb.db.models import Artist
 from musicweb.images import WebpAssetStore
@@ -94,3 +96,19 @@ def test_revert_then_noop(tmp_path):
     revert_preferred(store, artist)
     assert artist.preferred_rev == 2
     assert artist.has_preferred_image is False
+
+
+def test_va_preferred_is_forbidden(tmp_path):
+    store = WebpAssetStore(tmp_path / "artists-preferred")
+    artist = Artist(
+        id=VA_ARTIST_ID,
+        name=VA_DISPLAY_NAME,
+        name_norm="various artists",
+        sort_name="various artists",
+        album_count=1,
+        track_count=0,
+    )
+    with pytest.raises(PreferredImageForbidden):
+        apply_preferred_upload(store, artist, _png_bytes())
+    with pytest.raises(PreferredImageForbidden):
+        revert_preferred(store, artist)
