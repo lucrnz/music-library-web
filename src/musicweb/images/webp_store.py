@@ -69,6 +69,24 @@ class WebpAssetStore:
             except OSError:
                 pass
 
+    def rekey(self, old_id: str, new_id: str) -> None:
+        """Rename full+thumb to *new_id*, or drop *old_id* if *new_id* already has files."""
+        if old_id == new_id:
+            return
+        if self.has(new_id):
+            self.delete(old_id)
+            return
+        for size in ("full", "thumb"):
+            src = self.path_for(old_id, size)
+            dest = self.path_for(new_id, size)
+            try:
+                if src.is_file() and src.stat().st_size > 0:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    src.replace(dest)
+            except OSError as exc:
+                logger.debug("webp store rekey failed %s → %s: %s", old_id, new_id, exc)
+        self.delete(old_id)
+
     def write_from_bytes(self, asset_id: str, source: bytes) -> bool:
         """Write full+thumb WebP from raw image bytes. Returns True on success."""
         if not source:

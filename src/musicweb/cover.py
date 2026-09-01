@@ -115,6 +115,9 @@ class CoverStore:
     def path_for(self, album_id: str, size: str) -> Path:
         return self.store.path_for(album_id, size)
 
+    def rekey(self, old_id: str, new_id: str) -> None:
+        self.store.rekey(old_id, new_id)
+
     def ensure_album_cover(
         self, album_id: str, audio_path: Path, *, force: bool = False
     ) -> bool:

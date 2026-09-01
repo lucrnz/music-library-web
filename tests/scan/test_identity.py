@@ -6,6 +6,7 @@ from musicweb.db.fts import fts_search_track_ids
 from musicweb.db.models import Track
 from musicweb.db.names import track_id_for
 from musicweb.metadata import TrackMetadata
+from musicweb.db.va import VA_ARTIST_ID, VA_DISPLAY_NAME
 from musicweb.scan.identity import (
     apply_track_fields,
     ensure_album,
@@ -44,6 +45,16 @@ def test_ensure_artist_and_album_idempotent_and_year_fill(db):
         again = ensure_album(session, a1, "OK Computer", 1997)
         assert again.id == album.id
         assert again.year == 1997
+        session.commit()
+
+
+def test_ensure_artist_collapses_va_aliases(db):
+    with db.session() as session:
+        a1 = ensure_artist(session, "V.A.")
+        a2 = ensure_artist(session, "Various Artists")
+        a3 = ensure_artist(session, "オムニバス")
+        assert a1.id == a2.id == a3.id == VA_ARTIST_ID
+        assert a1.name == VA_DISPLAY_NAME
         session.commit()
 
 

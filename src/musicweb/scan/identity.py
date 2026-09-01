@@ -18,14 +18,25 @@ from musicweb.db.names import (
     normalize_name,
     sort_name,
 )
+from musicweb.db.va import (
+    VA_ARTIST_ID,
+    VA_DISPLAY_NAME,
+    canonical_artist_display,
+    is_va_name,
+)
 from musicweb.metadata import TrackMetadata
 from musicweb.scan.formats import source_codec_is_lossy
 
 
 def ensure_artist(session: Session, display: str) -> Artist:
-    name = display_name(display, UNKNOWN_ARTIST)
-    name_norm = normalize_name(name) or normalize_name(UNKNOWN_ARTIST)
-    artist_id = artist_id_for(name_norm)
+    if is_va_name(display):
+        name = VA_DISPLAY_NAME
+        name_norm = normalize_name(VA_DISPLAY_NAME)
+        artist_id = VA_ARTIST_ID
+    else:
+        name = display_name(display, UNKNOWN_ARTIST)
+        name_norm = normalize_name(name) or normalize_name(UNKNOWN_ARTIST)
+        artist_id = artist_id_for(name_norm)
     artist = session.get(Artist, artist_id)
     if artist is None:
         artist = Artist(
@@ -174,10 +185,10 @@ def apply_track_fields(
     Returns album_id.
     """
     title = display_name(meta.title, path.stem)
-    artist_name = display_name(meta.artist, UNKNOWN_ARTIST)
+    artist_name = canonical_artist_display(meta.artist, UNKNOWN_ARTIST)
     album_title = display_name(meta.album, UNKNOWN_ALBUM)
     albumartist_raw = meta.albumartist or meta.artist or ""
-    album_artist_name = display_name(albumartist_raw, artist_name)
+    album_artist_name = canonical_artist_display(albumartist_raw, artist_name)
 
     track_artist = ensure_artist(session, artist_name)
     album_artist = ensure_artist(session, album_artist_name)

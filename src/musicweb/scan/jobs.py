@@ -17,6 +17,7 @@ from musicweb.scan.covers import album_cover_sources, extract_covers
 from musicweb.scan.finalize import mark_missing, recount_entities
 from musicweb.scan.index_phase import run_index
 from musicweb.scan.lyrics import fetch_track_lyrics
+from musicweb.scan.va_remount import remount_va
 
 CancelFn = Callable[[], bool]
 ProgressFn = Callable[..., None]
@@ -29,9 +30,11 @@ def _finalize(
     mode: ScanMode,
     *,
     seen_paths: set[str],
+    covers: CoverStore,
 ) -> int:
     with database.session() as session:
         missing = mark_missing(session, seen_paths)
+        remount_va(session, covers)
         recount_entities(session)
         if mode == "full":
             fts_rebuild(session)
@@ -91,7 +94,9 @@ def run_scan(
     if cancel():
         return
     begin_phase("finalize")
-    missing = _finalize(database, mode, seen_paths=result.seen_paths)
+    missing = _finalize(
+        database, mode, seen_paths=result.seen_paths, covers=covers
+    )
     set_counts(result.seen_count, result.upserted, missing)
     on_progress(
         phase="finalize",

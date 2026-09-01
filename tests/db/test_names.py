@@ -15,6 +15,7 @@ def test_normalize_name_collapses_and_casefolds():
     assert normalize_name("  Radio  Head ") == "radio head"
     assert normalize_name(None) == ""
     assert normalize_name("") == ""
+    assert normalize_name("Various Artists") == "various artists"
 
 
 def test_display_name_fallback():
