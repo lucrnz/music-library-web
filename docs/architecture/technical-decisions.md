@@ -36,6 +36,10 @@ Browser-compatible delivery is produced by ffmpeg, not browser demux of arbitrar
 
 Radio is a household clock plus instructed client seek, not a live stdout pipe and not a second encoder. Tuners call the same `enqueue_prepare` as `/transcode/prepare`. There is no `/api/radio/stream` and no concat demuxer. See `docs/systems/radio.md`.
 
+### VA compilations are one artist; radio identity is the performer
+
+Album-artist strings that match the closed VA alias set (`src/musicweb/db/va.py`) are one library artist, displayed Various Artists. Radio picks by performing artist, not album artist: a studio cut and a VA appearance share one urn and one ban key. See `docs/systems/library-scan.md` and `docs/systems/radio.md`.
+
 ### Vite + pnpm frontend, FastAPI serves dist
 
 The SPA is Vue 3 SFC (`<script setup lang="ts">`) plus TypeScript modules under `frontend/src/`. Vue and Vue Router versions live in `frontend/package.json`. `pnpm --dir frontend typecheck` runs `vue-tsc --noEmit` on the app tsconfig. `pnpm --dir frontend build` typechecks then Vite-emits `frontend/dist`. That build is required before `uv run musicweb` and before a green `musicweb doctor`. FastAPI serves `frontend/dist` (hashed `/assets/`, images at `/static/img/…`). CSS stays in `frontend/css/`. Client stores stay custom reactive modules (not Pinia). Client types are hand-written from today’s shapes (existing JSDoc plus unmapped snake_case fields next to their owner; no OpenAPI codegen; no new runtime mappers). The service worker stays Python-generated from a dist inventory; cache-first is precache membership. Source HTML has valid `{"publicOrigin":"","devUnlockPwa":false}`; FastAPI replaces that `#musicweb-config` script body per request (`publicOrigin` plus optional `devUnlockPwa`). Dev is `pnpm --dir frontend dev` (proxies `/api` to `:8765`) plus `uv run musicweb`.

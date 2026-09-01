@@ -31,6 +31,7 @@ Conceptual areas:
 - Track IDs are stable content-derived identifiers (see scan docs).
 - Missing files can be marked without immediately destroying identity (playlists and history-friendly behavior).
 - Cover and artist WebP files live beside the DB under `covers/` (`albums/`, `artists/`, `artists-preferred/`), keyed by entity IDs — not inside SQLite BLOBs.
+- **VA** aliases collapse to one well-known artist id (uuid5 of normalized `Various Artists`). There is no `is_va` column. Album ids follow that owner after remount.
 
 ## Guardrails
 

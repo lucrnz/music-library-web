@@ -49,8 +49,14 @@ Exact skip/rehash heuristics live in source; docs only state the product intent.
 ## Enrichment policies
 
 - **Covers:** embedded art or common folder filenames; `CoverStore` extracts, `WebpAssetStore` owns has/path and writes full + thumb WebP.
-- **Artist images:** optional remote providers need keys/email in env; local `artist.jpg` / `artist.png` works without keys. Rate limits and retry cooldowns are source constants in `config.py`. Scan writes only `covers/artists/`. An operator override may live beside that pair under `covers/artists-preferred/`; fetch and `--force` must not delete it. `GET /api/artist-image` serves the override first (`artist_images/resolve.py`). Artist-image and lyrics commit loops share `iter_enrichment`.
+- **Artist images:** optional remote providers need keys/email in env; local `artist.jpg` / `artist.png` works without keys. Rate limits and retry cooldowns are source constants in `config.py`. Scan writes only `covers/artists/`. An operator override may live beside that pair under `covers/artists-preferred/`; fetch and `--force` must not delete it. `GET /api/artist-image` serves the override first (`artist_images/resolve.py`). Artist-image and lyrics commit loops share `iter_enrichment`. **VA** (the single Various Artists compilation owner) is skipped: no local file, no remote fetch, no preferred upload, even under `--force`. `GET /api/artist-image` short-circuits to the packaged Aero portrait (`musicweb.images.va_portrait`).
 - **Lyrics:** LRCLIB needs no API key; retries/cooldowns are source constants. Local sidecar presence is `sidecar_lrc_exists`.
+
+## Various Artists (VA)
+
+Compilations whose **album artist** (whole field; today’s fallback is still `albumartist or artist`) matches the closed alias set fold to one artist displayed **Various Artists**. Matcher and well-known id live in `src/musicweb/db/va.py` — do not copy the alias inventory into docs. `ensure_artist` canonicalizes on write. Every `run_scan` (startup quick included) remounts already-indexed alias rows in SQL without re-reading files (`src/musicweb/scan/va_remount.py`); regen-only jobs do not remount. Same-title comps under former aliases merge (`album_id` follows the new owner). Preferred files under `covers/artists-preferred/` stay sacred.
+
+A **VA-only performer** appears only as a track artist on VA albums and owns no albums. They stay off the Artists list and have no artist page; their tracks stay in Search. Anyone with `album_count == 0` 404s on `GET /api/artists/{id}`.
 
 ## Guardrails
 

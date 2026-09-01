@@ -29,12 +29,12 @@ Clients are **installed Chromium PWAs** unless noted. Feature availability (for 
 
 - **Mobile-first.** Phones get bottom tabs (Library | Playlist | Radio), scrolling browse-mode chips, icon-only queue actions, a mini-player, and an expandable now-playing sheet. Desktop (≥ ~900px) hides the tab bar; Library/Playlist stay the dual-pane; radio uses the now-playing right rail. Chrome is an application shell, not a document: names and lyrics are copied from `⋯` menus, not by selecting page text.
 
-- **Browse modes:** Artists → Albums → Tracks, Albums grid, Search. Routes should remain bookmarkable.
+- **Browse modes:** Artists → Albums → Tracks, Albums grid, Search. Routes should remain bookmarkable. **VA** (Various Artists) is one artist card for compilations whose album artist matches the closed alias set. Performers who only appear on VA albums are not Artists-UI cards; their tracks still appear in Search.
+- **Custom artist art:** an operator can set one library-wide preferred portrait from a device file (cropped square). It is a server-side display override, LAN-global and reversible, never written back into the music library tree. Scan still fills `covers/artists/` and must not delete the override. **VA is the exception:** packaged Aero CD + note, no fetch, no preferred.
 - **Queue vs playlists:** Session queue lives in the browser (survives reload). Saved playlists live in SQLite and are shared across devices on the same server.
 - **Honest capability:** Codec profile pickers should list only formats the **current browser can actually decode** (runtime media probes), not optimistic `canPlayType` / UA guesses alone. See `docs/systems/playback.md`.
 - **Quality preferences (client):** One Streaming setting and an independent Download setting. Playback may prefer a local download when it is at least as good as the active stream profile (user-selectable policy). See `docs/systems/playback.md`.
 - **Offline downloads (client):** Optional download-to-device locker. Android (and leftover browser files) use OPFS. An installed desktop PWA stores bytes on companion disk. They must not corrupt the server index. The download queue auto-pauses when offline, the server is unreachable, or the companion is down. See `docs/systems/downloads.md`, `docs/systems/companion.md`, and `docs/systems/connectivity.md`.
-- **Custom artist art:** an operator can set one library-wide preferred portrait from a device file (cropped square). It is a server-side display override, LAN-global and reversible, never written back into the music library tree. Scan still fills `covers/artists/` and must not delete the override.
 
 ## Audio quality principles
 

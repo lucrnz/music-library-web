@@ -30,9 +30,9 @@ Upcoming rows in `library.db` are an accepted spoiler. UI, HTTP, WebSocket, and 
 
 ## Picking
 
-Uniform random **album artist** → **album** → eligible track. Eligible: present, duration ≥ 30s, has an album. Lossy tracks are eligible when indexed. Batch of 8; same track at most once per batch; at most 2 tracks per album artist. Banlist: persist at most four picked batches; when a fifth would be appended, keep `[previous, new]` only.
+Uniform random **performing artist** → **album** → eligible track (`src/musicweb/radio/picker.py`). Eligible: present, duration ≥ 30s, has an album and a track `artist_id`. Lossy tracks are eligible when indexed. VA albums (album artist is Various Artists) contribute each guest’s tracks as a **subalbum** on that performer’s urn; Various Artists as album artist is not a lottery key. Batch of 8; same track at most once per batch; at most one track per performing artist per window, except tracks whose performer is VA itself (badly tagged comps). Banlist storage stays batches of track ids (persist at most four picked batches; when a fifth would be appended, keep `[previous, new]` only); artist exclusion is derived from those ids.
 
-Small-library loosening (in order): drop oldest banlist batches → drop the per-artist cap → shrink the batch to the eligible-track count (no in-batch repeats). If nothing is ≥30s, the station is idle.
+Small-library loosening (in order): drop oldest banlist batches → shrink the batch to what remains (no in-batch repeats). If nothing is ≥30s, the station is idle.
 
 Pick-time **ffprobe** is required (`musicweb doctor` and startup fail without it). Bad files are skipped for the process lifetime and are not written to the banlist. Catalog paths go through `Library.resolve`. Encode policy at stream time uses `tech_from_track`, not a second pick-time tech snapshot.
 
