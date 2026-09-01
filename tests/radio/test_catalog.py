@@ -120,6 +120,7 @@ def test_eligible_rows_include_lossy_exclude_hard_filters(db):
     ids = {row.id for row in rows}
     assert ids == {"ok-lossless", "ok-lossy"}
     assert all(row.album_artist_id == "art-1" for row in rows)
+    assert all(row.artist_id == "art-1" for row in rows)
 
 
 def test_resolve_failure_omits_row(tmp_path):
@@ -133,9 +134,9 @@ def test_resolve_failure_omits_row(tmp_path):
             return good
 
     rows = [
-        EligibleRow("t-ok", "ok.flac", 180_000, "alb", "art"),
-        EligibleRow("t-jail", "jail.flac", 180_000, "alb", "art"),
-        EligibleRow("t-missing", "missing.flac", 180_000, "alb", "art"),
+        EligibleRow("t-ok", "ok.flac", 180_000, "alb", "art", "art"),
+        EligibleRow("t-jail", "jail.flac", 180_000, "alb", "art", "art"),
+        EligibleRow("t-missing", "missing.flac", 180_000, "alb", "art", "art"),
     ]
     snap = snapshot_from_rows(FakeLib(), rows)  # type: ignore[arg-type]
     ids = {t.id for t in snap.all_tracks()}
@@ -149,8 +150,24 @@ def test_snapshot_has_no_source_tech(tmp_path):
     lib = SimpleNamespace(present_audio=lambda _rel: path)
     snap = snapshot_from_rows(
         lib,  # type: ignore[arg-type]
-        [EligibleRow("t1", "a.flac", 180_000, "alb", "art")],
+        [EligibleRow("t1", "a.flac", 180_000, "alb", "art", "art")],
     )
     track = snap.all_tracks()[0]
     assert not hasattr(track, "is_lossy")
     assert not hasattr(track, "source_codec")
+
+
+def test_snapshot_groups_va_guests_by_performer(tmp_path):
+    path = tmp_path / "a.flac"
+    path.write_bytes(b"x")
+    lib = SimpleNamespace(present_audio=lambda _rel: path)
+    snap = snapshot_from_rows(
+        lib,  # type: ignore[arg-type]
+        [
+            EligibleRow("bj", "a.flac", 180_000, "now", "va", "bon-jovi"),
+            EligibleRow("ac", "a.flac", 180_000, "now", "va", "alice"),
+        ],
+    )
+    assert set(snap.artists) == {"bon-jovi", "alice"}
+    assert {t.id for t in snap.artists["bon-jovi"]["now"]} == {"bj"}
+    assert {t.id for t in snap.artists["alice"]["now"]} == {"ac"}

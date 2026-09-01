@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from musicweb.db.models import Track
+from sqlalchemy.orm import object_session
+
+from musicweb.db.models import Artist, Track
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +20,7 @@ class EligibleRow:
     duration_ms: int
     album_id: str
     album_artist_id: str
+    artist_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,11 +32,12 @@ class CatalogTrack:
     path: Path
     album_id: str
     album_artist_id: str
+    artist_id: str
 
 
 @dataclass
 class CatalogSnapshot:
-    """Album-artist → album → tracks graph of eligible radio tracks."""
+    """Performer → album → tracks graph of eligible radio tracks."""
 
     artists: dict[str, dict[str, list[CatalogTrack]]]
 
@@ -97,10 +101,17 @@ class SnapshotTrack:
     source_codec: str | None
     bitrate_kbps: int | None
     bitrate_mode: str | None
+    artist_browsable: bool = False
 
     @staticmethod
     def from_track(row: Track) -> SnapshotTrack:
         album = SnapshotAlbum(title=row.album.title) if row.album is not None else None
+        browsable = False
+        if row.artist_id:
+            sess = object_session(row)
+            if sess is not None:
+                artist = sess.get(Artist, row.artist_id)
+                browsable = artist is not None and artist.album_count > 0
         return SnapshotTrack(
             id=row.id,
             rel_path=row.rel_path,
@@ -122,6 +133,7 @@ class SnapshotTrack:
             source_codec=row.source_codec,
             bitrate_kbps=row.bitrate_kbps,
             bitrate_mode=row.bitrate_mode,
+            artist_browsable=browsable,
         )
 
 

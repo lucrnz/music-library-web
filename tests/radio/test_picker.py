@@ -3,6 +3,7 @@
 from pathlib import Path
 from random import Random
 
+from musicweb.db.va import VA_ARTIST_ID
 from musicweb.radio.picker import pick_batch
 from musicweb.radio.types import CatalogSnapshot, CatalogTrack
 
@@ -12,6 +13,7 @@ def _track(
     *,
     artist: str,
     album: str | None = None,
+    album_artist: str | None = None,
     duration_ms: int = 180_000,
     path: str | None = None,
 ) -> CatalogTrack:
@@ -20,14 +22,15 @@ def _track(
         duration_ms=duration_ms,
         path=Path(path or f"/lib/{track_id}.flac"),
         album_id=album or f"alb-{artist}",
-        album_artist_id=artist,
+        album_artist_id=album_artist or artist,
+        artist_id=artist,
     )
 
 
 def _snapshot(tracks: list[CatalogTrack]) -> CatalogSnapshot:
     artists: dict[str, dict[str, list[CatalogTrack]]] = {}
     for track in tracks:
-        albums = artists.setdefault(track.album_artist_id, {})
+        albums = artists.setdefault(track.artist_id, {})
         albums.setdefault(track.album_id, []).append(track)
     return CatalogSnapshot(artists=artists)
 
@@ -36,25 +39,14 @@ def _ok(_path: Path) -> bool:
     return True
 
 
-def test_full_batch_unique_and_artist_cap():
-    tracks = [
-        _track(f"a{i}", artist="art-a", album=f"alb-a-{i}") for i in range(6)
-    ] + [
-        _track(f"b{i}", artist="art-b", album=f"alb-b-{i}") for i in range(6)
-    ] + [
-        _track(f"c{i}", artist="art-c", album=f"alb-c-{i}") for i in range(6)
-    ] + [
-        _track(f"d{i}", artist="art-d", album=f"alb-d-{i}") for i in range(6)
-    ]
+def test_full_batch_unique_one_per_performer():
+    tracks = [_track(f"t{i}", artist=f"art-{i}") for i in range(12)]
     batch = pick_batch(_snapshot(tracks), [], set(), Random(1), _ok)
     assert len(batch) == 8
     ids = [t.id for t in batch]
     assert len(ids) == len(set(ids))
-    counts: dict[str, int] = {}
-    for track in batch:
-        counts[track.album_artist_id] = counts.get(track.album_artist_id, 0) + 1
-        assert track.duration_ms >= 30_000
-    assert all(n <= 2 for n in counts.values())
+    assert len({t.artist_id for t in batch}) == 8
+    assert all(t.duration_ms >= 30_000 for t in batch)
 
 
 def test_same_track_not_twice_in_batch():
@@ -78,38 +70,33 @@ def test_banlist_len_ge_4_uses_last_batch_only():
     older = set().union(*batches[:-1])
     fifth_ids = {t.id for t in fifth}
     assert fifth_ids.isdisjoint(last)
-    # With 40 unique ids, the fifth batch must be able to reuse older banlist ids.
     assert fifth_ids & older or fifth_ids.isdisjoint(set().union(*batches))
 
     stale = batches + [["ghost"]]
     assert len(stale) == 5
     sixth = pick_batch(snap, stale, set(), Random(5), _ok)
     assert {t.id for t in sixth}.isdisjoint({"ghost"})
-    # Last-only: tracks from batches[3] (previous last) are legal again.
-    # The banned set is only ["ghost"].
 
 
-def test_attempt_budget_exhausted_loosens_cap():
+def test_single_performer_short_batch():
     tracks = [_track(f"a{i}", artist="only", album=f"alb-{i}") for i in range(8)]
     batch = pick_batch(_snapshot(tracks), [], set(), Random(6), _ok)
-    assert len(batch) == 8
-    assert {t.album_artist_id for t in batch} == {"only"}
+    assert len(batch) == 1
+    assert batch[0].artist_id == "only"
 
 
-def test_loosening_drops_banlist_then_cap_then_shrinks():
+def test_loosening_drops_banlist_then_shrinks():
     tracks = [
         _track("a1", artist="A", album="alb-A"),
         _track("a2", artist="A", album="alb-A"),
-        _track("a3", artist="A", album="alb-A"),
         _track("b1", artist="B", album="alb-B"),
-        _track("b2", artist="B", album="alb-B"),
         _track("c1", artist="C", album="alb-C"),
     ]
-    banlist = [["b1", "b2", "c1", "a1"]]
+    banlist = [["b1", "c1", "a1"]]
     batch = pick_batch(_snapshot(tracks), banlist, set(), Random(7), _ok)
     ids = {t.id for t in batch}
-    assert ids == {"a1", "a2", "a3", "b1", "b2", "c1"}
-    assert len(batch) == 6
+    assert ids == {"a1", "b1", "c1"}
+    assert len({t.artist_id for t in batch}) == 3
 
 
 def test_five_eligible_shrinks_without_repeats():
@@ -137,21 +124,36 @@ def test_probe_false_skips_id_and_fills_another():
     assert len(batch) == 8
 
 
-def test_artist_cap_uses_album_artist_not_track_artist():
-    # Three tracks share album artist A; a fourth is another album artist.
-    # Full rules: at most 2 from A, so the batch cannot be 3×A when others exist.
+def test_nirvana_studio_bans_nirvana_on_va():
     tracks = [
-        _track("a1", artist="A", album="alb-A"),
-        _track("a2", artist="A", album="alb-A"),
-        _track("a3", artist="A", album="alb-A"),
-        _track("b1", artist="B", album="alb-B"),
-        _track("c1", artist="C", album="alb-C"),
-        _track("d1", artist="D", album="alb-D"),
-        _track("e1", artist="E", album="alb-E"),
-        _track("f1", artist="F", album="alb-F"),
-        _track("g1", artist="G", album="alb-G"),
+        _track("nirv-studio", artist="nirvana", album="nevermind"),
+        _track(
+            "nirv-va",
+            artist="nirvana",
+            album="grunge-box",
+            album_artist=VA_ARTIST_ID,
+        ),
+        _track("pj", artist="pearl-jam", album="ten"),
+        _track("soundgarden", artist="soundgarden", album="superunknown"),
     ]
     batch = pick_batch(_snapshot(tracks), [], set(), Random(11), _ok)
-    from_a = [t for t in batch if t.album_artist_id == "A"]
-    assert len(from_a) <= 2
-    assert len(batch) == 8
+    nirvana = [t for t in batch if t.artist_id == "nirvana"]
+    assert len(nirvana) == 1
+
+
+def test_two_guests_on_same_va_album_both_eligible():
+    tracks = [
+        _track("bj", artist="bon-jovi", album="now-rock", album_artist=VA_ARTIST_ID),
+        _track("ac", artist="alice", album="now-rock", album_artist=VA_ARTIST_ID),
+    ]
+    batch = pick_batch(_snapshot(tracks), [], set(), Random(12), _ok)
+    assert {t.id for t in batch} == {"bj", "ac"}
+
+
+def test_va_performer_tracks_are_not_artist_banned():
+    tracks = [
+        _track(f"va{i}", artist=VA_ARTIST_ID, album=f"comp-{i}") for i in range(5)
+    ]
+    batch = pick_batch(_snapshot(tracks), [], set(), Random(13), _ok)
+    assert len(batch) == 5
+    assert {t.artist_id for t in batch} == {VA_ARTIST_ID}

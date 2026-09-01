@@ -29,7 +29,12 @@ def serialize(snapshot: StationSnapshot, *, now: datetime | None = None) -> dict
         return {"face": snapshot.face}
     now = now or datetime.now(timezone.utc)
     body = {"face": "current"}
-    body.update(track_dict(snapshot.track))
+    body.update(
+        track_dict(
+            snapshot.track,
+            artist_browsable=snapshot.track.artist_browsable,
+        )
+    )
     body["position"] = snapshot.position_seconds(now) or 0.0
     return body
 

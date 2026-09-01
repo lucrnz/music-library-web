@@ -29,8 +29,9 @@ def snapshot_from_rows(library: Library, rows: Sequence[EligibleRow]) -> Catalog
             path=path,
             album_id=row.album_id,
             album_artist_id=row.album_artist_id,
+            artist_id=row.artist_id,
         )
-        artists[row.album_artist_id][row.album_id].append(track)
+        artists[row.artist_id][row.album_id].append(track)
     return CatalogSnapshot(
         artists={
             artist_id: dict(albums) for artist_id, albums in artists.items()

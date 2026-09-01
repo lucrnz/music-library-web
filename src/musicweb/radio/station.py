@@ -368,6 +368,7 @@ class RadioStation:
             return None, "not_found"
         if (
             row.album_id is None
+            or row.artist_id is None
             or row.duration_ms is None
             or row.duration_ms < RADIO_MIN_DURATION_MS
             or row.is_missing
@@ -386,6 +387,7 @@ class RadioStation:
                 path=path,
                 album_id=row.album_id,
                 album_artist_id=row.album_artist_id or row.artist_id or "",
+                artist_id=row.artist_id,
             ),
             None,
         )

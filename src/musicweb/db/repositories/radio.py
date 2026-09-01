@@ -28,6 +28,7 @@ def list_eligible_rows(session: Session) -> list[EligibleRow]:
             Track.duration_ms,
             Track.album_id,
             Album.artist_id,
+            Track.artist_id,
         )
         .join(Album, Track.album_id == Album.id)
         .where(
@@ -45,9 +46,17 @@ def list_eligible_rows(session: Session) -> list[EligibleRow]:
             duration_ms=duration_ms,
             album_id=album_id,
             album_artist_id=album_artist_id,
+            artist_id=artist_id,
         )
-        for track_id, rel_path, duration_ms, album_id, album_artist_id in rows
-        if rel_path and duration_ms is not None and album_id
+        for (
+            track_id,
+            rel_path,
+            duration_ms,
+            album_id,
+            album_artist_id,
+            artist_id,
+        ) in rows
+        if rel_path and duration_ms is not None and album_id and artist_id
     ]
 
 

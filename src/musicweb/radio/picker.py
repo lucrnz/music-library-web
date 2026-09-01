@@ -1,4 +1,4 @@
-"""Pure batch picker: album artist → album → track, with loosening."""
+"""Pure batch picker: performer → album → track, with banlist loosening."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from random import Random
 from musicweb.config import (
     RADIO_BANLIST_MAX_BATCHES,
     RADIO_BATCH_SIZE,
-    RADIO_MAX_PER_ARTIST,
     RADIO_PICK_ATTEMPTS,
 )
+from musicweb.db.va import VA_ARTIST_ID
 from musicweb.radio.types import CatalogSnapshot, CatalogTrack
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,6 @@ def pick_batch(
 
     banned_batches = _effective_banlist(banlist_batches)
     ban_drop = 0
-    cap_enabled = True
     batch: list[CatalogTrack] = []
 
     while len(batch) < RADIO_BATCH_SIZE:
@@ -45,7 +44,6 @@ def pick_batch(
             skip_ids,
             rng,
             probe,
-            cap_enabled=cap_enabled,
         )
         if picked is not None:
             batch.append(picked)
@@ -53,9 +51,6 @@ def pick_batch(
             continue
         if ban_drop < len(banned_batches):
             ban_drop += 1
-            continue
-        if cap_enabled:
-            cap_enabled = False
             continue
         break
     return batch
@@ -67,6 +62,23 @@ def _effective_banlist(banlist_batches: list[list[str]]) -> list[set[str]]:
     return [set(batch) for batch in banlist_batches]
 
 
+def _banned_artist_ids(
+    snapshot: CatalogSnapshot,
+    banned_track_ids: set[str],
+    batch: list[CatalogTrack],
+) -> set[str]:
+    by_id = {t.id: t for t in snapshot.all_tracks()}
+    artists: set[str] = set()
+    for track_id in banned_track_ids:
+        track = by_id.get(track_id)
+        if track is not None and track.artist_id != VA_ARTIST_ID:
+            artists.add(track.artist_id)
+    for track in batch:
+        if track.artist_id != VA_ARTIST_ID:
+            artists.add(track.artist_id)
+    return artists
+
+
 def _try_slot(
     snapshot: CatalogSnapshot,
     batch: list[CatalogTrack],
@@ -74,15 +86,14 @@ def _try_slot(
     skip_ids: set[str],
     rng: Random,
     probe: Probe,
-    *,
-    cap_enabled: bool,
 ) -> CatalogTrack | None:
     banned = set().union(*banned_batches) if banned_batches else set()
     in_batch = {t.id for t in batch}
     exclude = banned | in_batch | skip_ids
-    counts: dict[str, int] = {}
-    for track in batch:
-        counts[track.album_artist_id] = counts.get(track.album_artist_id, 0) + 1
+    banned_artists = _banned_artist_ids(snapshot, banned, batch)
+    for track in snapshot.all_tracks():
+        if track.artist_id in banned_artists:
+            exclude.add(track.id)
 
     graph = _remaining_graph(snapshot, exclude)
     if not graph:
@@ -93,8 +104,6 @@ def _try_slot(
         album_id = rng.choice(sorted(graph[artist_id]))
         tracks = graph[artist_id][album_id]
         track = rng.choice(sorted(tracks, key=lambda t: t.id))
-        if cap_enabled and counts.get(track.album_artist_id, 0) >= RADIO_MAX_PER_ARTIST:
-            continue
         if not probe(track.path):
             skip_ids.add(track.id)
             snapshot.remove_track(track.id)
