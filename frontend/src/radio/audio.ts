@@ -12,19 +12,19 @@ import {
   onCompanionEvent,
 } from "@/exclusive/companionClient";
 import { PlayBlockError } from "@/playBlock";
+import { JOIN_LOAD_TIMEOUT_MS } from "@/playback/joinTimeout";
 import {
   setHtmlAudioSrc,
   setHtmlAudioVolume,
   stopHtmlAudio,
   waitAudioEvent,
+  waitAudioEventWithTimeout,
 } from "@/playback/sinks/htmlElement";
 import type { PlaybackSink, SinkHandlers } from "@/playback/sinks/types";
 
 export function shouldIgnoreTransport(loadInFlight: boolean, seekInFlight: boolean): boolean {
   return loadInFlight || seekInFlight;
 }
-
-export const RADIO_LOAD_TIMEOUT_MS = 8000;
 
 export function shouldIgnorePause(
   loadInFlight: boolean,
@@ -130,7 +130,7 @@ export function createRadioAudio(): RadioAudio {
       durationWaiters.add(check);
       timer = setTimeout(
         () => finish(new Error("audio canplay timeout")),
-        RADIO_LOAD_TIMEOUT_MS,
+        JOIN_LOAD_TIMEOUT_MS,
       );
     });
   }
@@ -251,22 +251,12 @@ export function createRadioAudio(): RadioAudio {
       }
       if (!el) return;
       loadInFlight = true;
-      let timer: ReturnType<typeof setTimeout> | null = null;
       try {
         el.pause();
         setHtmlAudioSrc(el, url);
         el.load();
-        await Promise.race([
-          waitAudioEvent(el, "canplay"),
-          new Promise<void>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error("audio canplay timeout")),
-              RADIO_LOAD_TIMEOUT_MS,
-            );
-          }),
-        ]);
+        await waitAudioEventWithTimeout(el, "canplay", JOIN_LOAD_TIMEOUT_MS);
       } finally {
-        if (timer != null) clearTimeout(timer);
         loadInFlight = false;
       }
     },

@@ -10,7 +10,7 @@ import { formatPlayingSubtitle } from "@/util";
 import { become, onLeaveRadio } from "@/playback/session";
 import { player } from "@/stores/playerState";
 import { createRadioAudio } from "@/radio/audio";
-import { createRejoinClock } from "@/radio/rejoin";
+import { createRejoinClock } from "@/playback/rejoinClock";
 import {
   bumpRadioGen,
   cancelRadioJoinHold,

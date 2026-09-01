@@ -54,7 +54,7 @@ import { fromApiTrack } from "@/models/track";
 import { SOURCE_TAG } from "@/lossyKind";
 import { streamUrl } from "@/api";
 import { resolvePlaySource } from "@/downloads/resolve";
-import { RADIO_JOIN_HOLD_MS } from "@/radio/hold";
+import { JOIN_HOLD_MS } from "@/playback/joinHold";
 import { loadCurrent } from "@/radio/session";
 import {
   applySnapshot,
@@ -429,7 +429,7 @@ describe("radio store", () => {
     const calls = load.mock.calls.length;
     tuneOut();
     expect(radio.chrome).toBe("stopped");
-    await vi.advanceTimersByTimeAsync(RADIO_JOIN_HOLD_MS);
+    await vi.advanceTimersByTimeAsync(JOIN_HOLD_MS);
     expect(radio.chrome).toBe("stopped");
     expect(load.mock.calls.length).toBe(calls);
     vi.useRealTimers();

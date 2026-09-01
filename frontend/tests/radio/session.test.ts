@@ -59,7 +59,7 @@ import { markTrackBroken } from "@/downloads/catalog";
 import { resolvePlaySource } from "@/downloads/resolve";
 import { exclusiveDelivery } from "@/playback/exclusiveDelivery";
 import { requestPrepare } from "@/playback/prepare";
-import { RADIO_JOIN_HOLD_MS } from "@/radio/hold";
+import { JOIN_HOLD_MS } from "@/playback/joinHold";
 import {
   bindAudioHandlers,
   bumpRadioGen,
@@ -316,7 +316,7 @@ describe("radio session", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tuneAndBind();
     expect(radio.chrome).toBe("tuned");
-    await vi.advanceTimersByTimeAsync(RADIO_JOIN_HOLD_MS);
+    await vi.advanceTimersByTimeAsync(JOIN_HOLD_MS);
     radioAudio.el?.dispatchEvent(new Event("pause"));
     pauseWhileTuned();
     expect(radio.chrome).toBe("stopped");

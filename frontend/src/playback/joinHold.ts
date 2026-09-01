@@ -1,4 +1,4 @@
-export const RADIO_JOIN_HOLD_MS = 8000;
+export const JOIN_HOLD_MS = 8000;
 
 export function createJoinHold() {
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -17,7 +17,7 @@ export function createJoinHold() {
       timer = setTimeout(() => {
         timer = null;
         pending = false;
-      }, RADIO_JOIN_HOLD_MS);
+      }, JOIN_HOLD_MS);
     },
     cancel(): void {
       if (timer != null) {

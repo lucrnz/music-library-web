@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createJoinHold, RADIO_JOIN_HOLD_MS } from "@/radio/hold";
+import { createJoinHold, JOIN_HOLD_MS } from "@/playback/joinHold";
 
-describe("radio join hold", () => {
+describe("join hold", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -12,7 +12,7 @@ describe("radio join hold", () => {
     expect(hold.pending).toBe(false);
     hold.start();
     expect(hold.pending).toBe(true);
-    await vi.advanceTimersByTimeAsync(RADIO_JOIN_HOLD_MS - 1);
+    await vi.advanceTimersByTimeAsync(JOIN_HOLD_MS - 1);
     expect(hold.pending).toBe(true);
     await vi.advanceTimersByTimeAsync(1);
     expect(hold.pending).toBe(false);
@@ -24,7 +24,7 @@ describe("radio join hold", () => {
     hold.start();
     hold.cancel();
     expect(hold.pending).toBe(false);
-    await vi.advanceTimersByTimeAsync(RADIO_JOIN_HOLD_MS);
+    await vi.advanceTimersByTimeAsync(JOIN_HOLD_MS);
     expect(hold.pending).toBe(false);
   });
 
@@ -35,7 +35,7 @@ describe("radio join hold", () => {
     await vi.advanceTimersByTimeAsync(3000);
     hold.start();
     expect(hold.pending).toBe(true);
-    await vi.advanceTimersByTimeAsync(RADIO_JOIN_HOLD_MS - 1);
+    await vi.advanceTimersByTimeAsync(JOIN_HOLD_MS - 1);
     expect(hold.pending).toBe(true);
     await vi.advanceTimersByTimeAsync(1);
     expect(hold.pending).toBe(false);

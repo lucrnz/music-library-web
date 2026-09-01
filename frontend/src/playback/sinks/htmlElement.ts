@@ -43,3 +43,22 @@ export function waitAudioEvent(
     el.addEventListener("error", onErr, { once: true });
   });
 }
+
+export function waitAudioEventWithTimeout(
+  el: HTMLAudioElement,
+  name: string,
+  timeoutMs: number,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    waitAudioEvent(el, name),
+    new Promise<void>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("audio canplay timeout")),
+        timeoutMs,
+      );
+    }),
+  ]).finally(() => {
+    if (timer != null) clearTimeout(timer);
+  });
+}

@@ -2,21 +2,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createRejoinClock,
   nextRejoinDelay,
-  RADIO_REJOIN_CAP_MS,
-  RADIO_REJOIN_INITIAL_MS,
-} from "@/radio/rejoin";
+  REJOIN_CAP_MS,
+  REJOIN_INITIAL_MS,
+} from "@/playback/rejoinClock";
 
-describe("radio rejoin clock", () => {
+describe("rejoin clock", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
   it("doubles delay from 1s up to 8s", () => {
-    expect(nextRejoinDelay(null)).toBe(RADIO_REJOIN_INITIAL_MS);
+    expect(nextRejoinDelay(null)).toBe(REJOIN_INITIAL_MS);
     expect(nextRejoinDelay(1000)).toBe(2000);
     expect(nextRejoinDelay(2000)).toBe(4000);
-    expect(nextRejoinDelay(4000)).toBe(RADIO_REJOIN_CAP_MS);
-    expect(nextRejoinDelay(8000)).toBe(RADIO_REJOIN_CAP_MS);
+    expect(nextRejoinDelay(4000)).toBe(REJOIN_CAP_MS);
+    expect(nextRejoinDelay(8000)).toBe(REJOIN_CAP_MS);
   });
 
   it("coalesces two schedule calls into one timer", async () => {

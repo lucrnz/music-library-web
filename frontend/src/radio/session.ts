@@ -15,7 +15,7 @@ import {
 import { exclusiveDelivery } from "@/playback/exclusiveDelivery";
 import { requestPrepare } from "@/playback/prepare";
 import { suspendMediaSession } from "@/playback/session";
-import { createJoinHold } from "@/radio/hold";
+import { createJoinHold } from "@/playback/joinHold";
 import { needsReseek } from "@/radio/sync";
 import {
   getExclusiveProfileTag,

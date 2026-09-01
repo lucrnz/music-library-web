@@ -1,9 +1,9 @@
-export const RADIO_REJOIN_INITIAL_MS = 1000;
-export const RADIO_REJOIN_CAP_MS = 8000;
+export const REJOIN_INITIAL_MS = 1000;
+export const REJOIN_CAP_MS = 8000;
 
 export function nextRejoinDelay(prevMs: number | null): number {
-  if (prevMs == null) return RADIO_REJOIN_INITIAL_MS;
-  return Math.min(prevMs * 2, RADIO_REJOIN_CAP_MS);
+  if (prevMs == null) return REJOIN_INITIAL_MS;
+  return Math.min(prevMs * 2, REJOIN_CAP_MS);
 }
 
 export function createRejoinClock(attempt: () => Promise<void>) {

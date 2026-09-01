@@ -16,9 +16,9 @@ vi.mock("@/exclusive/companionClient", () => ({
   }),
 }));
 
+import { JOIN_LOAD_TIMEOUT_MS } from "@/playback/joinTimeout";
 import {
   createRadioAudio,
-  RADIO_LOAD_TIMEOUT_MS,
   shouldIgnorePause,
   shouldIgnoreTransport,
 } from "@/radio/audio";
@@ -101,7 +101,7 @@ describe("radio audio latch", () => {
     const radio = createRadioAudio();
     if (!radio.el) return;
     const pending = radio.load("");
-    await vi.advanceTimersByTimeAsync(RADIO_LOAD_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(JOIN_LOAD_TIMEOUT_MS);
     await expect(pending).rejects.toThrow();
     expect(radio.loadInFlight).toBe(false);
   });
@@ -144,7 +144,7 @@ describe("radio audio latch", () => {
     radio.setBackend("companion");
     const pending = radio.load("https://lib.example/api/stream?id=t1");
     const rejected = expect(pending).rejects.toThrow();
-    await vi.advanceTimersByTimeAsync(RADIO_LOAD_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(JOIN_LOAD_TIMEOUT_MS);
     await rejected;
     expect(radio.loadInFlight).toBe(false);
   });
