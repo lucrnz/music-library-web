@@ -28,6 +28,7 @@ import {
   shouldWarnMissingExclusiveTech,
 } from "@/stores/exclusiveAudio";
 import { activeDelivery } from "@/playback/deliveryPolicy";
+import { isHardJoinBlock } from "@/playback/queueJoin";
 import { pl } from "@/stores/playlist";
 import {
   clearPlaySourceState,
@@ -257,15 +258,20 @@ async function intentForTrack(
   });
 }
 
+export type LoadResolvedResult =
+  | { ok: true }
+  | { ok: false; retryable: true }
+  | { ok: false; retryable: false };
+
 export async function loadResolved(
   gen: number,
   track: Track | null | undefined,
   extra: { localBroken?: boolean } = {},
-) {
+): Promise<LoadResolvedResult> {
   const intent = await intentForTrack(track, gen, extra);
   if (!still(gen) || !intent) {
     if (still(gen)) player.loadPending = false;
-    return;
+    return { ok: false, retryable: false };
   }
   applyIntent(intent);
   if (needsCompanionStop(intent, activeSink.kind)) {
@@ -277,7 +283,7 @@ export async function loadResolved(
       reason: intent.block,
       message: intent.message || PLAY_BLOCK_MESSAGES[intent.block],
     });
-    return;
+    return { ok: false, retryable: false };
   }
 
   if (
@@ -298,7 +304,7 @@ export async function loadResolved(
   }
 
   const result = await attemptPlay(intent.url, gen);
-  if (!still(gen)) return;
+  if (!still(gen)) return { ok: false, retryable: false };
   if (!result.ok && intent.source === "downloaded" && !extra.localBroken) {
     console.warn("Local playback failed, falling back to stream", result.err);
     if (track?.id) markTrackBroken(track.id).catch(() => {});
@@ -307,17 +313,20 @@ export async function loadResolved(
   }
   if (!result.ok) {
     const err = result.err;
-    if (err.reason.startsWith("exclusive")) {
-      console.error("Exclusive playback failed", err);
-    } else {
-      console.error("Playback failed", err);
+    if (isHardJoinBlock(err.reason)) {
+      if (err.reason.startsWith("exclusive")) {
+        console.error("Exclusive playback failed", err);
+      } else {
+        console.error("Playback failed", err);
+      }
+      failCurrentLoad({
+        reason: err.reason,
+        message: err.message,
+        toast: err.reason.startsWith("exclusive") ? true : undefined,
+      });
+      return { ok: false, retryable: false };
     }
-    failCurrentLoad({
-      reason: err.reason,
-      message: err.message,
-      toast: err.reason.startsWith("exclusive") ? true : undefined,
-    });
-    return;
+    return { ok: false, retryable: true };
   }
   emit(
     "player.load.ok",
@@ -326,4 +335,5 @@ export async function loadResolved(
   );
   syncTransportFlags();
   player.loadPending = false;
+  return { ok: true };
 }

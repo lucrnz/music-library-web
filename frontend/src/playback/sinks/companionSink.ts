@@ -16,6 +16,7 @@ import {
   PlayBlockError,
   isPlayBlockReason,
 } from "@/playBlock";
+import { JOIN_LOAD_TIMEOUT_MS } from "@/playback/joinTimeout";
 import type { PlaybackSink, SinkHandlers } from "@/playback/sinks/types";
 
 function companionBlock(
@@ -41,6 +42,24 @@ export function createCompanionSink(): PlaybackSink {
     for (const resolve of pending) resolve();
   }
 
+  function waitDurationWithTimeout(): Promise<void> {
+    if (duration > 0) return Promise.resolve();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return Promise.race([
+      new Promise<void>((resolve) => {
+        durationWaiters.push(resolve);
+      }),
+      new Promise<void>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("audio canplay timeout")),
+          JOIN_LOAD_TIMEOUT_MS,
+        );
+      }),
+    ]).finally(() => {
+      if (timer != null) clearTimeout(timer);
+    });
+  }
+
   function ensureListen(): void {
     if (unsub) return;
     unsub = onCompanionEvent((evt) => {
@@ -58,8 +77,15 @@ export function createCompanionSink(): PlaybackSink {
         paused = true;
         if (hasLoad) handlers.onEnded?.();
       } else if (evt.type === "released") {
+        if (!hasLoad) {
+          paused = true;
+          return;
+        }
         hasLoad = false;
         paused = true;
+        handlers.onError?.(
+          new PlayBlockError("exclusive_failed", "Exclusive companion released"),
+        );
       } else if (evt.type === "error" || evt.type === "disconnect") {
         if (!hasLoad) return;
         handlers.onError?.(
@@ -97,6 +123,7 @@ export function createCompanionSink(): PlaybackSink {
           "Companion not ready for load",
         );
       }
+      await waitDurationWithTimeout();
     },
     pause() {
       companionPause();

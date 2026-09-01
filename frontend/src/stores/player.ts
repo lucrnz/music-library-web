@@ -3,7 +3,11 @@
  * (htmlAudio or exclusive companion) — HTMLAudioElement is not exported.
  * Load/fail lives in playback/load.ts.
  */
-import { canReachServer, canUseRemoteMedia } from "@/connectivity";
+import {
+  canReachServer,
+  canUseRemoteMedia,
+  onConnectivityRecovered,
+} from "@/connectivity";
 import { emit } from "@/diag/log";
 import { downloads } from "@/downloads/state";
 import type { SinkErrorDetails } from "@/playback/sinks/types";
@@ -25,6 +29,11 @@ import {
   teardownOnDemandMedia,
 } from "@/playback/load";
 import { playTapAction } from "@/playback/playTap";
+import {
+  createQueueJoin,
+  isHardJoinBlock,
+  isNaturalEnded,
+} from "@/playback/queueJoin";
 import { prepareTracks } from "@/playback/prepare";
 import {
   clearPlaybackPosition,
@@ -71,6 +80,23 @@ let pendingResume: { gen: number; seconds: number } | null = null;
 
 /** Pause once the in-flight load finishes. Initialized from resumePaused. */
 let wantPaused = false;
+
+/** Rejoin attempt in flight — playIndex must not reset the backoff clock. */
+let rejoinAttempt = false;
+
+/** Last hard block was offline_no_local; reconnect can retry this row. */
+let healOffline = false;
+
+const queueJoin = createQueueJoin(async () => {
+  if (pl.index < 0) return;
+  const resumeAt = player.currentTime > 0 ? player.currentTime : undefined;
+  rejoinAttempt = true;
+  try {
+    await playIndex(pl.index, { resumeAt });
+  } finally {
+    rejoinAttempt = false;
+  }
+});
 
 function applyTransportFlags() {
   const hold =
@@ -151,9 +177,23 @@ function updatePositionState() {
 function onSinkEnded() {
   if (player.playSource === "none") return;
   const sink = getActiveSink();
-  if (pl.repeat === "one") {
-    sink.seek(0);
-    Promise.resolve(sink.resume()).catch(console.error);
+  const endedAt = sink.currentTime || player.currentTime;
+  const endedDur = sink.duration || player.duration;
+  if (pl.repeat === "one" || isNaturalEnded(endedAt, endedDur)) {
+    queueJoin.cancel();
+    if (pl.repeat === "one") {
+      sink.seek(0);
+      Promise.resolve(sink.resume()).catch(console.error);
+      return;
+    }
+    clearPlaybackPosition();
+    playNext();
+    return;
+  }
+  if (queueJoin.holdPending) {
+    persistCurrentPosition();
+    player.loadPending = true;
+    queueJoin.onFailedJoin();
     return;
   }
   clearPlaybackPosition();
@@ -201,13 +241,35 @@ function wireSinkHandlers() {
           "error",
         );
       }
-      failCurrentLoad({
-        reason: err.reason,
-        message: err.message,
-        toast: err.reason.startsWith("exclusive") ? true : undefined,
-      });
+      if (isHardJoinBlock(err.reason)) {
+        queueJoin.cancel();
+        if (err.reason === "offline_no_local") healOffline = true;
+        failCurrentLoad({
+          reason: err.reason,
+          message: err.message,
+          toast: err.reason.startsWith("exclusive") ? true : undefined,
+        });
+        return;
+      }
+      player.loadPending = true;
+      queueJoin.onFailedJoin();
     },
-    onPauseState: () => {
+    onPauseState: (paused: boolean) => {
+      if (paused) {
+        if (queueJoin.userPauseMarked) {
+          queueJoin.onIntentionalPause();
+          applyTransportFlags();
+          persistPausePosition();
+          return;
+        }
+        if (queueJoin.holdPending) {
+          persistCurrentPosition();
+          player.loadPending = true;
+          queueJoin.onFailedJoin();
+          applyTransportFlags();
+          return;
+        }
+      }
       applyTransportFlags();
       persistPausePosition();
     },
@@ -217,6 +279,7 @@ function wireSinkHandlers() {
 }
 
 export function stopPlayback() {
+  queueJoin.cancel();
   become("none");
   setPlayNotice(null);
   nearEndPrepareSent = false;
@@ -277,6 +340,7 @@ export async function playIndex(
   index: number,
   opts?: { resumeAt?: number; resumePaused?: boolean },
 ) {
+  if (!rejoinAttempt) queueJoin.cancel();
   become("queue");
   if (index < 0 || index >= pl.length) return;
   const cold = player.playSource === "none";
@@ -314,7 +378,24 @@ export async function playIndex(
   revokeLocalPlayUrl();
   setPlayNotice(null);
 
-  await loadResolved(gen, track);
+  const loaded = await loadResolved(gen, track);
+  if (!still(gen)) return;
+  if (!loaded.ok && loaded.retryable) {
+    if (wantPaused) {
+      queueJoin.onIntentionalPause();
+      try {
+        getActiveSink().pause();
+      } catch {
+        /* ignore */
+      }
+      player.loadPending = false;
+      return;
+    }
+    player.loadPending = true;
+    queueJoin.onFailedJoin();
+    return;
+  }
+  if (player.playBlockReason === "offline_no_local") healOffline = true;
   if (
     still(gen) &&
     pendingResume &&
@@ -324,11 +405,18 @@ export async function playIndex(
     player.currentTime = pendingResume.seconds;
   }
   if (still(gen) && wantPaused) {
+    queueJoin.onIntentionalPause();
     try {
       getActiveSink().pause();
     } catch {
       /* ignore */
     }
+  } else if (
+    still(gen) &&
+    (player.playSource === "streaming" || player.playSource === "downloaded")
+  ) {
+    healOffline = false;
+    queueJoin.onPlaySucceeded();
   }
   if (still(gen)) flushPendingResume();
 }
@@ -416,11 +504,18 @@ function ensureAudible() {
 
 export function togglePlay() {
   if (player.loadPending) {
-    wantPaused = !wantPaused;
+    if (!wantPaused) {
+      queueJoin.markUserPause();
+      wantPaused = true;
+      queueJoin.onIntentionalPause();
+    } else {
+      wantPaused = false;
+    }
     return;
   }
   const sink = getActiveSink();
   if (!sink.paused) {
+    queueJoin.markUserPause();
     sink.pause();
   } else {
     ensureAudible();
@@ -488,16 +583,28 @@ export function initAudioListeners() {
   selectSink("htmlAudio");
   subscribeOutputVolume((v) => getActiveSink().setVolume(v));
   onLeaveQueue(() => {
+    queueJoin.cancel();
     invalidateLoads();
     teardownOnDemandMedia();
+  });
+  onConnectivityRecovered(() => {
+    if (activeSession() !== "queue") return;
+    if (wantPaused) return;
+    const unfinished =
+      player.loadPending || queueJoin.holdPending || queueJoin.rejoinActive;
+    if (!unfinished && !healOffline) return;
+    healOffline = false;
+    queueJoin.kick();
   });
   installOnDemandMediaSession({
     play: () => {
       ensureAudible();
     },
     pause: () => {
+      queueJoin.markUserPause();
       if (player.loadPending) {
         wantPaused = true;
+        queueJoin.onIntentionalPause();
         return;
       }
       getActiveSink().pause();

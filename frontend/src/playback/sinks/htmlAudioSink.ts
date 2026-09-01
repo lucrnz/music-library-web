@@ -2,11 +2,13 @@
  * HTMLAudioElement sink — owns the element internally (not exported).
  */
 
+import { JOIN_LOAD_TIMEOUT_MS } from "@/playback/joinTimeout";
 import {
   attachHtmlAudio,
   setHtmlAudioSrc,
   setHtmlAudioVolume,
   stopHtmlAudio,
+  waitAudioEventWithTimeout,
 } from "@/playback/sinks/htmlElement";
 import { PlayBlockError } from "@/playBlock";
 import { isSoftPlayReject } from "@/playback/playReject";
@@ -56,10 +58,23 @@ export function createHtmlAudioSink(): PlaybackSink {
     async load(url) {
       ensureAttached();
       setHtmlAudioSrc(audio, url);
+      audio.load();
+      try {
+        await waitAudioEventWithTimeout(audio, "canplay", JOIN_LOAD_TIMEOUT_MS);
+      } catch (err: unknown) {
+        throw err instanceof PlayBlockError
+          ? err
+          : new PlayBlockError(
+              "play_failed",
+              err instanceof Error ? err.message : "audio canplay timeout",
+            );
+      }
       try {
         await audio.play();
       } catch (err: unknown) {
-        if (isSoftPlayReject(err)) return;
+        if (isSoftPlayReject(err)) {
+          throw new PlayBlockError("play_failed");
+        }
         throw err instanceof PlayBlockError
           ? err
           : new PlayBlockError(
