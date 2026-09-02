@@ -66,7 +66,7 @@ def redact_token_in_text(text: str) -> str:
 
 
 class MpvPlayer:
-    """Owns one idle mpv process with JSON IPC."""
+    """Owns one mpv process with JSON IPC. The OS child can start and stop."""
 
     def __init__(
         self,
@@ -86,6 +86,7 @@ class MpvPlayer:
         self._pending: dict[int, threading.Event] = {}
         self._results: dict[int, Any] = {}
         self._closed = False
+        self._intentional_stop = False
         self._stub = False
         self._stub_logged: set[str] = set()
         self._stderr_buf: list[bytes] = []
@@ -125,6 +126,18 @@ class MpvPlayer:
     def url(self) -> str | None:
         return self._url
 
+    @property
+    def running(self) -> bool:
+        """True while a child is up or the Linux hog stub is active."""
+        return self._stub or self._proc is not None
+
+    def _ipc_down(self) -> bool:
+        return self._sock is None and not self._stub
+
+    def _ensure_started(self) -> None:
+        if self._proc is None and self._sock is None and not self._stub:
+            self.start()
+
     def _stub_out(self, action: str) -> bool:
         if not self._stub:
             return False
@@ -134,8 +147,11 @@ class MpvPlayer:
         return True
 
     def start(self) -> None:
+        if self._closed:
+            return
         if self._proc is not None or self._stub:
             return
+        self._intentional_stop = False
         if not hog_supported():
             logger.info("exclusive mpv hog stub: no-op on this platform")
             self._stub = True
@@ -185,16 +201,23 @@ class MpvPlayer:
         for prop in ("time-pos", "duration", "pause", "eof-reached"):
             self._command("observe_property", self._next_id(), prop)
 
-    def close(self) -> None:
+    def shutdown_process(self) -> None:
+        """Tear the OS child down without treating it as a crash. start() may run again."""
         with self._lock:
+            final = self._closed
+            self._intentional_stop = True
             self._closed = True
             if self._stub:
                 self._device = None
+                self._stub = False
+                if not final:
+                    self._closed = False
                 return
-            self._unhog_unlocked()
-            restore = self._vol.on_release()
-            self._device = None
-            self._write_restore(restore)
+            if self._device is not None:
+                self._unhog_unlocked()
+                restore = self._vol.on_release()
+                self._device = None
+                self._write_restore(restore)
             if self._sock is not None:
                 try:
                     self._command_unlocked("quit")
@@ -215,18 +238,36 @@ class MpvPlayer:
                     except Exception:
                         pass
                 self._proc = None
-            if self._stderr_thread is not None:
-                self._stderr_thread.join(timeout=0.5)
-                self._stderr_thread = None
-            if self._tmpdir is not None:
-                try:
-                    self._tmpdir.cleanup()
-                except Exception:
-                    pass
-                self._tmpdir = None
+            reader = self._reader
+            stderr_thread = self._stderr_thread
+            tmpdir = self._tmpdir
+            self._reader = None
+            self._stderr_thread = None
+            self._ipc = None
+            self._tmpdir = None
+        if stderr_thread is not None:
+            stderr_thread.join(timeout=0.5)
+        if reader is not None:
+            reader.join(timeout=1.0)
+        if tmpdir is not None:
+            try:
+                tmpdir.cleanup()
+            except Exception:
+                pass
+        with self._lock:
+            if not final:
+                self._closed = False
+
+    def close(self) -> None:
+        """Companion-exit teardown. Further start() calls are refused."""
+        self.shutdown_process()
+        self._closed = True
 
     def set_device(self, mpv_device: str) -> None:
         """Select output and arm exclusive mode for that device."""
+        if self._stub_out("set_device"):
+            return
+        self._ensure_started()
         if self._stub_out("set_device"):
             return
         with self._lock:
@@ -244,11 +285,16 @@ class MpvPlayer:
         """Exclusive off: no hog device; mpv ``audio-device=auto``."""
         if self._stub_out("use_auto_output"):
             return
+        if self._ipc_down():
+            return
         with self._lock:
             self._unhog_unlocked()
 
     def load(self, url: str) -> None:
         """Load and play an absolute HTTP(S) stream URL."""
+        if self._stub_out("load"):
+            return
+        self._ensure_started()
         if self._stub_out("load"):
             return
         with self._lock:
@@ -264,12 +310,16 @@ class MpvPlayer:
     def pause(self) -> None:
         if self._stub_out("pause"):
             return
+        if self._ipc_down():
+            return
         with self._lock:
             self._command_unlocked("set_property", "pause", True)
             self._paused = True
 
     def resume(self) -> None:
         if self._stub_out("resume"):
+            return
+        if self._ipc_down():
             return
         with self._lock:
             self._command_unlocked("set_property", "pause", False)
@@ -288,7 +338,8 @@ class MpvPlayer:
             return
         with self._lock:
             self._clear_transport_unlocked()
-            self._unhog_unlocked()
+            if self._sock is not None:
+                self._unhog_unlocked()
             restore = self._vol.on_release()
             self._device = None
             self._write_restore(restore)
@@ -308,6 +359,8 @@ class MpvPlayer:
 
     def seek(self, seconds: float) -> None:
         if self._stub_out("seek"):
+            return
+        if self._ipc_down():
             return
         with self._lock:
             self._command_unlocked("set_property", "time-pos", float(seconds))
@@ -415,7 +468,11 @@ class MpvPlayer:
                 except json.JSONDecodeError:
                     continue
                 self._handle_ipc_message(msg)
-        if not self._closed and self._on_event:
+        if (
+            not self._closed
+            and not self._intentional_stop
+            and self._on_event
+        ):
             self._on_event("error", {"message": "mpv IPC closed"})
 
     def _handle_ipc_message(self, msg: dict[str, Any]) -> None:

@@ -17,7 +17,8 @@ DEFAULT_PORT: Final[int] = 18765
 
 # Client heartbeat ~5s (also on become-visible). After CONTROLLER_TTL_S
 # with no inbound traffic and nothing loaded in mpv, the companion unhogs
-# so a crashed PWA that never closed the socket cannot keep the device.
+# and quits the mpv child so a crashed PWA that never closed the socket
+# cannot keep the device. Reclaim / set_device respawns the child.
 # The same session takes hog back on the next message.
 HEARTBEAT_INTERVAL_S: Final[float] = 5.0
 CONTROLLER_TTL_S: Final[float] = 60.0

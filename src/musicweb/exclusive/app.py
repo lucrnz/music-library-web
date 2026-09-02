@@ -130,7 +130,6 @@ def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
         import asyncio
 
         hub.bind_loop(asyncio.get_running_loop())
-        hub.start_player()
         hub.ensure_ttl_watch()
         logger.info("Companion ready")
         try:

@@ -20,6 +20,8 @@ from musicweb.exclusive.session import ClientSession, ExclusiveHub
 class FakePlayer:
     def __init__(self) -> None:
         self.release_calls = 0
+        self.start_calls = 0
+        self.shutdown_calls = 0
         self.fail_release = False
         self.load_calls: list[str] = []
         self.auto_output_calls = 0
@@ -30,6 +32,15 @@ class FakePlayer:
         self.entered_load = threading.Event()
         self.entered_set_device = threading.Event()
 
+    def start(self) -> None:
+        self.start_calls += 1
+
+    def shutdown_process(self) -> None:
+        self.shutdown_calls += 1
+        self._device = None
+        self._url = None
+        self._paused = True
+
     def release_device(self) -> None:
         self.release_calls += 1
         if self.fail_release:
@@ -39,12 +50,14 @@ class FakePlayer:
         self._paused = True
 
     def set_device(self, mpv_device: str) -> None:
+        self.start()
         self.entered_set_device.set()
         if self.gate is not None:
             self.gate.wait()
         self._device = mpv_device
 
     def load(self, url: str) -> None:
+        self.start()
         self.entered_load.set()
         if self.gate is not None:
             self.gate.wait()
@@ -55,6 +68,22 @@ class FakePlayer:
     def use_auto_output(self) -> None:
         self.auto_output_calls += 1
         self._device = None
+
+    def stop(self) -> None:
+        self._url = None
+        self._paused = True
+
+    def pause(self) -> None:
+        self._paused = True
+
+    def resume(self) -> None:
+        self._paused = False
+
+    def seek(self, _seconds: float) -> None:
+        return None
+
+    def set_volume(self, _volume: float) -> None:
+        return None
 
     def status_snapshot(self) -> dict[str, Any]:
         return {
@@ -119,6 +148,7 @@ def test_controller_disconnect_releases_device():
     assert hub._controller_id is None
     assert hub._device_id is None
     assert fake.release_calls == 1
+    assert fake.shutdown_calls == 1
     assert "c1" not in hub._clients
 
 
@@ -134,6 +164,7 @@ def test_ttl_demotion_releases_idle_device():
     assert hub._controller_id is None
     assert hub._device_id is None
     assert fake.release_calls == 1
+    assert fake.shutdown_calls == 1
     assert sess.role == p.ROLE_READONLY
     assert "c1" in hub._clients
     ttl_msgs = [
@@ -156,6 +187,7 @@ def test_release_device_unhogs_while_stream_loaded():
     asyncio.run(hub.handle_message(sess, {"type": p.MSG_RELEASE_DEVICE}))
 
     assert fake.release_calls == 1
+    assert fake.shutdown_calls == 1
     assert fake._url is None
     assert fake._device is None
     assert hub._device_id is None
@@ -290,6 +322,7 @@ def test_hello_replace_new_disconnect_releases():
     assert hub._controller_id is None
     assert hub._device_id is None
     assert fake.release_calls == 1
+    assert fake.shutdown_calls == 1
     assert "c1" not in hub._clients
 
 
@@ -477,6 +510,7 @@ def test_missing_controller_session_releases():
     assert hub._controller_id is None
     assert hub._device_id is None
     assert fake.release_calls == 1
+    assert fake.shutdown_calls == 1
 
 
 def test_readonly_may_blob_stat_but_not_load():
@@ -575,6 +609,7 @@ def test_load_hog_false_without_device_does_not_raise():
     )
     assert fake.load_calls == ["http://127.0.0.1/cdda/dev/1"]
     assert fake.auto_output_calls == 1
+    assert fake.start_calls >= 1
     assert not any(m.get("type") == p.MSG_ERROR for m in ws.sent)
 
 
@@ -589,6 +624,7 @@ def test_load_hog_true_without_device_still_fails():
         )
     )
     assert fake.load_calls == []
+    assert fake.start_calls == 0
     assert any("select a device first" in str(m.get("message")) for m in ws.sent)
 
 
@@ -604,3 +640,56 @@ def test_load_hog_omitted_without_device_still_fails():
     )
     assert fake.load_calls == []
     assert any("select a device first" in str(m.get("message")) for m in ws.sent)
+
+
+def test_set_device_starts_player():
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    asyncio.run(
+        hub.handle_message(
+            sess, p.envelope(p.MSG_SET_DEVICE, deviceId="dev-1")
+        )
+    )
+    assert fake.start_calls >= 1
+    assert fake.shutdown_calls == 0
+    assert hub._device_id == "dev-1"
+
+
+def test_stop_with_selected_device_does_not_quit():
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    hub._device_id = "dev-1"
+    fake._device = "coreaudio/Dev1"
+    fake._url = "http://127.0.0.1/stream"
+    asyncio.run(hub.handle_message(sess, {"type": p.MSG_STOP}))
+    assert fake._url is None
+    assert fake.shutdown_calls == 0
+    assert hub._device_id == "dev-1"
+
+
+def test_stop_without_device_quits_player():
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    hub._device_id = None
+    fake._url = "http://127.0.0.1/cdda/1"
+    asyncio.run(hub.handle_message(sess, {"type": p.MSG_STOP}))
+    assert fake._url is None
+    assert fake.shutdown_calls == 1
+
+
+def test_pause_does_not_start_player():
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    asyncio.run(hub.handle_message(sess, {"type": p.MSG_PAUSE}))
+    assert fake.start_calls == 0
+
+
+def test_list_devices_does_not_start_player(monkeypatch):
+    hub, fake = _hub_with_fake()
+    sess = _add_session(hub, "c1", role=p.ROLE_CONTROLLER)
+    monkeypatch.setattr(
+        "musicweb.exclusive.session.list_output_devices", lambda: []
+    )
+    asyncio.run(hub.handle_message(sess, {"type": p.MSG_LIST_DEVICES}))
+    assert fake.start_calls == 0
+    assert fake.shutdown_calls == 0

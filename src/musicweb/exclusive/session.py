@@ -66,8 +66,15 @@ class ExclusiveHub:
         self._loop = loop
 
     def start_player(self) -> None:
-        self._player.start()
-        self._devices = list_output_devices()
+        """No-op. The mpv child starts on set_device/load; devices list on demand."""
+        return
+
+    def _shutdown_player_if_idle(self) -> None:
+        if self._device_id is not None:
+            return
+        if self._player.status_snapshot().get("url"):
+            return
+        self._player.shutdown_process()
 
     def stop(self) -> None:
         if self._ttl_task is not None:
@@ -121,6 +128,7 @@ class ExclusiveHub:
         # Release mpv first; only clear hub device id after success (honest status on failure).
         await asyncio.to_thread(self._player.release_device)
         self._device_id = None
+        await asyncio.to_thread(self._shutdown_player_if_idle)
 
     async def _check_ttl(self) -> None:
         async with self._lock:
@@ -433,6 +441,7 @@ class ExclusiveHub:
         logger.info(
             "Controller %s released exclusive device", sess.session_id
         )
+        await asyncio.to_thread(self._shutdown_player_if_idle)
 
     async def _cmd_list_optical_drives(
         self, sess: ClientSession, _msg: dict[str, Any]
@@ -484,7 +493,11 @@ class ExclusiveHub:
                 if not self._device_id:
                     raise ValueError("select a device first")
         else:
-            await asyncio.to_thread(self._player.use_auto_output)
+            def _prepare_auto() -> None:
+                self._player.start()
+                self._player.use_auto_output()
+
+            await asyncio.to_thread(_prepare_auto)
         url = p.require_http_url(str(msg.get("url") or ""))
         await asyncio.to_thread(self._player.load, url)
         if not await self._with_live(sess):
@@ -500,6 +513,7 @@ class ExclusiveHub:
 
     async def _cmd_stop(self, _sess: ClientSession, _msg: dict[str, Any]) -> None:
         await asyncio.to_thread(self._player.stop)
+        await asyncio.to_thread(self._shutdown_player_if_idle)
 
     async def _cmd_seek(self, _sess: ClientSession, msg: dict[str, Any]) -> None:
         t = msg.get("t")

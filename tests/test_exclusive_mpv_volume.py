@@ -30,7 +30,8 @@ def _bind(
     monkeypatch.setattr(mpv_mod, "get_device_volume", fake_get)
     monkeypatch.setattr(mpv_mod, "set_device_volume", fake_set)
     player = MpvPlayer()
-    player._sock = object()  # digital callback may send
+    # Injected IPC skips set_device/load auto-start (never launch mpv).
+    player._sock = object()
     cmds: list[tuple] = []
     monkeypatch.setattr(player, "_command_unlocked", lambda *a: cmds.append(a))
     return player, cmds, gets, sets

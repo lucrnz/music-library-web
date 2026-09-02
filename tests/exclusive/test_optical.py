@@ -34,6 +34,12 @@ from musicweb.exclusive.session import ClientSession, ExclusiveHub
 
 
 class FakePlayer:
+    def start(self) -> None:
+        return None
+
+    def shutdown_process(self) -> None:
+        return None
+
     def release_device(self) -> None:
         return None
 
