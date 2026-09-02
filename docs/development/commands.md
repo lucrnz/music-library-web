@@ -148,6 +148,8 @@ Requires:
 - `mpv` on `PATH` (or `--mpv /path/to/mpv`) on **macOS and Windows**
 - macOS or Windows for real exclusive/hog device behavior (Linux stays a Downloads stub)
 
+The mpv **binary** is required at launch on macOS and Windows. The process itself is not started until hog (`set_device`) or CD `load`. A `list_devices` request may run a short-lived `mpv --audio-device=help`.
+
 Optional: `DEBUG=true` or `DEBUG=1` for verbose companion logs, including exclusive volume path decisions. `false` / `0` / unset stay at INFO. Sourced from the same `.env` (or process environment). Loopback HTTP access logs stay off so `?token=` does not hit stdout.
 
 ```sh

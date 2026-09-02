@@ -18,7 +18,7 @@ Three jobs share one process (`uv run musicweb companion`) and one `COMPANION_TO
 
 ## Behavior (intent)
 
-- Binds **127.0.0.1 only**. mpv is required on macOS and Windows. Linux hog is a no-op stub so Downloads still start without mpv.
+- Binds **127.0.0.1 only**. mpv is required on macOS and Windows. Linux hog is a no-op stub so Downloads still start without mpv. The companion does not launch mpv (including a one-shot `--audio-device=help`) until `set_device`, `load`, or `list_devices`.
 - Data files live in the OS app-support directory (printed on every launch). There is no env override.
 - Hello + token authenticates a session. Any authenticated session may command the blob store. Hog transport (`load`, device, volume) stays **controller-only**.
 - The companion fetches library stream URLs and writes jailed relative keys. The PWA plays those files over a token-gated loopback GET with Range. HTML and exclusive both consume that store.

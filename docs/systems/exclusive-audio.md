@@ -48,7 +48,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#de
 
 1. **Library server** (anywhere on the LAN) indexes lossless files and encodes stream profiles into process-temp cache. Lossy-indexed tracks play exclusive via a local download or an mpv `source` stream — do not remux MP3/AAC through a companion FLAC tag. Household radio on this computer uses the same exclusive delivery into mpv and seeks the station clock; Tune-in keeps hog armed (`stop` is transport-only). Unarmed exclusive Tune-in hard-fails (no HTML). See `docs/systems/radio.md`. **Linux hog is a no-op stub**; the companion still runs there for Downloads ([companion.md](companion.md)).
 2. **Desktop PWA** (installed, standalone, macOS or Windows) enables exclusive mode, stores `COMPANION_TOKEN` + port, connects to `ws://127.0.0.1:<port>/ws`.
-3. **Desktop companion** (`musicweb companion`) binds **127.0.0.1 only**, starts idle **mpv without** process-level `--audio-exclusive`, lists devices (Core Audio ∩ mpv on macOS; WASAPI ∩ mpv on Windows), holds a **controller lock** (first successful hello). Windows JSON IPC is a named pipe.
+3. **Desktop companion** (`musicweb companion`) binds **127.0.0.1 only**, starts with **no mpv child**. `set_device` / `load` spawn mpv without a process-level `--audio-exclusive`. First `list_devices` (not boot) lists Core Audio ∩ mpv on macOS or WASAPI ∩ mpv on Windows. Holds a **controller lock** (first successful hello). Windows JSON IPC is a named pipe.
 4. **Controller + `set_device`** arms exclusive at runtime (`audio-exclusive=yes` + selected device). Exclusive is not engaged until the companion **accepts** a live device.
 5. On play, the PWA **ensures** the preferred device is live, then applies the same **When a download exists** policy as HTML. A companion locker file is a loopback GET into mpv. Otherwise lossless uses an **absolute** exclusive FLAC tag URL (`new URL(streamPath, location.origin).href`) so mpv hits the **same host the browser uses**; lossy streams `source`. Leftover OPFS files stay HTML-only until migrate Yes.
 
@@ -139,8 +139,8 @@ Implementation: pure `static/js/exclusive/statusFace.js` — Settings panel uses
 ## Lock, heartbeat, and exclusive release
 
 - First successful `hello` becomes **controller**; further sessions are **readonly**.
-- Client heartbeat ~5s (also on become-visible). After **60s** with no inbound traffic and nothing loaded in mpv, the companion **unhogs** (crash / half-open socket safety). A later message from the same session **reclaims** the lock and re-arms the last device. A loaded stream is not idle — hog stays.
-- Turning **exclusive off** sends `release_device` immediately (even if mpv still has a track). The hog drops so the headphones are free for other apps. The companion socket may stay open for Downloads. The queue/radio face keeps the same track and continues on the HTML sink.
+- Client heartbeat ~5s (also on become-visible). After **60s** with no inbound traffic and nothing loaded in mpv, the companion **unhogs and quits the mpv child** (crash / half-open socket safety). A later message from the same session **reclaims** the lock and re-arms the last device (`set_device` respawns). A loaded stream is not idle — hog and the child stay.
+- Turning **exclusive off** sends `release_device` immediately (even if mpv still has a track). The hog drops, and the mpv child is quit when nothing is loaded and no device is selected, so the headphones are free for other apps. The companion socket may stay open for Downloads. The queue/radio face keeps the same track and continues on the HTML sink. Mid-play exclusive toggle may respawn mpv on the next `load`.
 - Socket close also releases that session’s claim (the clean goodbye path).
 - Client always uses **`ws://127.0.0.1`** (not `localhost`) to avoid IPv6 mismatch.
 
@@ -151,8 +151,8 @@ Implementation: pure `static/js/exclusive/statusFace.js` — Settings panel uses
   1. Stop transport
   2. Set `audio-exclusive=no`, clear `audio-device`
   3. Clear companion `selected_device_id` (only after successful release) → client clears live
-- Controller loss paths: **WebSocket disconnect**, or **60s idle TTL** (`role` → readonly, `reason=controller_ttl`) while nothing is loaded. TTL does not toast or close the socket; the same session reclaims on the next heartbeat / visibility / command and re-arms the last device.
-- User **disables exclusive** (`release_device`): unhog now, keep the controller claim and the Downloads socket. Re-enable re-sends `set_device`. `set_device` is not sent while exclusive is off.
+- Controller loss paths: **WebSocket disconnect**, or **60s idle TTL** (`role` → readonly, `reason=controller_ttl`) while nothing is loaded. Both unhog and quit the mpv child when idle. TTL does not toast or close the socket; the same session reclaims on the next heartbeat / visibility / command and re-arms the last device (`set_device` respawns).
+- User **disables exclusive** (`release_device`): unhog now and quit the mpv child when nothing is loaded and no device is selected; keep the controller claim and the Downloads socket. Re-enable re-sends `set_device` (respawns). `set_device` is not sent while exclusive is off.
 - Never release on hello replace of the same session (reconnect reclaim without thrashing).
 - User **preference** stays in PWA localStorage; on next controller `hello_ok` (or reclaim) the client re-sends `set_device` via `syncPreferredDevice`.
 

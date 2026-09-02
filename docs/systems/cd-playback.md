@@ -14,7 +14,7 @@ Enable CD playback and pick an optical drive. The preference is a hardware key (
 
 The companion lists drives whenever CD is enabled. Media-appeared / media-gone is watched only while the setting is on **and** CD mode is on.
 
-Watch lifetime is `watch_optical` on/off, controller loss, and process stop. `release_device` only unhogs mpv. Exclusive-off CD keeps the socket and unhogs; the disc watch and CDDA reader stay up. Companion hello and a rematched drive id re-send watch while the session is still cd.
+Watch lifetime is `watch_optical` on/off, controller loss, and process stop. `release_device` only unhogs mpv — it does not tear down watch or the CDDA reader. Exclusive-off CD `load` starts mpv; leave / `stop` with no hog device quits the child. Watch is independent of that process. Exclusive-off CD keeps the socket and unhogs; the disc watch and CDDA reader stay up. Companion hello and a rematched drive id re-send watch while the session is still cd.
 
 The watch does not TOC-open the selected device while a `CddaReader` is live. A failed idle read never means eject (keep last present). Physical eject / unplug while playing surfaces via the WAV/mpv error path, then one idle read. `eject` drops the reader first, then the ioctl. Missing `libcdio-paranoia` is an `optical_error`, not a silent WAV 404.
 
