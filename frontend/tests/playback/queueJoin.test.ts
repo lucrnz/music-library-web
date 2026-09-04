@@ -92,13 +92,15 @@ describe("queueJoin", () => {
     expect(isNaturalEnded(Number.NaN, 100)).toBe(false);
   });
 
-  it("kick after a scheduled fail runs attempt immediately and resets delay", async () => {
+  it("kick after a scheduled fail waits the min floor and resets delay", async () => {
     vi.useFakeTimers();
     const attempt = vi.fn(async () => {});
     const join = createQueueJoin(attempt);
     join.onFailedJoin();
     join.kick();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(249);
+    expect(attempt).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
     expect(attempt).toHaveBeenCalledTimes(1);
     join.onFailedJoin();
     await vi.advanceTimersByTimeAsync(999);

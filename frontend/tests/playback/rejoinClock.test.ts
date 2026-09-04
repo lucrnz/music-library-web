@@ -30,18 +30,33 @@ describe("rejoin clock", () => {
     expect(attempt).toHaveBeenCalledTimes(1);
   });
 
-  it("kick runs immediately and resets backoff", async () => {
+  it("kick waits the min floor then resets backoff", async () => {
     vi.useFakeTimers();
     const attempt = vi.fn(async () => {});
     const clock = createRejoinClock(attempt);
     clock.kick();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(249);
+    expect(attempt).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
     expect(attempt).toHaveBeenCalledTimes(1);
     clock.schedule();
     await vi.advanceTimersByTimeAsync(999);
     expect(attempt).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(attempt).toHaveBeenCalledTimes(2);
+  });
+
+  it("a second kick while the min timer is pending re-arms 250ms", async () => {
+    vi.useFakeTimers();
+    const attempt = vi.fn(async () => {});
+    const clock = createRejoinClock(attempt);
+    clock.kick();
+    await vi.advanceTimersByTimeAsync(200);
+    clock.kick();
+    await vi.advanceTimersByTimeAsync(249);
+    expect(attempt).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(attempt).toHaveBeenCalledTimes(1);
   });
 
   it("cancel prevents a pending schedule from running", async () => {
@@ -65,9 +80,10 @@ describe("rejoin clock", () => {
     );
     const clock = createRejoinClock(attempt);
     clock.kick();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(attempt).toHaveBeenCalledTimes(1);
     clock.kick();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(250);
     expect(attempt).toHaveBeenCalledTimes(1);
     release?.();
     await Promise.resolve();
@@ -84,7 +100,7 @@ describe("rejoin clock", () => {
     );
     const clock = createRejoinClock(attempt);
     clock.kick();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(250);
     clock.schedule();
     clock.schedule();
     release?.();

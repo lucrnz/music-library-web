@@ -1,5 +1,6 @@
 export const REJOIN_INITIAL_MS = 1000;
 export const REJOIN_CAP_MS = 8000;
+export const REJOIN_MIN_MS = 250;
 
 export function nextRejoinDelay(prevMs: number | null): number {
   if (prevMs == null) return REJOIN_INITIAL_MS;
@@ -43,7 +44,11 @@ export function createRejoinClock(attempt: () => Promise<void>) {
         clearTimeout(timer);
         timer = null;
       }
-      void run();
+      if (inFlight) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void run();
+      }, REJOIN_MIN_MS);
     },
     schedule(): void {
       if (timer != null) return;
