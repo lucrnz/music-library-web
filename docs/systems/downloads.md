@@ -9,7 +9,8 @@ Optional client-side offline music: users can download stream-profile audio to t
   - User download with confirm: `ui.ts`
   - Reactive fields: `state.ts` (`syncQueueSummary`)
   - Filename / MIME: `media.ts`
-  - Catalog barrel: `catalog.ts` re-exports `projection.ts` (status join), `art.ts` (OPFS art + blob URLs), `writer.ts` (IDB lock, pin/refcount, commit/delete)
+  - Catalog barrel: `catalog.ts` re-exports `projection.ts` (status join), `art.ts` (OPFS art + blob URLs + artist full / flip helper), `writer.ts` (IDB lock, pin/refcount, commit/delete)
+  - Companion backfill (quiet walk, not the manager queue): `backfill.ts`
   - Catalog view (hierarchy + art + primed roots): `snapshot.ts` (`loadDownloadsCatalogView`, cached; `invalidateDownloadsCatalogView` from `writer.ts` mutations)
   - Queue IDB CRUD / live progress: `queue.ts`
   - Concurrent-job cap (allowed values, persist, rank-to-keep): `concurrency.ts`
@@ -48,7 +49,9 @@ One Downloads feature. The companion is a dumb blob store; it does not own the c
 
 Storage line: `N tracks · catalog used` (ready audio + owned art; N is every catalog row). On the companion backend, append real OS free space. There is no quota/free from `estimate()`, and no near-quota confirm.
 
-Catalog commit/delete run under a module mutex. A finished job finalizes as one IDB transaction (catalog row + refcounts + queue delete); art I/O runs after. Delete drops IDB first, then unlinks OPFS or the companion key.
+Catalog commit/delete run under a module mutex. A finished job finalizes as one IDB transaction (catalog row + refcounts + queue delete); companions run after. Delete drops IDB first, then unlinks OPFS or the companion key.
+
+**Companions** (after audio commit, best-effort — a miss does not fail the job): album thumb + full, artist full photo plus flip flags (`hasImage` / `hasPreferredImage` / `isVa` / `preferredRev`), and lyrics (`ok` / `instrumental` / `not_found` in the lyrics IDB store). `GET /api/artist-image` placeholder (`Cache-Control: no-store`) is not stored as a photo. VA stores flags and does not download a portrait file. Existing catalog rows backfill when the session is `online`: on play of that downloaded track, and via a quiet walker (`backfill.ts`) that yields while the user download queue has work. The walker is not a download-manager job. Modules: `writer.ts`, `art.ts`, `lyrics/cache.ts`, `downloads/backfill.ts`.
 
 ## Behavior (intent)
 
@@ -58,7 +61,7 @@ Catalog commit/delete run under a module mutex. A finished job finalizes as one 
 4. **Network policy.** Auto-pause when hard offline, server unreachable, or (desktop PWA) the companion socket is down. User pause is separate from auto-pause.
 5. **Catalog projection.** In-memory projection of downloaded tracks feeds UI icons, prepare skip, and tree/list browse of local content. `trackDownloadState` `ready` / `other` means a playable local file — playback uses that join to gray and skip undownloaded queue rows when `connectivity.canUseRemote` is false (see `docs/systems/playback.md`).
 6. **Play path.** Delivery choice (companion file URL, leftover OPFS blob, or stream) is owned by playback resolution (`resolve.ts`), used by the on-demand player and by `radio/session.ts`, not by re-encoding on the client. After Later, leftover OPFS still plays in HTML until Yes finishes; exclusive only loads companion file URLs into mpv.
-7. **Artist thumbs.** Offline thumbs follow `GET /api/artist-image` (preferred bytes first). After a local preferred upload (online submit or flush), `applyPreferredServerResult` overwrites the OPFS artist thumb, publishes a new object URL on `urlCache` (`artist:${id}:thumb`), then revokes the old one. List/tree read that cache and browse `artUrls` under the same keys (`artist:${id}:thumb`, `cover:${albumId}:thumb`). `artistImageUrl` busts on nonzero `preferredRev` even after revert. A queued revert does not change GET bytes until DELETE succeeds.
+7. **Artist art.** Offline thumbs follow `GET /api/artist-image` (preferred bytes first). Finalize / backfill also store artist **full** when the artist API says there is a real portrait. After a local preferred upload (online submit or flush), `applyPreferredServerResult` overwrites the OPFS artist thumb, publishes a new object URL on `urlCache` (`artist:${id}:thumb`), then revokes the old one. List/tree read that cache and browse `artUrls` under the same keys (`artist:${id}:thumb`, `cover:${albumId}:thumb`). `artistImageUrl` busts on nonzero `preferredRev` even after revert. A queued revert does not change GET bytes until DELETE succeeds.
 
 ## Ownership / import surface
 
@@ -72,7 +75,8 @@ Durable split so `index.ts` does not become a barrel:
 | Reactive `downloads` fields | `state.ts` |
 | Filename / MIME | `media.ts` |
 | Catalog projection / UI join | `projection.ts` (via `catalog.ts`) |
-| Local art files + blob URLs | `art.ts` (via `catalog.ts`) |
+| Local art files + blob URLs + artist flip helper | `art.ts` (via `catalog.ts`) |
+| Quiet companion backfill | `backfill.ts` |
 | Catalog write mutex, pin/refcount, finalize, delete | `writer.ts` (via `catalog.ts`) |
 | Storage-only catalog row (`CatalogTrackRecord`) | `writer.ts` / `models/track.ts` (no snake aliases; queue snapshot is a `Track`) |
 | One catalog view for browse / add-all / tree | `snapshot.ts` |

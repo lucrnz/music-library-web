@@ -16,17 +16,19 @@ Three published states (`ConnectivityState`):
 
 | State | Intent |
 |-------|--------|
-| `online` | Browser reports online and the app treats the server as reachable |
-| `offline` | Browser reports offline (hard offline) |
-| `server_down` | Browser online but health / failure classification says the app server is not usable |
+| `online` | Last live same-origin `/api` success treated the library as reachable |
+| `offline` | Last classified failure happened while the browser reported offline |
+| `server_down` | Last classified failure happened while the browser reported online |
 
-Truth and probes live in non-Vue `connectivity.js`. The Vue store mirrors state for templates. Success/failure reporters from API helpers feed classification (network vs item failure vs abort).
+Published state follows **this origin’s last live `/api` result**, not Chromium’s `navigator.onLine`. `apiFetch` (`frontend/src/api.ts`) reports success on `res.ok` and failure on network throws, 429, and 5xx. 4xx does not flip connectivity. Health probes (`GET /api/health`) use the same reporters. Window `online` / `offline` only start a health probe; they do not set state. After a **failed** request, `navigator.onLine` may only choose Offline vs Can’t-reach copy.
 
-Boot is **optimistic** `online` so the shell does not flash “Can’t reach server.” `canReachServer()` stays `state === "online"` and not browser-offline — prepare, download-queue policy, and library loaders use that. Play, player remote covers, local-fail stream fallback, and queue skip use `canUseRemoteMedia()` (`canReachServer()` and `hasConfirmedReachability()`). The Vue store mirrors `state`, `confirmed`, and `canUseRemote`; queue gray reads `connectivity.canUseRemote`. Listeners fire when **state or confirmed** changes (`from`/`to` may be equal). `reportSuccess()` sets the session flag when it treats the server as up (codecs, browse, or health). `GET /api/codecs` at boot is that first probe and is not served from HTTP cache (`cache: "no-store"`); success confirms; failure or timeout reports `server_down`. No fourth published state.
+Truth and probes live in non-Vue `connectivity.ts`. The Vue store mirrors state for templates.
+
+Boot is **optimistic** `online` so the shell does not flash “Can’t reach server.” `canReachServer()` is `state === "online"` and does not read the browser flag. Play, remote covers, local-fail stream fallback, and queue skip use `canUseRemoteMedia()` (`canReachServer()` and `hasConfirmedReachability()`). The Vue store mirrors `state`, `confirmed`, and `canUseRemote`; queue gray reads `connectivity.canUseRemote`. Listeners fire when **state or confirmed** changes (`from`/`to` may be equal). `reportSuccess()` always confirms and sets `online`, including when `navigator.onLine === false`. `GET /api/codecs` at boot is still a first probe (`cache: "no-store"`). No fourth published state.
 
 ### Health probes
 
-A backoff health loop runs when **any** `setHealthWork` source has work (`"downloads"` or `"artist-art"`). Downloads write `setHealthWork("downloads", enabled && queueHasWork)`. Preferred-art flush re-arms with `reportFailure` + `requestHealthProbe`, not “wait for recovered.” Recovery notifies listeners so queue policy can resume, pending artist-art can flush, and playback can retry prepare paths. Exact intervals and probe endpoints live in source.
+The backoff health loop runs while published state is `offline` or `server_down`, or a probe was requested — even when the download queue is empty. `setHealthWork` (`"downloads"` / `"artist-art"`) still exists for those pumps; it is not required to start a probe. Window events and empty-queue recovery call `requestHealthProbe`. Preferred-art flush re-arms with `reportFailure` + `requestHealthProbe`. Recovery notifies listeners so queue policy can resume, pending artist-art can flush, companion backfill can start, and playback can retry prepare paths. Exact intervals and probe endpoints live in source.
 
 ### Auto-pause signal
 
