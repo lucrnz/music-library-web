@@ -35,7 +35,7 @@ CLI flags and env notes: [development/commands.md](../development/commands.md#de
 ## Source of truth
 
 - Companion CLI: `src/musicweb/cli/companion.py`
-- Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `optical_session.py`, `mpv_player.py`, `mpv_ipc.py`, `coreaudio.py`, `wasapi.py`, `volume.py`). CD uses the same mpv: hog if exclusive is on (hard-fail if unarmed), auto if exclusive is off (`load` hog flag). Exclusive-off CD still watches the tray. Compact status while CD is on is the CD face, not exclusive Ready. Mid-play exclusive toggle reloads the CD URL. See [cd-playback.md](cd-playback.md).
+- Companion package: `src/musicweb/exclusive/` (`protocol.py`, `app.py`, `session.py`, `optical_session.py`, `mpv_player.py`, `mpv_ipc.py`, `coreaudio.py`, `wasapi.py`, `volume.py`). CD uses the same mpv: hog if exclusive is on (hard-fail if unarmed), auto if exclusive is off (`load` hog flag). Yellow Book hog wraps the as-is `/cdrom/file` URL; `cdLoad` does not use `exclusiveDelivery`. A hog failure on an odd FLAC/ALAC rate is honest. Exclusive-off CD still watches the tray. Compact status while CD is on is the CD face, not exclusive Ready. Mid-play exclusive toggle reloads the CD URL. See [cd-playback.md](cd-playback.md).
 - Profile tags + catalog: `src/musicweb/transcode/profiles.py`
 - HTTP: `GET /api/exclusive-formats`, existing `GET /api/stream` + `POST /api/transcode/prepare` with tags
 - Client: `frontend/src/exclusive/` (including `statusFace.ts`, `companionClient.ts`), `stores/exclusiveAudio.ts`, `playback/exclusiveDelivery.ts`, `playback/sinks/`, `radio/audio.ts`, `stores/player.ts`, `playbackStatus.ts`

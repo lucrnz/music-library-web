@@ -1,10 +1,12 @@
 # CD playback
 
-Software deck for a Red Book audio CD on an installed Mac Desktop PWA with the Desktop companion. The disc is the file: live sector reads become a loopback WAV for stock mpv. There is no rip UI, no write into the library tree as audio files, and no household restream.
+Software deck for a Mac optical disc on an installed Desktop PWA with the Desktop companion. There is no rip UI, no write into the library tree as audio files, and no household restream.
+
+**Red Book** (audio session) is the live-sector WAV deck plus MusicBrainz identify. **Yellow Book** (data session, `kind === "data"`) is a jailed filesystem of allowlisted files plus a CD-local queue. Mixed-mode / Enhanced CDs stay Red Book whenever an audio session exists. The old data-disc face **Not an audio CD** is replaced by `data` / `no_playable`.
 
 ## Gating
 
-Only an installed Mac Chromium PWA shows CD Settings. The desktop session toggle and the mobile CD tab appear only when Enable CD playback is on **and** a drive is picked; Drive missing does not hide them. Disabling CD, or having no pick, leaves a live CD session. The companion may connect when CD is enabled (token required). Windows/Linux companions expose an empty optical list and 404 the WAV route so a later Windows reader is not a rewrite. Phones and browser tabs never show CD UI.
+Only an installed Mac Chromium PWA shows CD Settings. The desktop session toggle and the mobile CD tab appear only when Enable CD playback is on **and** a drive is picked; Drive missing does not hide them. Disabling CD, or having no pick, leaves a live CD session. The companion may connect when CD is enabled (token required). Windows/Linux companions expose an empty optical list and 404 the WAV and `/cdrom/*` routes so a later Windows reader is not a rewrite. Phones and browser tabs never show CD UI.
 
 ## Settings and rematch
 
@@ -18,11 +20,11 @@ Watch lifetime is `watch_optical` on/off, controller loss, and process stop. `re
 
 The watch does not TOC-open the selected device while a `CddaReader` is live. A failed idle read never means eject (keep last present). Physical eject / unplug while playing surfaces via the WAV/mpv error path, then one idle read. `eject` drops the reader first, then the ioctl. Missing `libcdio-paranoia` is an `optical_error`, not a silent WAV 404.
 
-A disc with no Red Book audio session is face **Not an audio CD**, not No disc. Trailing CD-Extra stays playable.
+A data-session disc is face **Data CD** (or the volume name once mounted), not No disc. After a finished walk with zero allowlisted files the face is **No playable audio**. Trailing CD-Extra stays Red Book. After the first data classify, watch polls mount presence + `volume_id` and does not TOC-open the raw device. Classify can precede `/Volumes`; the companion retries the mount each tick (30s is a log window, not a give-up). Identity is companion-side `volume_id` (volume UUID / BSD disk), not the volume name — a new id at the same path is a new disc. Host paths and `volume_id` never appear on the WebSocket.
 
 ## Session
 
-CD is a third occupant (`none` | `queue` | `radio` | `cd`). The on-demand queue is never occupied or stashed. Disc rows live on a CD cursor (`frontend/src/stores/cd.ts`). The disc list is `CdTrackList` (desktop right pane while CD is on; mobile `/cd`). `PlaylistView` is queue-only.
+CD is a third occupant (`none` | `queue` | `radio` | `cd`). The on-demand queue is never occupied or stashed. Disc rows live on a CD cursor (`frontend/src/stores/cd.ts`). Red Book mounts `CdTrackList`. Yellow Book mounts a split filesystem + CD-local queue (`CdRomPane` desktop; stacked on narrow `/cd`). That queue is not `PlaylistView` / `pl`. `PlaylistView` stays queue-only.
 
 The desktop CD icon is absent until Enable CD playback is on and a drive is picked. Once shown it is a **session toggle**: first press enters CD and opens the rail; second press leaves (`become("none")`), stops transport, stops watch, and restores the queue pane. Collapse / X only hides the now-playing rail and **keeps** the session. A collapsed desktop session or a Library tab shows `CdMini` (transport + Leave), never queue Play / Next.
 
@@ -44,18 +46,28 @@ Unripped stubs are first-class (`tracks.unripped`). They stay out of Artists/Alb
 
 ## Audio
 
-Companion serves a token-gated loopback WAV per track. The device path is a query argument, never a URL path segment (see `cdDelivery.ts` / `app.py`). One `CddaReader` per `(device, track)` is reused across Range requests. Paranoia reads sectors sequentially (seek once per prime). mpv `load`s that HTTP URL. `load` takes an explicit **hog** flag: exclusive on → hog (hard-fail if unarmed); exclusive off → auto output. Mid-play exclusive toggle reloads the same URL and seeks only after duration is known. Correction is libcdio-paranoia overlap+verify with a 6 s RAM ring. Volume is a `subscribeOutputVolume` on the CD sink. Media Session metadata and position come from the CD cursor, not the queue. Status face while CD is on includes Reading / Detecting / Playing / No disc / Drive missing / Companion offline / Not an audio CD.
+Companion serves a token-gated loopback WAV per Red Book track. The device path is a query argument, never a URL path segment (see `cdDelivery.ts` / `app.py`). One `CddaReader` per `(device, track)` is reused across Range requests. Paranoia reads sectors sequentially (seek once per prime). mpv `load`s that HTTP URL. `load` takes an explicit **hog** flag: exclusive on → hog (hard-fail if unarmed); exclusive off → auto output. Mid-play exclusive toggle reloads the same URL and seeks only after duration is known. Correction is libcdio-paranoia overlap+verify with a 6 s RAM ring. Volume is a `subscribeOutputVolume` on the CD sink. Media Session metadata and position come from the CD cursor, not the queue. Status face while CD is on includes Reading / Detecting / Playing / No disc / Drive missing / Companion offline / Data CD / volume name / No playable audio.
 
 Companion STATUS `url` and mpv stderr never carry the raw query token.
 
 Eject stops transport and asks the companion to eject. Failure toasts; stay in the room if media is still present.
 
+## Yellow Book
+
+macOS data CDs only. Windows/Linux stay empty optical + 404. Not DVD, USB, or an arbitrary folder player.
+
+The companion holds one in-memory tree jailed to that volume. Relative paths are POSIX-style from the volume root. Every list / cover / lyrics / file GET resolves `rel` through that jail (`device` + `rel` + `token` query; never a raw path segment). Walks a closed allowlist (**MP3**, **AAC** (`.aac` / AAC-in-`.m4a`), **WMA**, **ALAC**, **FLAC**). Wrong token is **401**; jail miss / missing file / stub / non-allowlist is **404**. Playback is as-is: `cdLoad` keys data rows off `cdrom:` ids (`path` is the rel, no `albumId` / `artistId`), profile `"cdrom"`, never `/cdda/` and never `exclusiveDelivery`. Hog still wraps that URL; a high-rate FLAC/ALAC hog failure is honest (toast + skip). A read/load error toasts and skips to the next row; stop only when the queue is exhausted. Session-only: no SQLite tracks, no scan, no import, no write back to the disc.
+
+Auto-add enqueues the single directory that holds every playable file; two or more parent folders leave the CD-local queue empty (**Add some files to start CD playback**). Leave / eject / new disc wipe that queue; re-enter of an already-cd session keeps queue + shuffle/repeat. Same `volume_id` remount is the same disc; a new `volume_id` at the same path rebuilds and re-runs auto-add. Desktop split is filesystem on top, CD-local queue on the bottom (resizable, `musicweb.cdromSplitHeight.v1`). File click starts only when that queue is empty or paused; file ⋯ is Add; folder ⋯ is Add all + Play all (**replace**). Queue chrome is the on-demand row plus Radio/CD + Edit/Clear — no Save, Download, or Go to. Filesystem chrome is List/Grid/Tree (`ui.libraryLayout`; hide non-audio; Back + folder title, volume name at root), dedicated `CdRomFileRow` / `CdRomFolderRow`, and a private tree type — not `TrackRow`, `AlbumCard`, or library `TreeNode`. File icon is the shipped VA thumb; folders use `#i-folder`. Queue / now-playing / Media Session covers are embedded, then a folder image, then that VA thumb. LossyMark shows on filesystem rows, the CD-local queue, and now-playing for MP3 / AAC / WMA (`fmt-wma` matches the MP3/AAC text sprite). ALAC / FLAC have no mark. Data-disc now-playing has no Change disc / MusicBrainz.
+
+Lyrics: always GET `/cdrom/lyrics` first (sidecar `.lrc` then embedded tags), then library-server LRCLIB by title/artist/album/duration. `LyricsOverlay` takes an optional `resolve`; do not teach `resolveLyrics` about `cdrom:`. No `tracks` / `track_lyrics` row. Memory cache is keyed by the `cdrom:` id and dropped on leave / eject / new disc.
+
 ## Out of scope
 
-Ripping UI / Import, showing unripped albums in Artists/Albums/Search, data-session / CD-ROM file playback, Windows/Linux optical implementation, household restream, analog MMC play-out, custom mpv `cdda://`, gapless whole-disc concat, manual tagger, lyrics/downloads/saved-playlist add for CD rows, DiskArbitration / IOKit location rewrite, `disc_no` on stubs and rip-merge of disc 2.
+Ripping UI / Import, showing unripped albums in Artists/Albums/Search, Windows/Linux optical implementation, DVD-ROM / Blu-ray / USB sticks, mixed-mode switcher, household restream, analog MMC play-out, custom mpv `cdda://`, gapless whole-disc concat, manual tagger, indexing WMA (or any Yellow Book-only kind) into the library, transcoding Yellow Book files, DiskArbitration / IOKit **identity** rewrite, `disc_no` on stubs and rip-merge of disc 2.
 
 ## Source of truth
 
-- Companion optical + WAV: `src/musicweb/exclusive/optical.py`, `optical_cdio.py`, `optical_session.py`, `cdda_stream.py`, `app.py`
-- Server identity: `src/musicweb/cd/`
-- Client store + chrome: `frontend/src/stores/cd.ts`, `frontend/src/cd/identifyFlow.ts`, `frontend/src/components/cd/`, `frontend/src/playback/cdLoad.ts`, `frontend/src/playback/cdDelivery.ts`
+- Companion optical + WAV + jailed CD-ROM: `src/musicweb/exclusive/optical.py`, `optical_cdio.py`, `optical_session.py`, `optical_volume.py`, `optical_fs.py`, `optical_meta.py`, `cdda_stream.py`, `app.py`
+- Server identity + CD LRCLIB: `src/musicweb/cd/`, `src/musicweb/lyrics/lookup.py`, `src/musicweb/routes/cd.py`
+- Client store + chrome: `frontend/src/stores/cd.ts`, `frontend/src/cd/`, `frontend/src/components/cd/`, `frontend/src/playback/cdLoad.ts`, `frontend/src/playback/cdDelivery.ts`

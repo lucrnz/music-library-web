@@ -12,7 +12,7 @@ How the client chooses **what** to play (stream vs downloaded file), **which** q
 - Exclusive URL / profile / block (no sink): `frontend/src/playback/exclusiveDelivery.ts`
 - Exclusive delivery builder: `frontend/src/playback/deliveryPolicy.ts` (`sink` + `profileFor`)
 - Shared prepare: `frontend/src/playback/prepare.ts` (`prepareTracks`)
-- Session handoff: `frontend/src/playback/session.ts` (`become("none" | "queue" | "radio" | "cd")`). CD does not go through `resolvePlayIntent` or `player.ts`; delivery is companion loopback via `playback/cdLoad.ts`. Compact status is the CD face. Playback details may list 16/44.1 and exclusive hog when exclusive is on. The disc list is `CdTrackList`, not `PlaylistView`. Queue mutations use `queueActionsAllowed()`. See [cd-playback.md](cd-playback.md).
+- Session handoff: `frontend/src/playback/session.ts` (`become("none" | "queue" | "radio" | "cd")`). CD does not go through `resolvePlayIntent` or `player.ts`; delivery is companion loopback via `playback/cdLoad.ts`. Compact status is the CD face. Red Book playback details may list 16/44.1 and exclusive hog when exclusive is on; Yellow Book details follow the as-is file (codec / rate from tags, not a WAV wrap). The desktop right pane is `CdTrackList` (Red Book) or the Yellow Book split (filesystem over a CD-local queue). That queue is not `PlaylistView`. `cdLoad` keys data rows off `cdrom:` ids and profile `"cdrom"`. Queue mutations use `queueActionsAllowed()`. See [cd-playback.md](cd-playback.md).
 - Shared HTML element: `frontend/src/playback/sinks/htmlElement.ts`
 - Companion-stop decision: `needsCompanionStop` in `playback/playIntent.ts`
 - Quality prefs: `frontend/src/stores/settings.ts` (maps `/api/codecs` to camelCase once at hydrate; `setStreamCodec` / `setPlaybackPolicy` persist only)
@@ -38,7 +38,7 @@ Each successful load records a **play source** (not a library path):
 | Source | Meaning |
 |--------|---------|
 | `streaming` | Playing a server stream URL for the active stream profile |
-| `cd` | Playing a live companion `/cdda/` WAV (optical). Not `resolvePlayIntent`. |
+| `cd` | Playing a live companion optical URL: Red Book `/cdda/` WAV or Yellow Book `/cdrom/file`. Not `resolvePlayIntent`. |
 | `downloaded` | Playing a local catalog file (OPFS blob or companion loopback URL) |
 | `unavailable` | Cannot start; structured block reason set |
 | `none` | Player idle (no current load) |

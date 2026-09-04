@@ -6,7 +6,7 @@ Three jobs share one process (`uv run musicweb companion`) and one `COMPANION_TO
 
 1. **Exclusive hog** (macOS / Windows) — mpv + Core Audio or WASAPI exclusive. See [exclusive-audio.md](exclusive-audio.md).
 2. **Downloads blob store** — real-disk locker for the same Downloads feature the PWA catalogs in IndexedDB. See [downloads.md](downloads.md).
-3. **Optical + live virtual WAV** (macOS) — list/watch/eject a CD, serve a token-gated loopback WAV (`device` query, never a path segment), `load` with an explicit hog flag. Watch lives on `optical_session.py` and is not torn down by `release_device`. Watch does not TOC-poll a live reader. Paranoia reads sectors sequentially. STATUS redacts `token=`. One CDDA reader per track is reused across Ranges. Optional `libcdio` + `libcdio-paranoia`. Windows/Linux stub: empty list, WAV 404. See [cd-playback.md](cd-playback.md).
+3. **Optical + live virtual WAV + jailed CD-ROM** (macOS) — list/watch/eject a CD, serve a token-gated loopback WAV (`device` query, never a path segment), and jailed Yellow Book `GET /cdrom/file` / `/cdrom/cover` / `/cdrom/lyrics` (`device` + `rel` + `token`). Wrong `/cdrom/*` token is **401**; jail / miss / stub is **404**. After a data classify, watch polls mount presence + `volume_id` and does not TOC-open the device. `load` takes an explicit hog flag. Watch lives on `optical_session.py` and is not torn down by `release_device`. Watch does not TOC-poll a live reader. Paranoia reads sectors sequentially. STATUS redacts `token=`. One CDDA reader per track is reused across Ranges. Optional `libcdio` + `libcdio-paranoia`. Windows/Linux stub: empty list, WAV and `/cdrom/*` 404. See [cd-playback.md](cd-playback.md).
 
 ## Source of truth
 

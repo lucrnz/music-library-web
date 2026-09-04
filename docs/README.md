@@ -37,7 +37,7 @@ Do not copy exact schemas, payload shapes, table columns, profile tags, or route
 - `docs/systems/pwa.md`: installable shell, service worker scope, public origin.
 - `docs/systems/downloads.md`: client offline catalog (OPFS or companion disk), queue, import surface.
 - `docs/systems/companion.md`: Desktop companion sidecar (hog + Downloads blob store + optical).
-- `docs/systems/cd-playback.md`: Mac PWA software CD deck (live WAV, unripped stubs, no rip UI).
+- `docs/systems/cd-playback.md`: Mac PWA software CD deck (Red Book live WAV + Yellow Book `/cdrom/file`, unripped stubs, no rip UI).
 - `docs/systems/playback.md`: play source, quality prefs, prepare.
 - `docs/systems/radio.md`: household 24/7 station (encode + seek, not a live pipe).
 - `docs/systems/exclusive-audio.md`: operator get started (macOS / Windows), then design (Desktop companion / `musicweb companion`, hog, mpv, loopback WS).
