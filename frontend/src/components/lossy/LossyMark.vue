@@ -10,6 +10,7 @@ import Icon from "@/components/icons/Icon.vue";
 const ICONS: Record<string, string> = {
   mp3: "fmt-mp3",
   aac: "fmt-aac",
+  wma: "fmt-wma",
   lossy: "fmt-lossy",
   mixed: "fmt-lossy",
 };

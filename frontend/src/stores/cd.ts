@@ -34,7 +34,9 @@ export type CdRoomFace =
   | "reading"
   | "playing"
   | "pick"
-  | "not_audio";
+  | "not_audio"
+  | "data"
+  | "no_playable";
 
 export interface CdDrive {
   id: string;
@@ -74,6 +76,7 @@ export interface CdState {
   matches: CdMatch[];
   lastDiscid: string | null;
   pickerOpen: boolean;
+  volumeName: string | null;
 }
 
 export const cd = reactive<CdState>({
@@ -95,6 +98,7 @@ export const cd = reactive<CdState>({
   matches: [],
   lastDiscid: null,
   pickerOpen: false,
+  volumeName: null,
 });
 
 function normalizeDrives(drives: CdDrive[]): CdDrive[] {
@@ -175,16 +179,22 @@ function applyOpticalLive(partial: Parameters<typeof setCdLive>[0]): void {
   if (!presentChanged && !kindChanged) return;
   if (activeSession() !== "cd") return;
   if (cd.mediaKind === "data") {
-    notifyCdMediaGone();
-    clearCdCursor();
     cd.pickerOpen = false;
     cd.matches = [];
-    cd.face = "not_audio";
+    player.lyricsOpen = false;
+    notifyCdMediaGone();
+    setCdTracks([]);
+    refreshCdFace();
+    void import("@/cd/identifyFlow").then((m) => m.abortIdentify());
+    void import("@/cd/cdrom").then((m) => m.startCdromSession());
     return;
   }
+  void import("@/cd/cdrom").then((m) => m.forgetCdromIndex());
+  void import("@/lyrics/cache").then((m) => m.dropLyricsMemory("cdrom:"));
   if (cd.mediaPresent && cd.toc && cd.mediaKind === "audio") {
     void import("@/cd/identifyFlow").then((m) => m.runIdentify());
   } else {
+    void import("@/cd/identifyFlow").then((m) => m.abortIdentify());
     notifyCdMediaGone();
     clearCdCursor();
     cd.pickerOpen = false;
@@ -238,6 +248,7 @@ export function setCdLive(partial: {
   toc?: CdToc | null;
   cdText?: CdTextInfo | null;
   lastError?: string | null;
+  volumeName?: string | null;
 }): void {
   if (partial.drives) {
     const prevId = cd.selectedDriveId;
@@ -250,6 +261,7 @@ export function setCdLive(partial: {
   if ("toc" in partial) cd.toc = partial.toc ?? null;
   if ("cdText" in partial) cd.cdText = partial.cdText ?? null;
   if ("lastError" in partial) cd.lastError = partial.lastError ?? null;
+  if ("volumeName" in partial) cd.volumeName = partial.volumeName ?? null;
 }
 
 export function setCdTracks(tracks: Track[], index = 0): void {
@@ -282,7 +294,9 @@ export function enterCdMode(): void {
   if (cd.enabled && cd.selectedDriveId) {
     watchOptical(true, cd.selectedDriveId);
   }
-  if (cd.mediaPresent && cd.toc && cd.mediaKind === "audio") {
+  if (cd.mediaKind === "data") {
+    void import("@/cd/cdrom").then((m) => m.startCdromSession());
+  } else if (cd.mediaPresent && cd.toc && cd.mediaKind === "audio") {
     void import("@/cd/identifyFlow").then((m) => m.runIdentify());
   } else {
     refreshCdFace();
@@ -299,7 +313,12 @@ export function toggleCdSession(): void {
 
 export function leaveCdMode(): void {
   watchOptical(false);
+  player.lyricsOpen = false;
+  void import("@/cd/identifyFlow").then((m) => m.abortIdentify());
+  void import("@/cd/cdrom").then((m) => m.clearCdromTree());
+  void import("@/lyrics/cache").then((m) => m.dropLyricsMemory("cdrom:"));
   clearCdCursor();
+  cd.volumeName = null;
   refreshCdFace();
   if (player.railFace === "cd") {
     setRailFace("queue");
@@ -349,7 +368,8 @@ export function refreshCdFace(): void {
     return;
   }
   if (cd.mediaKind === "data") {
-    cd.face = "not_audio";
+    void import("@/cd/cdrom").then((m) => m.applyCdromFace());
+    if (cd.face !== "data" && cd.face !== "no_playable") cd.face = "data";
     return;
   }
   if (!cd.mediaPresent) {

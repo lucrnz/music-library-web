@@ -318,6 +318,51 @@ describe("formatPrimaryStatus", () => {
     expect(face.icon).toBe("cd");
   });
 
+  it("cd data face is volume name or Data CD", () => {
+    expect(
+      formatPrimaryStatus({
+        session: "cd",
+        playSource: "cd",
+        cdFace: "data",
+      }).text,
+    ).toBe("Data CD");
+    expect(
+      formatPrimaryStatus({
+        session: "cd",
+        playSource: "cd",
+        cdFace: "data",
+        cdVolumeName: "MYCD",
+      }).text,
+    ).toBe("MYCD");
+    expect(
+      formatPrimaryStatus({
+        session: "cd",
+        playSource: "cd",
+        cdFace: "no_playable",
+      }).text,
+    ).toBe("No playable audio");
+  });
+
+  it("cdrom lossless details list the file codec, not cdda", () => {
+    const rows = buildPlaybackDetailsRows({
+      session: "cd",
+      playSource: "cd",
+      playProfileId: "cdrom",
+      track: {
+        isLossy: false,
+        sourceCodec: "flac",
+        bitrateKbps: null,
+        sampleRateHz: 44100,
+        bitrateMode: null,
+        bitDepth: 16,
+      },
+    });
+    expect(value(rows, "codec")).toBe("FLAC");
+    expect(value(rows, "bit_depth")).toBe("16-bit");
+    expect(value(rows, "sample_rate")).toBe("44.1 kHz");
+    expect(value(rows, "source")).toBe("CD");
+  });
+
   it("cdda details list Source CD and 16/44.1", () => {
     const track = {
       isLossy: false,

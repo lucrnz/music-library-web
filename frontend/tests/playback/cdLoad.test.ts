@@ -18,7 +18,13 @@ const {
   sink,
 } = vi.hoisted(() => {
   const durationWaiters: Array<() => void> = [];
-  const state = { duration: 0, handlers: {} as { onTime?: (t: number, d: number) => void } };
+  const state = {
+    duration: 0,
+    handlers: {} as {
+      onTime?: (t: number, d: number) => void;
+      onError?: (err: Error) => void;
+    },
+  };
   function flushDurationWaiters(): void {
     if (!(state.duration > 0) || !durationWaiters.length) return;
     const pending = durationWaiters.splice(0, durationWaiters.length);
@@ -39,7 +45,10 @@ const {
 vi.mock("@/playback/sinks/companionSink", () => ({
   createCompanionSink: () => ({
     kind: "companion",
-    setHandlers(h: { onTime?: (t: number, d: number) => void }) {
+    setHandlers(h: {
+      onTime?: (t: number, d: number) => void;
+      onError?: (err: Error) => void;
+    }) {
       sink.state.handlers = h;
     },
     async load(url: string, opts?: { hog?: boolean }) {
@@ -164,6 +173,210 @@ describe("cdLoad", () => {
     player.duration = 180;
     await reloadCdAtPosition();
     expect(seekFn).toHaveBeenCalledWith(12);
+  });
+
+  it("data rows load /cdrom/file with profile cdrom", async () => {
+    const { cdLoad } = await import("@/playback/cdLoad");
+    const { player } = await import("@/stores/playerState");
+    const { setCdTracks } = await import("@/stores/cd");
+    setCdTracks([
+      {
+        id: "cdrom:Music/a.mp3",
+        path: "Music/a.mp3",
+        title: "A",
+        artist: "B",
+        album: "C",
+        albumId: null,
+        artistId: null,
+        albumArtist: "B",
+        albumArtistId: null,
+        track: 1,
+        disc: 1,
+        year: null,
+        duration: 1,
+        durationMs: 1000,
+        isMissing: false,
+        sampleRateHz: 44100,
+        bitDepth: 16,
+        isLossy: true,
+        sourceCodec: "mp3",
+        bitrateKbps: null,
+        bitrateMode: null,
+      },
+    ]);
+    await cdLoad(0);
+    expect(load.mock.calls[0][0]).toContain("/cdrom/file");
+    expect(String(load.mock.calls[0][0])).not.toContain("/cdda/");
+    expect(player.playProfileId).toBe("cdrom");
+  });
+
+  it("stale data load gen does not skip again", async () => {
+    const { showToast } = await import("@/stores/ui");
+    const { cdLoad, cdStopTransport } = await import("@/playback/cdLoad");
+    const { setCdTracks } = await import("@/stores/cd");
+    setCdTracks([
+      {
+        id: "cdrom:a.mp3",
+        path: "a.mp3",
+        title: "A",
+        artist: "",
+        album: "",
+        albumId: null,
+        artistId: null,
+        albumArtist: "",
+        albumArtistId: null,
+        track: 1,
+        disc: null,
+        year: null,
+        duration: 1,
+        durationMs: 1000,
+        isMissing: false,
+        sampleRateHz: null,
+        bitDepth: null,
+        isLossy: true,
+        sourceCodec: "mp3",
+        bitrateKbps: null,
+        bitrateMode: null,
+      },
+      {
+        id: "cdrom:b.mp3",
+        path: "b.mp3",
+        title: "B",
+        artist: "",
+        album: "",
+        albumId: null,
+        artistId: null,
+        albumArtist: "",
+        albumArtistId: null,
+        track: 2,
+        disc: null,
+        year: null,
+        duration: 1,
+        durationMs: 1000,
+        isMissing: false,
+        sampleRateHz: null,
+        bitDepth: null,
+        isLossy: true,
+        sourceCodec: "mp3",
+        bitrateKbps: null,
+        bitrateMode: null,
+      },
+    ]);
+    load.mockRejectedValueOnce(new Error("fail"));
+    await cdLoad(0);
+    const toasts = (showToast as unknown as { mock: { calls: unknown[] } }).mock
+      .calls.length;
+    cdStopTransport();
+    load.mockRejectedValueOnce(new Error("stale"));
+    const first = cdLoad(0);
+    const second = cdLoad(1);
+    await Promise.allSettled([first, second]);
+    expect(
+      (showToast as unknown as { mock: { calls: unknown[] } }).mock.calls.length,
+    ).toBeGreaterThanOrEqual(toasts);
+  });
+
+  it("failed data load toasts and advances", async () => {
+    const { showToast } = await import("@/stores/ui");
+    const { cdLoad } = await import("@/playback/cdLoad");
+    const { cd, setCdTracks } = await import("@/stores/cd");
+    const row = (id: string) => ({
+      id: `cdrom:${id}`,
+      path: id,
+      title: id,
+      artist: "",
+      album: "",
+      albumId: null,
+      artistId: null,
+      albumArtist: "",
+      albumArtistId: null,
+      track: 1,
+      disc: null,
+      year: null,
+      duration: 1,
+      durationMs: 1000,
+      isMissing: false,
+      sampleRateHz: null,
+      bitDepth: null,
+      isLossy: true,
+      sourceCodec: "mp3",
+      bitrateKbps: null,
+      bitrateMode: null,
+    });
+    setCdTracks([row("a.mp3"), row("b.mp3")]);
+    load.mockRejectedValueOnce(new Error("fail"));
+    await cdLoad(0);
+    expect(showToast).toHaveBeenCalled();
+    expect(cd.index).toBe(1);
+  });
+
+  it("stale sink error does not advance a newer data load", async () => {
+    const { cdLoad } = await import("@/playback/cdLoad");
+    const { cd, setCdTracks } = await import("@/stores/cd");
+    const row = (id: string) => ({
+      id: `cdrom:${id}`,
+      path: id,
+      title: id,
+      artist: "",
+      album: "",
+      albumId: null,
+      artistId: null,
+      albumArtist: "",
+      albumArtistId: null,
+      track: 1,
+      disc: null,
+      year: null,
+      duration: 1,
+      durationMs: 1000,
+      isMissing: false,
+      sampleRateHz: null,
+      bitDepth: null,
+      isLossy: true,
+      sourceCodec: "mp3",
+      bitrateKbps: null,
+      bitrateMode: null,
+    });
+    setCdTracks([row("a.mp3"), row("b.mp3")]);
+    await cdLoad(0);
+    const firstHandlers = sink.state.handlers;
+    await cdLoad(1);
+    firstHandlers.onError?.(new Error("stale"));
+    expect(cd.index).toBe(1);
+  });
+
+  it("a failed data load does not wrap on repeat all", async () => {
+    const { cdLoad } = await import("@/playback/cdLoad");
+    const { cd, setCdTracks } = await import("@/stores/cd");
+    cd.repeat = "all";
+    setCdTracks([
+      {
+        id: "cdrom:a.mp3",
+        path: "a.mp3",
+        title: "A",
+        artist: "",
+        album: "",
+        albumId: null,
+        artistId: null,
+        albumArtist: "",
+        albumArtistId: null,
+        track: 1,
+        disc: null,
+        year: null,
+        duration: 1,
+        durationMs: 1000,
+        isMissing: false,
+        sampleRateHz: null,
+        bitDepth: null,
+        isLossy: true,
+        sourceCodec: "mp3",
+        bitrateKbps: null,
+        bitrateMode: null,
+      },
+    ]);
+    load.mockRejectedValueOnce(new Error("fail"));
+    await cdLoad(0);
+    expect(load).toHaveBeenCalledTimes(1);
+    cd.repeat = "off";
   });
 
 });

@@ -10,7 +10,7 @@ vi.mock("@/downloads/lyricsStore", () => ({
 }));
 vi.mock("@/downloads/catalog", () => ({ getTrackRecord: vi.fn() }));
 
-import { peekLyricsMemory, resolveLyrics } from "@/lyrics/cache";
+import { dropLyricsMemory, peekLyricsMemory, rememberLyricsMemory, resolveLyrics } from "@/lyrics/cache";
 import { emptyLyrics } from "@/models/lyrics";
 
 describe("peekLyricsMemory", () => {
@@ -36,5 +36,21 @@ describe("peekLyricsMemory", () => {
     const peek = peekLyricsMemory("t-inst");
     expect(peek?.status).toBe("instrumental");
     expect(peekLyricsMemory("other")).toBeUndefined();
+  });
+
+  it("dropLyricsMemory removes cdrom: keys only", async () => {
+    rememberLyricsMemory("cdrom:Music/01.mp3", {
+      ...emptyLyrics("cdrom:Music/01.mp3"),
+      status: "ok",
+      plainText: "old disc",
+    });
+    rememberLyricsMemory("lib-track", {
+      ...emptyLyrics("lib-track"),
+      status: "ok",
+      plainText: "library",
+    });
+    dropLyricsMemory("cdrom:");
+    expect(peekLyricsMemory("cdrom:Music/01.mp3")).toBeUndefined();
+    expect(peekLyricsMemory("lib-track")?.plainText).toBe("library");
   });
 });

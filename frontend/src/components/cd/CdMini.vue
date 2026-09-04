@@ -8,17 +8,33 @@ import { cd, toggleCdSession } from "@/stores/cd";
 import { openCdRail, setOutputVolume } from "@/stores/playerPrefs";
 import { player } from "@/stores/playerState";
 import { coverUrl } from "@/api";
+import { cdromCoverUrl, isCdromTrack, VA_ARTIST_THUMB } from "@/cd/cdrom";
+import { kindForTrack } from "@/lossyKind";
+import LossyMark from "@/components/lossy/LossyMark.vue";
 
 const desktop = useDesktopViewport();
 const current = computed(() =>
   cd.index >= 0 ? cd.tracks[cd.index] ?? null : null,
 );
-const title = computed(() => current.value?.title || "Audio CD");
+const dataDisc = computed(
+  () =>
+    cd.mediaKind === "data" ||
+    cd.face === "data" ||
+    cd.face === "no_playable" ||
+    !!(current.value && isCdromTrack(current.value)),
+);
+const title = computed(() => {
+  if (current.value?.title) return current.value.title;
+  if (dataDisc.value) return cd.volumeName || "Data CD";
+  return "Audio CD";
+});
 const subtitle = computed(() => {
   const t = current.value;
   if (!t) {
     if (cd.face === "no_disc") return "No disc";
     if (cd.face === "drive_missing") return "Drive missing";
+    if (cd.face === "no_playable") return "No playable audio";
+    if (cd.face === "data") return cd.volumeName || "Data CD";
     if (cd.face === "not_audio") return "Not an audio CD";
     if (cd.face === "companion_offline") return "Companion offline";
     return "Audio CD";
@@ -27,10 +43,13 @@ const subtitle = computed(() => {
 });
 const cover = computed(() => {
   const t = current.value;
+  if (t && isCdromTrack(t)) return cdromCoverUrl(t);
   if (t?.albumId) return coverUrl(t, "thumb", false);
+  if (dataDisc.value) return VA_ARTIST_THUMB;
   return "/static/img/audio-cd.svg";
 });
 const playIcon = computed(() => (player.paused ? "play" : "pause"));
+const lossyKind = computed(() => kindForTrack(current.value));
 
 function openCd() {
   if (desktop.value) {
@@ -61,6 +80,7 @@ function onVolume(e: Event) {
         <span class="np-artist">{{ subtitle }}</span>
       </span>
     </button>
+    <LossyMark :kind="lossyKind" />
     <button
       type="button"
       class="icon-btn"

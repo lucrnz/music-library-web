@@ -135,6 +135,40 @@ describe("applyCdDto", () => {
     expect(cd.tracks[3]?.id).toBe("lib-4");
     become("none");
   });
+
+  it("does not apply a Red Book snapshot onto a data disc", async () => {
+    const { applyCdDto } = await import("@/cd/identifyFlow");
+    const { cd, setCdLive, setCdTracks } = await import("@/stores/cd");
+    setCdLive({ mediaKind: "data", mediaPresent: true });
+    setCdTracks([
+      {
+        id: "cdrom:a.mp3",
+        path: "a.mp3",
+        title: "File",
+        artist: "",
+        album: "",
+        albumId: null,
+        artistId: null,
+        albumArtist: "",
+        albumArtistId: null,
+        track: 1,
+        disc: null,
+        year: null,
+        duration: 1,
+        durationMs: 1000,
+        isMissing: false,
+        sampleRateHz: null,
+        bitDepth: null,
+        isLossy: true,
+        sourceCodec: "mp3",
+        bitrateKbps: null,
+        bitrateMode: null,
+      },
+    ]);
+    applyCdDto(applied);
+    expect(cd.tracks[0]?.id).toBe("cdrom:a.mp3");
+    setCdLive({ mediaKind: "none" });
+  });
 });
 
 describe("runIdentify force", () => {

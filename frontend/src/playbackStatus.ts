@@ -33,6 +33,7 @@ export interface PlayStatusState {
   playProfileId?: string | null;
   playBlockReason?: PlayBlockReason | string | null;
   cdFace?: CdRoomFace | null;
+  cdVolumeName?: string | null;
   track?: Pick<
     Track,
     | "isLossy"
@@ -154,6 +155,8 @@ export function formatPrimaryStatus(
       playing: "Playing",
       pick: "Pick a release",
       not_audio: "Not an audio CD",
+      data: state.cdVolumeName || "Data CD",
+      no_playable: "No playable audio",
     };
     const label = face && face in labels ? labels[face] : "Audio CD";
     return { interactive: true, text: label, icon: "cd" };
@@ -264,6 +267,10 @@ function exclusiveDetailRows(
     appendCddaRows(rows, state.track);
     return rows;
   }
+  if (state.playProfileId === "cdrom") {
+    appendCdromRows(rows, state.track);
+    return rows;
+  }
   if (state.playProfileId) {
     const meta = resolveAnyProfile(
       state.playProfileId,
@@ -310,6 +317,36 @@ function appendCddaRows(
     value: `${depth}-bit`,
   });
   const rate = formatSampleRate(track?.sampleRateHz || 44100);
+  if (rate) {
+    rows.push({
+      key: "sample_rate",
+      label: "Sample rate",
+      value: rate,
+    });
+  }
+}
+
+function appendCdromRows(
+  rows: PlaybackDetailRow[],
+  track: PlayStatusState["track"],
+): void {
+  const codec = (track?.sourceCodec || "").trim();
+  if (codec) {
+    rows.push({
+      key: "codec",
+      label: "Codec",
+      value: codec.toUpperCase(),
+    });
+  }
+  const depth = Number(track?.bitDepth) || 0;
+  if (depth > 0) {
+    rows.push({
+      key: "bit_depth",
+      label: "Bit depth",
+      value: `${depth}-bit`,
+    });
+  }
+  const rate = formatSampleRate(track?.sampleRateHz);
   if (rate) {
     rows.push({
       key: "sample_rate",
@@ -421,6 +458,11 @@ export function buildPlaybackDetailsRows(
         value: rate,
       });
     }
+    return rows;
+  }
+
+  if (state.playProfileId === "cdrom") {
+    appendCdromRows(rows, state.track);
     return rows;
   }
 

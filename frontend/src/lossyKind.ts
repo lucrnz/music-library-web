@@ -9,7 +9,7 @@ export const SOURCE_TAG = "source";
 export const LOSSY_SOURCE_COPY =
   "Lossy source - played as stored. Not a lossless file.";
 
-export type LossyKind = "mp3" | "aac" | "lossy";
+export type LossyKind = "mp3" | "aac" | "wma" | "lossy";
 export type AlbumLossyKind = LossyKind | "mixed";
 
 export interface LossyTrackLike {
@@ -44,7 +44,7 @@ export function kindForTrack(
 ): LossyKind | null {
   if (!track?.isLossy) return null;
   const kind = (track.sourceCodec || "").toLowerCase();
-  if (kind === "mp3" || kind === "aac") return kind;
+  if (kind === "mp3" || kind === "aac" || kind === "wma") return kind;
   return "lossy";
 }
 
@@ -69,7 +69,7 @@ export function kindForAlbum(
   album: { lossyKind?: string | null } | null | undefined,
 ): AlbumLossyKind | null {
   const raw = album?.lossyKind ?? null;
-  if (raw === "mp3" || raw === "aac" || raw === "mixed" || raw === "lossy") {
+  if (raw === "mp3" || raw === "aac" || raw === "wma" || raw === "mixed" || raw === "lossy") {
     return raw;
   }
   return null;
@@ -86,6 +86,7 @@ export function lossySourceParts(
   let label: string | null = null;
   if (kind === "mp3") label = "MP3";
   else if (kind === "aac") label = "AAC";
+  else if (kind === "wma") label = "WMA";
   else if (kind) label = kind.toUpperCase();
   const bitrateKbps = Number(track?.bitrateKbps) || 0;
   return { label, bitrateKbps };

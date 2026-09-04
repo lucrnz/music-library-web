@@ -78,7 +78,12 @@ export function sentinelTracksFromMedia(): Track[] {
   return rows;
 }
 
+export function abortIdentify(): void {
+  identifyGen += 1;
+}
+
 export function applyCdDto(dto: CdApplied): void {
+  if (cd.mediaKind === "data") return;
   const toc = tocPayload(cd.toc);
   const prevTrackNo = cd.index >= 0 ? cd.tracks[cd.index]?.track : null;
   const rows = dto.tracks.map((t) => {
@@ -121,9 +126,17 @@ export function applyCdDto(dto: CdApplied): void {
 
 let identifyGen = 0;
 
+function identifyStillLive(gen: number): boolean {
+  return (
+    gen === identifyGen &&
+    activeSession() === "cd" &&
+    cd.mediaKind === "audio"
+  );
+}
+
 export async function runIdentify(opts?: { force?: boolean }): Promise<void> {
   const toc = tocPayload(cd.toc);
-  if (!toc || activeSession() !== "cd") return;
+  if (!toc || activeSession() !== "cd" || cd.mediaKind === "data") return;
   const gen = ++identifyGen;
   const prevIndex = cd.index;
   setCdTracks(sentinelTracksFromMedia(), prevIndex);
@@ -132,7 +145,7 @@ export async function runIdentify(opts?: { force?: boolean }): Promise<void> {
   const text = cdTextPayload(cd.cdText);
   try {
     const identified = await identifyCd(toc, text, opts);
-    if (gen !== identifyGen || activeSession() !== "cd") return;
+    if (!identifyStillLive(gen)) return;
     cd.lastDiscid = identified.discid;
     const decision = decideIdentify({
       memory: null,
@@ -149,7 +162,7 @@ export async function runIdentify(opts?: { force?: boolean }): Promise<void> {
         decision.match.release_mbid,
         toc,
       );
-      if (gen !== identifyGen || activeSession() !== "cd") return;
+      if (!identifyStillLive(gen)) return;
       applyCdDto(dto);
       return;
     }
@@ -161,14 +174,14 @@ export async function runIdentify(opts?: { force?: boolean }): Promise<void> {
     }
     cd.face = "idle";
   } catch {
-    if (gen !== identifyGen) return;
+    if (!identifyStillLive(gen)) return;
     cd.face = "idle";
   }
 }
 
 export async function confirmPickerMatch(releaseMbid: string): Promise<void> {
   const toc = tocPayload(cd.toc);
-  if (!toc || !cd.lastDiscid) return;
+  if (!toc || !cd.lastDiscid || cd.mediaKind === "data") return;
   const dto = await confirmCd(cd.lastDiscid, releaseMbid, toc);
   applyCdDto(dto);
 }

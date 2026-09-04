@@ -104,6 +104,46 @@ describe("cd store prefs", () => {
     onLeaveCd(null);
   });
 
+  it("re-enter while already cd keeps a live data queue", async () => {
+    const { cd, enterCdMode, setCdEnabled, setCdSelectedDriveId, setCdTracks } =
+      await import("@/stores/cd");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
+    enterCdMode();
+    setCdTracks([
+      {
+        id: "cdrom:a.mp3",
+        path: "a.mp3",
+        title: "A",
+        artist: "",
+        album: "",
+        albumId: null,
+        artistId: null,
+        albumArtist: "",
+        albumArtistId: null,
+        track: 1,
+        disc: null,
+        year: null,
+        duration: 1,
+        durationMs: 1000,
+        isMissing: false,
+        sampleRateHz: null,
+        bitDepth: null,
+        isLossy: true,
+        sourceCodec: "mp3",
+        bitrateKbps: null,
+        bitrateMode: null,
+      },
+    ]);
+    cd.shuffle = true;
+    cd.repeat = "all";
+    enterCdMode();
+    expect(cd.tracks).toHaveLength(1);
+    expect(cd.tracks[0].id).toBe("cdrom:a.mp3");
+    expect(cd.shuffle).toBe(true);
+    expect(cd.repeat).toBe("all");
+  });
+
   it("re-enter while already cd keeps shuffle", async () => {
     const { cd, enterCdMode, setCdEnabled, setCdSelectedDriveId } = await import(
       "@/stores/cd"
@@ -322,7 +362,7 @@ describe("cd live media and watch", () => {
     expect(watchOptical).toHaveBeenCalledWith(true, "/dev/rdisk3");
   });
 
-  it("data kind is not_audio and does not identify", async () => {
+  it("data kind starts cdrom session and does not identify", async () => {
     const { cd, enterCdMode, setCdEnabled, setCdSelectedDriveId } = await import(
       "@/stores/cd"
     );
@@ -337,10 +377,109 @@ describe("cd live media and watch", () => {
       toc: null,
       cd_text: null,
     });
-    await Promise.resolve();
-    expect(cd.face).toBe("not_audio");
+    await vi.waitFor(() => expect(cd.face).toBe("data"));
     expect(cd.tracks).toHaveLength(0);
     expect(identifyCd).not.toHaveBeenCalled();
+  });
+
+  it("kind data drops leftover Red Book rows without waiting for cdrom index", async () => {
+    const { cd, enterCdMode, setCdEnabled, setCdSelectedDriveId, setCdTracks } =
+      await import("@/stores/cd");
+    const { handleOpticalMessage } = await import("@/exclusive/opticalClient");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
+    enterCdMode();
+    setCdTracks([
+      {
+        id: "cd:unknown:1",
+        path: null,
+        title: "Track 1",
+        artist: "Unknown Artist",
+        album: "Audio CD",
+        albumId: null,
+        artistId: null,
+        albumArtist: "Unknown Artist",
+        albumArtistId: null,
+        track: 1,
+        disc: 1,
+        year: null,
+        duration: 1,
+        durationMs: 1000,
+        isMissing: false,
+        sampleRateHz: 44100,
+        bitDepth: 16,
+        isLossy: false,
+        sourceCodec: "cdda",
+        bitrateKbps: null,
+        bitrateMode: null,
+      },
+    ]);
+    handleOpticalMessage({
+      type: "optical_media",
+      present: true,
+      kind: "data",
+      toc: null,
+      cd_text: null,
+    });
+    expect(cd.tracks).toHaveLength(0);
+    expect(identifyCd).not.toHaveBeenCalled();
+  });
+
+  it("leave drops cdrom lyrics memory", async () => {
+    const { enterCdMode, leaveCdMode, setCdEnabled, setCdSelectedDriveId } =
+      await import("@/stores/cd");
+    const { rememberLyricsMemory, peekLyricsMemory } = await import(
+      "@/lyrics/cache"
+    );
+    const { onLeaveCd } = await import("@/playback/session");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
+    onLeaveCd(() => leaveCdMode());
+    enterCdMode();
+    rememberLyricsMemory("cdrom:a.mp3", {
+      trackId: "cdrom:a.mp3",
+      status: "ok",
+      source: "lrclib",
+      isSynced: false,
+      plainText: "old disc",
+      syncedLrc: null,
+      instrumental: false,
+    });
+    leaveCdMode();
+    await vi.waitFor(() =>
+      expect(peekLyricsMemory("cdrom:a.mp3")).toBeUndefined(),
+    );
+    onLeaveCd(null);
+  });
+
+  it("Leave then Enter with data already set starts the cdrom session", async () => {
+    const {
+      cd,
+      enterCdMode,
+      leaveCdMode,
+      setCdEnabled,
+      setCdSelectedDriveId,
+      setCdLive,
+    } = await import("@/stores/cd");
+    const { activeSession, become, onLeaveCd } = await import("@/playback/session");
+    const cdrom = await import("@/cd/cdrom");
+    const start = vi.spyOn(cdrom, "startCdromSession");
+    setCdEnabled(true);
+    setCdSelectedDriveId("/dev/rdisk2");
+    setCdLive({ mediaPresent: true, mediaKind: "data", volumeName: "MYCD" });
+    onLeaveCd(() => leaveCdMode());
+    enterCdMode();
+    await vi.waitFor(() => expect(start).toHaveBeenCalled());
+    start.mockClear();
+    expect(activeSession()).toBe("cd");
+    become("none");
+    expect(activeSession()).toBe("none");
+    enterCdMode();
+    await vi.waitFor(() => expect(start).toHaveBeenCalled());
+    expect(identifyCd).not.toHaveBeenCalled();
+    expect(cd.mediaKind).toBe("data");
+    onLeaveCd(null);
+    start.mockRestore();
   });
 
   it("does not re-identify on a repeated present message", async () => {

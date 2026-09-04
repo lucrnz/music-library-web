@@ -10,23 +10,25 @@ import { subscribeOutputVolume } from "@/stores/playerPrefs";
 import { bindCdRuntime } from "@/cd/runtime";
 import { player, setPlayNotice, setPlaySourceState } from "@/stores/playerState";
 import { activeSession } from "@/playback/session";
-import { cdTrackUrl } from "@/playback/cdDelivery";
+import { cdromFileUrl, cdTrackUrl } from "@/playback/cdDelivery";
 import { createCompanionSink } from "@/playback/sinks/companionSink";
 import { PlayBlockError } from "@/playBlock";
 import { ejectOptical, watchOptical } from "@/exclusive/opticalClient";
+import { cdromCoverUrl, cdromRelOf, isCdromTrack, VA_ARTIST_THUMB } from "@/cd/cdrom";
 
 const sink = createCompanionSink();
 let loadedIndex = -1;
 let loadedUrl = "";
+let loadGen = 0;
 
 function hogFlag(): boolean {
   return isExclusiveEnabled();
 }
 
-function bindHandlers(): void {
+function attachHandlers(gen: number): void {
   sink.setHandlers({
     onTime(t, d) {
-      if (activeSession() !== "cd") return;
+      if (gen !== loadGen || activeSession() !== "cd") return;
       player.currentTime = t;
       if (d > 0) {
         player.duration = d;
@@ -35,19 +37,25 @@ function bindHandlers(): void {
       updateCdPositionState();
     },
     onPauseState(paused) {
-      if (activeSession() !== "cd") return;
+      if (gen !== loadGen || activeSession() !== "cd") return;
       player.paused = paused;
       if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
         navigator.mediaSession.playbackState = paused ? "paused" : "playing";
       }
     },
     onEnded() {
-      if (activeSession() !== "cd") return;
+      if (gen !== loadGen || activeSession() !== "cd") return;
       void cdNext();
     },
     onError(err) {
+      if (gen !== loadGen) return;
+      loadGen += 1;
       setPlayNotice(err.message);
       showToast(err.message);
+      if (activeSession() === "cd" && isCdromTrack(cd.tracks[cd.index])) {
+        void cdAdvanceAfterError();
+        return;
+      }
       cdStopTransport();
       if (cd.enabled && cd.selectedDriveId && activeSession() === "cd") {
         watchOptical(false);
@@ -58,19 +66,24 @@ function bindHandlers(): void {
   });
 }
 
-bindHandlers();
+attachHandlers(0);
 
 export async function cdLoad(index: number): Promise<void> {
   if (index < 0 || index >= cd.tracks.length) return;
+  const gen = ++loadGen;
+  attachHandlers(gen);
   if (activeSession() !== "cd") enterCdMode();
   const track = cd.tracks[index];
   const deviceId = cd.selectedDriveId;
   const token = exclusiveAudio.companionToken;
   const port = exclusiveAudio.port || 18765;
-  const trackNo = track.track || index + 1;
+  const data = isCdromTrack(track);
+  const profile = data ? "cdrom" : "cdda";
   let url: string;
   try {
-    url = cdTrackUrl(port, token, deviceId || "", trackNo);
+    url = data
+      ? cdromFileUrl(port, token, deviceId || "", cdromRelOf(track))
+      : cdTrackUrl(port, token, deviceId || "", track.track || index + 1);
   } catch (err) {
     const block = err instanceof PlayBlockError ? err : new PlayBlockError("cd_not_ready");
     setPlayNotice(block.message);
@@ -82,18 +95,24 @@ export async function cdLoad(index: number): Promise<void> {
   player.paused = false;
   player.currentTime = 0;
   player.duration = 0;
-  setPlaySourceState("cd", "cdda", null);
+  setPlaySourceState("cd", profile, null);
   try {
     await sink.load(url, { hog: hogFlag() });
+    if (gen !== loadGen) return;
     sink.setVolume(player.volume);
     loadedIndex = index;
     loadedUrl = url;
     writeCdMediaSession();
   } catch (err) {
+    if (gen !== loadGen) return;
     const block = err instanceof PlayBlockError ? err : new PlayBlockError("exclusive_failed");
-    setPlaySourceState("unavailable", "cdda", block.reason);
+    setPlaySourceState("unavailable", profile, block.reason);
     setPlayNotice(block.message);
     showToast(block.message);
+    if (data) {
+      await cdAdvanceAfterError();
+      return;
+    }
     cd.face = "idle";
   }
 }
@@ -119,6 +138,7 @@ export function cdSeek(seconds: number): void {
 }
 
 export function cdStopTransport(): void {
+  loadGen += 1;
   sink.stop();
   player.paused = true;
   loadedIndex = -1;
@@ -142,6 +162,22 @@ function nextIndex(delta: number): number {
 
 export async function cdNext(): Promise<void> {
   const next = nextIndex(1);
+  if (next < 0) {
+    cdPause();
+    return;
+  }
+  await cdLoad(next);
+}
+
+function nextIndexAfterError(): number {
+  const n = cd.tracks.length;
+  if (n <= 0) return -1;
+  const next = cd.index + 1;
+  return next >= n ? -1 : next;
+}
+
+async function cdAdvanceAfterError(): Promise<void> {
+  const next = nextIndexAfterError();
   if (next < 0) {
     cdPause();
     return;
@@ -210,13 +246,18 @@ function writeCdMediaSession(): void {
   if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
   if (activeSession() !== "cd") return;
   const track = cd.index >= 0 ? cd.tracks[cd.index] : null;
-  const artwork = track?.albumId
-    ? coverUrl(track, "full", false)
-    : "/static/img/audio-cd.svg";
+  const dataDisc = cd.mediaKind === "data" || (track != null && isCdromTrack(track));
+  const artwork = track && isCdromTrack(track)
+    ? cdromCoverUrl(track)
+    : track?.albumId
+      ? coverUrl(track, "full", false)
+      : dataDisc
+        ? VA_ARTIST_THUMB
+        : "/static/img/audio-cd.svg";
   navigator.mediaSession.metadata = new MediaMetadata({
-    title: track?.title || "Audio CD",
+    title: track?.title || (dataDisc ? cd.volumeName || "Data CD" : "Audio CD"),
     artist: track?.artist || "",
-    album: track?.album || "Audio CD",
+    album: track?.album || (dataDisc ? cd.volumeName || "Data CD" : "Audio CD"),
     artwork: [{ src: artwork, sizes: "512x512", type: "image/png" }],
   });
   navigator.mediaSession.playbackState = player.paused ? "paused" : "playing";

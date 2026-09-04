@@ -19,6 +19,18 @@ export function peekLyricsMemory(trackId: string): Lyrics | undefined {
   return memory.get(trackId);
 }
 
+/** Drop keys that start with ``prefix`` (Yellow Book uses ``cdrom:``). */
+export function dropLyricsMemory(prefix: string): void {
+  if (!prefix) return;
+  for (const key of [...memory.keys()]) {
+    if (key.startsWith(prefix)) memory.delete(key);
+  }
+}
+
+export function rememberLyricsMemory(trackId: string, payload: Lyrics): void {
+  remember(trackId, payload);
+}
+
 function isTerminalSuccess(payload: Lyrics | null | undefined): boolean {
   if (!payload) return false;
   const status = payload.status;
