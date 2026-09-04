@@ -230,6 +230,24 @@ describe("resolvePlayIntent", () => {
     expect(resolvePlaySource).not.toHaveBeenCalled();
   });
 
+  it("forwards probeRemote into resolvePlaySource", async () => {
+    await resolvePlayIntent(track(), {
+      sink: "htmlAudio",
+      exclusiveTag: null,
+      enabled: true,
+      offline: true,
+      activeStreamCodec: "opus_192_48000",
+      probeRemote: true,
+    });
+    expect(resolvePlaySource).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "t1" }),
+      expect.objectContaining({
+        offline: true,
+        probeRemote: true,
+      }),
+    );
+  });
+
   it("unsupported source codec blocks HTML", async () => {
     const intent = await resolvePlayIntent(
       track({ isLossy: true, sourceCodec: "mp3" }),

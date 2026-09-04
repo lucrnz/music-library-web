@@ -5,11 +5,13 @@ vi.mock("@/diag/log", () => ({ emit: () => {} }));
 import {
   hasHealthWork,
   requestHealthProbe,
+  resetConnectivityForTests,
   setHealthWork,
 } from "@/connectivity";
 
 describe("setHealthWork OR", () => {
   beforeEach(() => {
+    resetConnectivityForTests();
     setHealthWork("downloads", false);
     setHealthWork("artist-art", false);
     vi.useFakeTimers();
@@ -26,8 +28,7 @@ describe("setHealthWork OR", () => {
   });
 
   afterEach(() => {
-    setHealthWork("downloads", false);
-    setHealthWork("artist-art", false);
+    resetConnectivityForTests();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -44,5 +45,14 @@ describe("setHealthWork OR", () => {
     requestHealthProbe(0);
     await vi.runAllTimersAsync();
     expect(fetch).toHaveBeenCalled();
+  });
+
+  it("requestHealthProbe hits /api/health with both health sources false", async () => {
+    setHealthWork("downloads", false);
+    setHealthWork("artist-art", false);
+    expect(hasHealthWork()).toBe(false);
+    requestHealthProbe(0);
+    await vi.runAllTimersAsync();
+    expect(fetch).toHaveBeenCalledWith("/api/health", { cache: "no-store" });
   });
 });

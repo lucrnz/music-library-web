@@ -8,7 +8,10 @@ import {
   classifyError,
   connectivityBanner,
   connectivityLoadError,
+  getConnectivityState,
   isItemFailHttpStatus,
+  reportFailure,
+  resetConnectivityForTests,
 } from "@/connectivity";
 
 describe("classifyError", () => {
@@ -25,11 +28,15 @@ describe("classifyError", () => {
     expect(isItemFailHttpStatus(429)).toBe(false);
   });
 
-  it("classifies offline when navigator.onLine is false", () => {
+  it("does not classify from navigator.onLine; reportFailure picks the copy", () => {
+    resetConnectivityForTests();
     (globalThis as { navigator: { onLine: boolean } }).navigator = {
       onLine: false,
     };
-    expect(classifyError(new Error("anything"))).toBe("offline");
+    expect(classifyError(new TypeError("Failed to fetch"))).toBe("server_down");
+    reportFailure(new TypeError("Failed to fetch"));
+    expect(getConnectivityState()).toBe("offline");
+    resetConnectivityForTests();
   });
 });
 

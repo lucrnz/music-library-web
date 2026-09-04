@@ -97,11 +97,11 @@ export function getConnectivityState(): ConnectivityState {
 }
 
 export function isHardOffline() {
-  return state === "offline" || browserOffline();
+  return state === "offline";
 }
 
 export function canReachServer() {
-  return state === "online" && !browserOffline();
+  return state === "online";
 }
 
 export function hasConfirmedReachability() {
@@ -133,9 +133,8 @@ const MESSAGES = {
   },
 };
 
-/** Resolve effective connectivity for copy (hard browser offline wins). */
+/** Copy follows published state. Browser onLine only picks that state in reportFailure. */
 function effectiveConnectivityState(s: ConnectivityState): ConnectivityState {
-  if (browserOffline() || s === "offline") return "offline";
   return s;
 }
 
@@ -182,13 +181,13 @@ export function connectivityToastLabel(
 }
 
 export function autoPauseReason(): AutoPauseReason | null {
-  if (state === "offline" || browserOffline()) return "offline";
+  if (state === "offline") return "offline";
   if (state === "server_down") return "server";
   return null;
 }
 
 export function classifyError(err: unknown, httpStatus?: number): ErrorClass {
-  if (browserOffline() || state === "offline") return "offline";
+  if (state === "offline") return "offline";
 
   if (httpStatus === 429) return "server_down";
   if (httpStatus != null && httpStatus >= 500) return "server_down";
@@ -224,11 +223,6 @@ export function isNetworkClassError(err: unknown, httpStatus?: number) {
 }
 
 export function reportSuccess() {
-  if (browserOffline()) {
-    probeRequested = false;
-    setState("offline");
-    return;
-  }
   backoffMs = BACKOFF_START_MS;
   probeRequested = false;
   const wasConfirmed = reachabilityConfirmed;
@@ -241,21 +235,11 @@ export function reportSuccess() {
 }
 
 export function reportFailure(err?: unknown, httpStatus?: number) {
-  if (browserOffline()) {
-    probeRequested = false;
-    setState("offline");
-    return;
-  }
   const c = classifyError(err, httpStatus);
-  if (c === "offline") {
+  if (c === "offline" || c === "server_down") {
+    // Browser flag only chooses Offline vs Can't-reach copy after a real failure.
     probeRequested = false;
-    setState("offline");
-    return;
-  }
-  if (c === "server_down") {
-    // Real failure — public server_down drives further probing; drop private flag.
-    probeRequested = false;
-    setState("server_down");
+    setState(browserOffline() ? "offline" : "server_down");
     return;
   }
   // item_fail / abort / unknown app errors — do not flip global connectivity
@@ -302,28 +286,14 @@ function scheduleHealthProbe(delayMs: number) {
 }
 
 function needsHealthProbe() {
-  if (!hasHealthWork()) return false;
-  if (browserOffline() || state === "offline") return false;
-  // Probe on real server_down, or while a recovery/confirmation probe was requested
-  // without flipping public state to server_down.
-  return state === "server_down" || probeRequested;
+  return state === "offline" || state === "server_down" || probeRequested;
 }
 
 function syncHealthLoop() {
-  if (!hasHealthWork()) {
-    probeRequested = false;
-    stopHealthLoop();
-    return;
-  }
-  if (browserOffline() || state === "offline") {
-    stopHealthLoop();
-    return;
-  }
   if (!needsHealthProbe()) {
     stopHealthLoop();
     return;
   }
-  // server_down or probeRequested — ensure a probe is scheduled
   if (!healthTimer && !healthInFlight) {
     scheduleHealthProbe(backoffMs);
   }
@@ -331,14 +301,8 @@ function syncHealthLoop() {
 
 async function runHealthProbe() {
   if (healthInFlight) return;
-  if (!hasHealthWork()) {
-    probeRequested = false;
+  if (!needsHealthProbe()) {
     stopHealthLoop();
-    return;
-  }
-  if (browserOffline()) {
-    probeRequested = false;
-    setState("offline");
     return;
   }
 
@@ -360,7 +324,7 @@ async function runHealthProbe() {
       BACKOFF_CAP_MS,
       Math.max(BACKOFF_START_MS, backoffMs * 2)
     );
-    if (hasHealthWork() && !browserOffline()) {
+    if (needsHealthProbe()) {
       scheduleHealthProbe(backoffMs);
     }
   } finally {
@@ -371,35 +335,32 @@ async function runHealthProbe() {
 /**
  * Request a health probe without flipping public state for bookkeeping.
  * server_down is set only if the probe (or other reportFailure) proves the server is down.
+ * Window online/offline and empty-queue recovery use this; health work is not required.
  */
 export function requestHealthProbe(delayMs = 0) {
-  if (!hasHealthWork()) return;
-  if (browserOffline()) {
-    probeRequested = false;
-    setState("offline");
-    return;
-  }
   probeRequested = true;
   scheduleHealthProbe(delayMs);
+}
+
+/** Restore boot defaults. Tests only — does not notify listeners. */
+export function resetConnectivityForTests() {
+  stopHealthLoop();
+  healthInFlight = false;
+  backoffMs = BACKOFF_START_MS;
+  probeRequested = false;
+  reachabilityConfirmed = false;
+  healthWork.downloads = false;
+  healthWork["artist-art"] = false;
+  state = "online";
 }
 
 export function bindWindowConnectivity() {
   if (windowBound || typeof window === "undefined") return;
   windowBound = true;
   window.addEventListener("offline", () => {
-    probeRequested = false;
-    setState("offline");
+    requestHealthProbe(0);
   });
   window.addEventListener("online", () => {
-    // Optimistic online — do not advertise server_down just to start a probe.
-    // If the server is still down, the probe (or the next request) sets server_down.
-    setState("online");
-    if (hasHealthWork()) {
-      probeRequested = true;
-      scheduleHealthProbe(0);
-    }
+    requestHealthProbe(0);
   });
-  if (browserOffline()) {
-    state = "offline";
-  }
 }

@@ -4,6 +4,7 @@
  * apiGet for track lists.
  */
 
+import { reportFailure, reportSuccess } from "@/connectivity";
 import { diagRequestHeaders } from "@/diag/log";
 import { fromApiAlbum, mapAlbums, type Album } from "@/models/album";
 import { fromApiArtist, mapArtists, type Artist } from "@/models/artist";
@@ -18,9 +19,21 @@ export interface ItemsResponse<T> {
   tracks?: unknown[];
 }
 
-export function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const headers = { ...diagRequestHeaders(), ...(init.headers || {}) };
-  return fetch(url, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, headers });
+  } catch (err) {
+    reportFailure(err);
+    throw err;
+  }
+  if (res.ok) {
+    reportSuccess();
+  } else if (res.status === 429 || res.status >= 500) {
+    reportFailure(null, res.status);
+  }
+  return res;
 }
 
 export async function apiGet<T>(url: string, init: RequestInit = {}): Promise<T> {

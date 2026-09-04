@@ -140,6 +140,7 @@ export async function resolvePlaySource(
     activeStreamCodec: string;
     playbackPolicy?: PlaybackPolicy;
     catalog?: { id: string }[];
+    probeRemote?: boolean;
   },
 ): Promise<HtmlSource> {
   if (!track?.id) {
@@ -160,10 +161,12 @@ export async function resolvePlaySource(
   }
   if (ctx.offline) {
     if (recordPlayable(rec)) return openDownloadedSource(rec);
-    let reason: PlayBlockReason = "missing";
-    if (rec?.status === "broken") reason = "broken";
-    else if (!rec) reason = "offline_no_local";
-    return unavailable(reason, recordCodec(rec) || active || null, playBlockMessage(reason));
+    if (!ctx.probeRemote) {
+      let reason: PlayBlockReason = "missing";
+      if (rec?.status === "broken") reason = "broken";
+      else if (!rec) reason = "offline_no_local";
+      return unavailable(reason, recordCodec(rec) || active || null, playBlockMessage(reason));
+    }
   }
 
   const localCodec = recordCodec(rec);

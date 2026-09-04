@@ -255,6 +255,7 @@ async function intentForTrack(
     catalog: settings.options,
     localBroken: extra.localBroken,
     sourceKindSupported: sourceOk,
+    probeRemote: true,
   });
 }
 

@@ -48,6 +48,7 @@ export interface PlayIntentCtx {
   catalog?: { id: string }[];
   localBroken?: boolean;
   sourceKindSupported?: boolean;
+  probeRemote?: boolean;
 }
 
 function blocked(
@@ -116,6 +117,7 @@ export async function resolvePlayIntent(
     activeStreamCodec: activeCodec,
     playbackPolicy: ctx.playbackPolicy,
     catalog: ctx.catalog,
+    probeRemote: ctx.probeRemote,
   });
 
   if (source.source === "unavailable") {
