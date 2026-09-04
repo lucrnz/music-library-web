@@ -1,10 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const canUseRemote = vi.fn(() => false);
+const artFilesListeners = vi.hoisted(() => {
+  const fns: Array<(albumId: string | null) => void> = [];
+  return fns;
+});
 
 vi.mock("@/connectivity", () => ({
   canUseRemoteMedia: () => canUseRemote(),
   onConnectivityChange: vi.fn(() => () => {}),
+}));
+
+vi.mock("@/downloads/art", () => ({
+  onArtFilesChanged: (fn: (albumId: string | null) => void) => {
+    artFilesListeners.push(fn);
+    return () => {};
+  },
 }));
 
 vi.mock("@/api", () => ({
@@ -45,8 +56,10 @@ vi.mock("@/downloads/state", () => ({
 
 import { pl } from "@/stores/playlist";
 import { player } from "@/stores/playerState";
+import { resolveCoverUrl } from "@/downloads/resolve";
 import {
   clearCovers,
+  initPlayerSession,
   invalidateCoverCache,
   updateMediaSession,
 } from "@/stores/playerSession";
@@ -111,5 +124,16 @@ describe("updateMediaSession covers", () => {
     player.coverFull = "stale";
     await updateMediaSession();
     expect(player.coverFull).toBe("stale");
+  });
+
+  it("repaints a local cover when art files land after a placeholder resolve", async () => {
+    initPlayerSession();
+    await updateMediaSession();
+    expect(player.coverFull).toBe(PLACEHOLDER_COVER);
+    vi.mocked(resolveCoverUrl).mockResolvedValue("blob:album-full");
+    artFilesListeners[0]?.("alb1");
+    await vi.waitFor(() => {
+      expect(player.coverFull).toBe("blob:album-full");
+    });
   });
 });

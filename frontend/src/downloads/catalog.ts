@@ -24,8 +24,11 @@ export {
   refreshArtistArtFile,
   getLocalCoverUrl,
   getLocalArtistImageUrl,
+  getLocalArtistFlip,
   ensureAlbumArtFiles,
   ensureArtistArtFile,
+  ensureArtistPhoto,
+  onArtFilesChanged,
 } from "@/downloads/art";
 
 export {

@@ -3,11 +3,11 @@
  */
 
 import { reactive } from "vue";
-import { artistImageUrl } from "@/api";
+import { artistImageUrl, fetchArtist } from "@/api";
 import type { Artist } from "@/models/artist";
 import { getOne, putOne } from "@/downloads/db";
 import { canUseCompanionDownloads } from "@/exclusive/capability";
-import { fileUrl, putFromUrl } from "@/downloads/companionBlob";
+import { fileUrl, putBytes, putFromUrl } from "@/downloads/companionBlob";
 import {
   albumCoverDirParts,
   albumCoverFileName,
@@ -38,6 +38,28 @@ export function revokeArtCached(key: string) {
 
 export function wipeArtUrlCache() {
   for (const key of Object.keys(artUrlCache.urls)) revokeArtCached(key);
+}
+
+const artFilesListeners = new Set<(albumId: string | null) => void>();
+
+export function onArtFilesChanged(fn: (albumId: string | null) => void) {
+  artFilesListeners.add(fn);
+  return () => artFilesListeners.delete(fn);
+}
+
+export function notifyArtFilesChanged(albumId: string | null) {
+  for (const fn of artFilesListeners) {
+    try {
+      fn(albumId);
+    } catch (err: unknown) {
+      console.error(err);
+    }
+  }
+}
+
+function isPlaceholderArtResponse(res: Response): boolean {
+  const cc = res.headers.get("Cache-Control") || "";
+  return /\bno-store\b/i.test(cc);
 }
 
 function absoluteLibraryUrl(url: string): string {
@@ -138,17 +160,44 @@ export async function getLocalCoverUrl(
   );
 }
 
+export async function getLocalArtistFlip(artistId: string): Promise<{
+  imageUrl: string | null;
+  hasImage: boolean;
+  hasPreferredImage: boolean;
+  isVa: boolean;
+  hasFull: boolean;
+} | null> {
+  if (!artistId) return null;
+  const artist = await getOne<CatalogArtistRecord>("artists", artistId);
+  if (!artist) return null;
+  const imageUrl = artist.hasFull
+    ? await getLocalArtistImageUrl(artistId, "full")
+    : null;
+  return {
+    imageUrl,
+    hasImage: !!artist.hasImage,
+    hasPreferredImage: !!artist.hasPreferredImage,
+    isVa: !!artist.isVa,
+    hasFull: !!artist.hasFull,
+  };
+}
+
 export async function getLocalArtistImageUrl(
   artistId: string,
-  _size: "thumb" | "full" = "thumb",
+  size: "thumb" | "full" = "thumb",
 ) {
   if (!artistId) return null;
   const artist = await getOne<CatalogArtistRecord>("artists", artistId);
-  if (!artist || !artist.hasThumb) return null;
+  if (!artist) return null;
+  let use = size;
+  if (use === "full" && !artist.hasFull) use = "thumb";
+  if (use === "thumb" && !artist.hasThumb && artist.hasFull) use = "full";
+  if (use === "thumb" && !artist.hasThumb) return null;
+  if (use === "full" && !artist.hasFull) return null;
   return blobUrlFor(
-    `artist:${artistId}:thumb`,
+    `artist:${artistId}:${use}`,
     artistCoverDirParts(),
-    artistCoverFileName(artistId, "thumb")
+    artistCoverFileName(artistId, use)
   );
 }
 
@@ -200,12 +249,28 @@ export async function ensureAlbumArtFiles(albumId: string): Promise<{
     albumCoverFileName(albumId, "full"),
     !!existing?.hasFull
   );
-  return {
+  const result = {
     hasThumb: thumb.ok || !!existing?.hasThumb,
     hasFull: full.ok || !!existing?.hasFull,
     thumbBytes: thumb.bytes ?? existing?.thumbBytes,
     fullBytes: full.bytes ?? existing?.fullBytes,
   };
+  if (existing) {
+    const wrote =
+      (!existing.hasThumb && result.hasThumb) ||
+      (!existing.hasFull && result.hasFull);
+    existing.hasThumb = existing.hasThumb || result.hasThumb;
+    existing.hasFull = existing.hasFull || result.hasFull;
+    if (result.thumbBytes != null) existing.thumbBytes = result.thumbBytes;
+    if (result.fullBytes != null) existing.fullBytes = result.fullBytes;
+    await putOne("albums", existing);
+    if (wrote) {
+      revokeArtCached(`cover:${albumId}:thumb`);
+      revokeArtCached(`cover:${albumId}:full`);
+      notifyArtFilesChanged(albumId);
+    }
+  }
+  return result;
 }
 
 export async function ensureArtistArtFile(
@@ -219,4 +284,115 @@ export async function ensureArtistArtFile(
     artistCoverFileName(artistId, "thumb"),
     !!existing?.hasThumb
   );
+}
+
+export type ArtistPhotoResult = {
+  hasThumb: boolean;
+  hasFull: boolean;
+  thumbBytes?: number;
+  fullBytes?: number;
+  hasImage: boolean;
+  hasPreferredImage: boolean;
+  isVa: boolean;
+  preferredRev: number;
+};
+
+function artistPhotoFromRecord(
+  rec: CatalogArtistRecord | undefined,
+): ArtistPhotoResult {
+  return {
+    hasThumb: !!rec?.hasThumb,
+    hasFull: !!rec?.hasFull,
+    thumbBytes: rec?.thumbBytes,
+    fullBytes: rec?.fullBytes,
+    hasImage: !!rec?.hasImage,
+    hasPreferredImage: !!rec?.hasPreferredImage,
+    isVa: !!rec?.isVa,
+    preferredRev: rec?.preferredRev ?? 0,
+  };
+}
+
+async function fetchArtistImageIfMissing(
+  url: string,
+  dirParts: string[],
+  fileName: string,
+  already: boolean,
+): Promise<{ ok: boolean; bytes?: number }> {
+  if (already) return { ok: true };
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { ok: false };
+    if (isPlaceholderArtResponse(res)) return { ok: false };
+    if (canUseCompanionDownloads()) {
+      const key = [...dirParts, fileName].join("/");
+      const blob = await res.blob();
+      const bytes = await putBytes(key, blob);
+      return { ok: true, bytes };
+    }
+    const written = await writeFromResponse(dirParts, fileName, res);
+    return { ok: true, bytes: written.bytes };
+  } catch (err: unknown) {
+    console.warn("Artist art download failed", err);
+    return { ok: false };
+  }
+}
+
+/** Persist artist flip flags and download a real full (and missing thumb). */
+export async function ensureArtistPhoto(
+  artistId: string,
+): Promise<ArtistPhotoResult> {
+  if (!artistId || artistId === "_unknown") {
+    return artistPhotoFromRecord(undefined);
+  }
+  const existing = await getOne<CatalogArtistRecord>("artists", artistId);
+  if (!existing) return artistPhotoFromRecord(undefined);
+
+  let artist: Artist;
+  try {
+    artist = await fetchArtist(artistId);
+  } catch (err: unknown) {
+    console.warn("Artist photo metadata failed", err);
+    return artistPhotoFromRecord(existing);
+  }
+
+  existing.hasImage = !!artist.hasImage;
+  existing.hasPreferredImage = !!artist.hasPreferredImage;
+  existing.isVa = !!artist.isVa;
+  existing.preferredRev = artist.preferredRev ?? 0;
+
+  const skipBytes =
+    existing.isVa || (!existing.hasImage && !existing.hasPreferredImage);
+  let wrote = false;
+  if (!skipBytes) {
+    const thumb = await fetchArtistImageIfMissing(
+      artistImageUrl(artist, "thumb"),
+      artistCoverDirParts(),
+      artistCoverFileName(artistId, "thumb"),
+      !!existing.hasThumb,
+    );
+    const full = await fetchArtistImageIfMissing(
+      artistImageUrl(artist, "full"),
+      artistCoverDirParts(),
+      artistCoverFileName(artistId, "full"),
+      !!existing.hasFull,
+    );
+    if (thumb.ok && !existing.hasThumb) {
+      existing.hasThumb = true;
+      wrote = true;
+    }
+    if (full.ok && !existing.hasFull) {
+      existing.hasFull = true;
+      wrote = true;
+    }
+    if (thumb.ok && thumb.bytes != null) existing.thumbBytes = thumb.bytes;
+    if (full.ok && full.bytes != null) existing.fullBytes = full.bytes;
+  }
+
+  await putOne("artists", existing);
+  if (wrote) {
+    revokeArtCached(`artist:${artistId}:thumb`);
+    revokeArtCached(`artist:${artistId}:full`);
+    notifyArtFilesChanged(null);
+  }
+  return artistPhotoFromRecord(existing);
 }

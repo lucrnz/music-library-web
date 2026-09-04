@@ -1,15 +1,16 @@
 /**
  * Lyrics resolve: memory → downloads IDB → network.
  *
- * Memory and IDB only keep terminal successes (ok / instrumental) so
- * pending / not_found / error revalidate on the next open after a scan.
+ * Memory and IDB keep ok / instrumental / not_found. pending / error are
+ * not written. Online resolve revalidates not_found.
  * Payloads are camelCase Lyrics (see models/lyrics.js).
  */
 
 import { fetchLyrics } from "@/api";
-import { getTrackRecord } from "@/downloads/catalog";
+import { getOne } from "@/downloads/db";
 import { getLyricsRecord, putLyricsRecord } from "@/downloads/lyricsStore";
 import { emptyLyrics, fromApiLyrics, type Lyrics } from "@/models/lyrics";
+import type { CatalogTrackRecord } from "@/models/track";
 
 const memory = new Map<string, Lyrics>();
 
@@ -37,11 +38,27 @@ function isTerminalSuccess(payload: Lyrics | null | undefined): boolean {
   return status === "ok" || status === "instrumental";
 }
 
+function isPersistableLyrics(payload: Lyrics | null | undefined): boolean {
+  if (!payload) return false;
+  const status = payload.status;
+  return status === "ok" || status === "instrumental" || status === "not_found";
+}
+
 function remember(trackId: string, payload: Lyrics): void {
-  if (trackId && isTerminalSuccess(payload)) {
+  if (trackId && isPersistableLyrics(payload)) {
     memory.set(trackId, payload);
   } else if (trackId) {
     memory.delete(trackId);
+  }
+}
+
+async function persistIfCatalogued(trackId: string, payload: Lyrics) {
+  if (!isPersistableLyrics(payload)) return;
+  try {
+    const rec = await getOne<CatalogTrackRecord>("tracks", trackId);
+    if (rec) await putLyricsRecord(trackId, payload);
+  } catch {
+    /* ignore offline persist failures */
   }
 }
 
@@ -60,12 +77,17 @@ export async function resolveLyrics(
 
   const mem = memory.get(trackId);
   if (mem && isTerminalSuccess(mem)) return mem;
+  if (mem && mem.status === "not_found" && !allowNetwork) return mem;
 
   try {
     const idb = await getLyricsRecord(trackId);
     if (idb && idb.payload) {
       const normalized = fromApiLyrics(idb.payload);
       if (isTerminalSuccess(normalized)) {
+        remember(trackId, normalized);
+        return normalized;
+      }
+      if (normalized.status === "not_found" && !allowNetwork) {
         remember(trackId, normalized);
         return normalized;
       }
@@ -80,17 +102,20 @@ export async function resolveLyrics(
 
   const payload = await fetchLyrics(trackId);
   remember(trackId, payload);
-
-  if (isTerminalSuccess(payload)) {
-    try {
-      const rec = await getTrackRecord(trackId);
-      if (rec) {
-        await putLyricsRecord(trackId, payload);
-      }
-    } catch {
-      /* ignore offline persist failures */
-    }
-  }
-
+  await persistIfCatalogued(trackId, payload);
   return payload;
+}
+
+/** Best-effort lyrics GET for a just-finalized / backfilled catalog row. */
+export async function cacheLyricsForDownload(trackId: string): Promise<void> {
+  if (!trackId) return;
+  try {
+    const payload = await fetchLyrics(trackId);
+    remember(trackId, payload);
+    if (isPersistableLyrics(payload)) {
+      await putLyricsRecord(trackId, payload);
+    }
+  } catch {
+    /* companion miss must not fail the audio job */
+  }
 }

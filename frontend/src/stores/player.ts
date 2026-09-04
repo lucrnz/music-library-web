@@ -9,6 +9,8 @@ import {
   onConnectivityRecovered,
 } from "@/connectivity";
 import { emit } from "@/diag/log";
+import { backfillTrack } from "@/downloads/backfill";
+import { catalogIndex } from "@/downloads/catalog";
 import { downloads } from "@/downloads/state";
 import type { SinkErrorDetails } from "@/playback/sinks/types";
 import { type PlayBlockError, isOfflineUnplayable } from "@/playBlock";
@@ -366,6 +368,9 @@ export async function playIndex(
     pl.shufflePos = pl.shuffleOrder.indexOf(index);
   }
   const track = pl.current;
+  if (downloads.enabled && track?.id && catalogIndex.byTrack[track.id]) {
+    void backfillTrack(track.id);
+  }
   emit(
     "player.load.begin",
     { track_id: track?.id ?? null, index },

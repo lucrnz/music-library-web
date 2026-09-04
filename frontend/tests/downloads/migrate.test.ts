@@ -25,11 +25,12 @@ describe("leftoverSpecsFromRecords", () => {
     const specs = leftoverSpecsFromRecords(
       [{ trackId: "t2", codec: "source", ext: "mp3", status: "broken" }],
       [],
-      [{ artistId: "ar", hasThumb: true }],
+      [{ artistId: "ar", hasThumb: true, hasFull: true }],
     );
     expect(specs.map((s) => s.key)).toEqual([
       "audio/t2.source.mp3",
       "covers/artists/ar.thumb.webp",
+      "covers/artists/ar.full.webp",
     ]);
   });
 });

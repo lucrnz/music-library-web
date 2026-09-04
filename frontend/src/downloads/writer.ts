@@ -44,10 +44,12 @@ import {
 } from "@/downloads/opfs";
 import {
   ensureAlbumArtFiles,
-  ensureArtistArtFile,
+  ensureArtistPhoto,
+  notifyArtFilesChanged,
   revokeArtCached,
   wipeArtUrlCache,
 } from "@/downloads/art";
+import { cacheLyricsForDownload } from "@/lyrics/cache";
 import {
   clearCatalogProjection,
   syncCatalogProjection,
@@ -71,7 +73,27 @@ export interface CatalogArtistRecord {
   name: string;
   refCount: number;
   hasThumb: boolean;
+  hasFull: boolean;
   thumbBytes?: number;
+  fullBytes?: number;
+  hasImage: boolean;
+  hasPreferredImage: boolean;
+  isVa: boolean;
+  preferredRev: number;
+}
+
+function newArtistRecord(id: string, name: string): CatalogArtistRecord {
+  return {
+    artistId: id,
+    name,
+    refCount: 0,
+    hasThumb: false,
+    hasFull: false,
+    hasImage: false,
+    hasPreferredImage: false,
+    isVa: false,
+    preferredRev: 0,
+  };
 }
 
 export interface CatalogTrackAudioMeta {
@@ -245,12 +267,11 @@ async function persistCatalogTrack(
         const artist =
           (await reqToPromise<CatalogArtistRecord | undefined>(
             stores.artists.get(aid),
-          )) || {
-            artistId: aid,
-            name: aid === "_unknown" ? "Unknown artist" : pArtistName,
-            refCount: 0,
-            hasThumb: false,
-          };
+          )) ||
+          newArtistRecord(
+            aid,
+            aid === "_unknown" ? "Unknown artist" : pArtistName,
+          );
         if (aid === n.albumArtistId) artist.name = n.albumArtist || artist.name;
         else if (aid === n.artistId) artist.name = n.artist || artist.name;
         else if (!artist.name) artist.name = pArtistName;
@@ -285,17 +306,19 @@ async function persistCatalogTrack(
 
 async function refreshCatalogArt(n: Track) {
   const pinArtists = pinArtistIdsOf(n);
+  const albumHad = n.albumId
+    ? await getOne<CatalogAlbumRecord>("albums", n.albumId)
+    : null;
   const albumArt = n.albumId
     ? await ensureAlbumArtFiles(n.albumId)
     : { hasThumb: false, hasFull: false };
-  const artistArt: Record<string, { ok: boolean; bytes?: number }> = {};
+  const artistArt: Record<string, Awaited<ReturnType<typeof ensureArtistPhoto>>> =
+    {};
   for (const aid of pinArtists) {
-    if (aid === "_unknown") {
-      artistArt[aid] = { ok: false };
-      continue;
-    }
-    artistArt[aid] = await ensureArtistArtFile(aid);
+    if (aid === "_unknown") continue;
+    artistArt[aid] = await ensureArtistPhoto(aid);
   }
+  let albumArtChanged = false;
   await withCatalogLock(async () => {
     await withStores(["albums", "artists"], "readwrite", async (stores) => {
       if (n.albumId) {
@@ -303,8 +326,15 @@ async function refreshCatalogArt(n: Track) {
           stores.albums.get(n.albumId),
         );
         if (album) {
-          album.hasThumb = album.hasThumb || albumArt.hasThumb;
-          album.hasFull = album.hasFull || albumArt.hasFull;
+          const nextThumb = album.hasThumb || albumArt.hasThumb;
+          const nextFull = album.hasFull || albumArt.hasFull;
+          albumArtChanged =
+            nextThumb !== !!albumHad?.hasThumb ||
+            nextFull !== !!albumHad?.hasFull ||
+            (!!albumArt.hasThumb && !albumHad?.hasThumb) ||
+            (!!albumArt.hasFull && !albumHad?.hasFull);
+          album.hasThumb = nextThumb;
+          album.hasFull = nextFull;
           if (albumArt.thumbBytes != null) album.thumbBytes = albumArt.thumbBytes;
           if (albumArt.fullBytes != null) album.fullBytes = albumArt.fullBytes;
           stores.albums.put(album);
@@ -312,18 +342,32 @@ async function refreshCatalogArt(n: Track) {
       }
       for (const aid of pinArtists) {
         const got = artistArt[aid];
-        if (aid === "_unknown" || !got?.ok) continue;
+        if (!got) continue;
         const artist = await reqToPromise<CatalogArtistRecord | undefined>(
           stores.artists.get(aid),
         );
         if (artist) {
-          artist.hasThumb = true;
-          if (got.bytes != null) artist.thumbBytes = got.bytes;
+          artist.hasThumb = artist.hasThumb || got.hasThumb;
+          artist.hasFull = artist.hasFull || got.hasFull;
+          artist.hasImage = got.hasImage;
+          artist.hasPreferredImage = got.hasPreferredImage;
+          artist.isVa = got.isVa;
+          artist.preferredRev = got.preferredRev;
+          if (got.thumbBytes != null) artist.thumbBytes = got.thumbBytes;
+          if (got.fullBytes != null) artist.fullBytes = got.fullBytes;
           stores.artists.put(artist);
         }
       }
     });
   });
+  if (albumArtChanged && n.albumId) {
+    notifyArtFilesChanged(n.albumId);
+  }
+  try {
+    await cacheLyricsForDownload(n.id);
+  } catch {
+    /* companion miss must not fail the audio job */
+  }
 }
 
 export async function finalizeTrackDownload(
@@ -355,6 +399,7 @@ export async function deleteTrackDownload(trackId: string) {
       albumHadThumb: boolean;
       albumHadFull: boolean;
       artistHadThumb: Record<string, boolean>;
+      artistHadFull: Record<string, boolean>;
     } = {
       rec,
       albumId: rec.albumId || null,
@@ -363,6 +408,7 @@ export async function deleteTrackDownload(trackId: string) {
       albumHadThumb: false,
       albumHadFull: false,
       artistHadThumb: {},
+      artistHadFull: {},
     };
 
     await withStores(["tracks", "albums", "artists"], "readwrite", async (stores) => {
@@ -399,6 +445,7 @@ export async function deleteTrackDownload(trackId: string) {
         if (artist.refCount === 0) {
           cleanup.dropArtists.push(aid);
           cleanup.artistHadThumb[aid] = !!artist.hasThumb;
+          cleanup.artistHadFull[aid] = !!artist.hasFull;
           stores.artists.delete(aid);
         } else {
           stores.artists.put(artist);
@@ -470,6 +517,17 @@ export async function deleteTrackDownload(trackId: string) {
         );
       }
     }
+    if (cleanup.artistHadFull[aid]) {
+      revokeArtCached(`artist:${aid}:full`);
+      if (canUseCompanionDownloads()) {
+        deleteKey(artistArtBlobKey(aid, "full"));
+      } else {
+        await deleteBinary(
+          artistCoverDirParts(),
+          artistCoverFileName(aid, "full")
+        );
+      }
+    }
   }
   invalidateDownloadsCatalogView();
 }
@@ -515,6 +573,7 @@ export async function wipeAllDownloads() {
     }
     for (const ar of artists) {
       if (ar.hasThumb) deleteKey(artistArtBlobKey(ar.artistId, "thumb"));
+      if (ar.hasFull) deleteKey(artistArtBlobKey(ar.artistId, "full"));
     }
   }
   await wipeOpfsDownloads();
@@ -531,7 +590,13 @@ export function artFileSpecsFromRecords(
     thumbBytes?: number;
     fullBytes?: number;
   }[],
-  artists: { artistId: string; hasThumb?: boolean; thumbBytes?: number }[],
+  artists: {
+    artistId: string;
+    hasThumb?: boolean;
+    hasFull?: boolean;
+    thumbBytes?: number;
+    fullBytes?: number;
+  }[],
 ): ArtFileSpec[] {
   const specs: ArtFileSpec[] = [];
   for (const al of albums) {
@@ -555,6 +620,12 @@ export function artFileSpecsFromRecords(
         fileName: artistCoverFileName(ar.artistId, "thumb"),
       });
     }
+    if (ar.hasFull && ar.fullBytes == null) {
+      specs.push({
+        dirParts: artistCoverDirParts(),
+        fileName: artistCoverFileName(ar.artistId, "full"),
+      });
+    }
   }
   return specs;
 }
@@ -573,6 +644,7 @@ export async function sumDownloadedBytes() {
   }
   for (const ar of artists) {
     if (ar.hasThumb && ar.thumbBytes != null) total += ar.thumbBytes;
+    if (ar.hasFull && ar.fullBytes != null) total += ar.fullBytes;
   }
   if (!canUseCompanionDownloads()) {
     total += await sumExistingFileSizes(artFileSpecsFromRecords(albums, artists));

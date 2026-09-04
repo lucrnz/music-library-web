@@ -55,10 +55,10 @@ describe("formatDownloadsStorageLine", () => {
 });
 
 describe("artFileSpecsFromRecords", () => {
-  it("emits thumb+full for one album and thumb for one artist", () => {
+  it("emits thumb+full for one album and thumb+full for one artist", () => {
     const specs = artFileSpecsFromRecords(
       [{ albumId: "alb", hasThumb: true, hasFull: true }],
-      [{ artistId: "art", hasThumb: true }],
+      [{ artistId: "art", hasThumb: true, hasFull: true }],
     );
     expect(specs).toEqual([
       {
@@ -72,6 +72,10 @@ describe("artFileSpecsFromRecords", () => {
       {
         dirParts: artistCoverDirParts(),
         fileName: artistCoverFileName("art", "thumb"),
+      },
+      {
+        dirParts: artistCoverDirParts(),
+        fileName: artistCoverFileName("art", "full"),
       },
     ]);
   });

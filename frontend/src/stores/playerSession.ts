@@ -3,6 +3,7 @@
  */
 import { coverUrl } from "@/api";
 import { canUseRemoteMedia, onConnectivityChange } from "@/connectivity";
+import { onArtFilesChanged } from "@/downloads/art";
 import { resolveCoverUrl } from "@/downloads/resolve";
 import { downloads } from "@/downloads/state";
 import { PLACEHOLDER_COVER } from "@/util";
@@ -34,6 +35,13 @@ export function initPlayerSession() {
   sessionBound = true;
   onConnectivityChange(() => {
     if (!canUseRemoteMedia()) return;
+    void updateMediaSession();
+  });
+  onArtFilesChanged((albumId) => {
+    const t = pl.current;
+    if (!t?.albumId) return;
+    if (albumId && t.albumId !== albumId) return;
+    lastCoverTrackId = null;
     void updateMediaSession();
   });
 }

@@ -46,6 +46,7 @@ import {
   wipeAllDownloads,
 } from "@/downloads/catalog";
 import { diskFree } from "@/downloads/companionBlob";
+import { requestCompanionsBackfill } from "@/downloads/backfill";
 import { refreshLeftoverFlag } from "@/downloads/migrate";
 import { openDownloadsDb } from "@/downloads/db";
 import { requireOpfs } from "@/downloads/opfs";
@@ -252,6 +253,7 @@ async function bootDownloadsRuntime() {
   await hydrateCatalogProjection();
   await refreshQueue({ includeStorage: true });
   syncDownloadPrewarm(downloads.queue);
+  requestCompanionsBackfill();
 }
 
 export async function initDownloads() {

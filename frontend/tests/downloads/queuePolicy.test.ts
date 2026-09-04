@@ -38,6 +38,9 @@ vi.mock("@/downloads/queue", () => ({
 vi.mock("@/downloads/catalog", () => ({
   codecExt: vi.fn(),
 }));
+vi.mock("@/downloads/backfill", () => ({
+  requestCompanionsBackfill: vi.fn(),
+}));
 vi.mock("@/api", () => ({
   apiGet: vi.fn(),
 }));

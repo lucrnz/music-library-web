@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/downloads/art", () => ({
+  getLocalArtistFlip: vi.fn(async () => null),
+}));
+
 import {
   artistHasFlipPhoto,
   clearCoverFlipCache,
@@ -196,5 +201,64 @@ describe("resolveCoverFlip", () => {
     });
     expect(later).toEqual({ ok: false });
     expect(fetchArtist).toHaveBeenCalledOnce();
+  });
+
+  it("uses a local full while unreachable and does not fetch", async () => {
+    const fetchArtist = vi.fn();
+    const result = await resolveCoverFlip(track({ album_artist_id: "aa" }), {
+      fetchArtist,
+      canReachServer: () => false,
+      getLocalArtist: async () => ({
+        imageUrl: "blob:artist-full",
+        hasImage: true,
+        hasPreferredImage: false,
+        isVa: false,
+        hasFull: true,
+      }),
+    });
+    expect(result).toEqual({
+      ok: true,
+      artistId: "aa",
+      imageUrl: "blob:artist-full",
+    });
+    expect(fetchArtist).not.toHaveBeenCalled();
+  });
+
+  it("flips VA to the packaged portrait while unreachable", async () => {
+    const fetchArtist = vi.fn();
+    const result = await resolveCoverFlip(track({ album_artist_id: "va1" }), {
+      fetchArtist,
+      canReachServer: () => false,
+      getLocalArtist: async () => ({
+        imageUrl: null,
+        hasImage: false,
+        hasPreferredImage: false,
+        isVa: true,
+        hasFull: false,
+      }),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.artistId).toBe("va1");
+    expect(result.imageUrl).toContain("artist_id=va1");
+    expect(result.imageUrl).toContain("size=full");
+    expect(fetchArtist).not.toHaveBeenCalled();
+  });
+
+  it("denies thumb-only local while unreachable", async () => {
+    const fetchArtist = vi.fn();
+    const result = await resolveCoverFlip(track({ album_artist_id: "aa" }), {
+      fetchArtist,
+      canReachServer: () => false,
+      getLocalArtist: async () => ({
+        imageUrl: null,
+        hasImage: true,
+        hasPreferredImage: false,
+        isVa: false,
+        hasFull: false,
+      }),
+    });
+    expect(result).toEqual({ ok: false });
+    expect(fetchArtist).not.toHaveBeenCalled();
   });
 });

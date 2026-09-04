@@ -11,6 +11,7 @@ import {
   requestHealthProbe,
   setHealthWork,
 } from "@/connectivity";
+import { requestCompanionsBackfill } from "@/downloads/backfill";
 import { onCompanionEvent } from "@/exclusive/companionClient";
 import { canUseCompanionDownloads } from "@/exclusive/capability";
 import { exclusiveAudio } from "@/stores/exclusiveAudio";
@@ -97,6 +98,7 @@ export function initPolicy(hooks: {
 
   onConnectivityRecovered(() => {
     reapplyNetworkPolicy().catch(console.error);
+    requestCompanionsBackfill();
   });
 
   onCompanionEvent((evt) => {

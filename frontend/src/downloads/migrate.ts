@@ -42,7 +42,7 @@ export function leftoverSpecsFromRecords(
     status?: string;
   }[],
   albums: { albumId: string; hasThumb?: boolean; hasFull?: boolean }[],
-  artists: { artistId: string; hasThumb?: boolean }[],
+  artists: { artistId: string; hasThumb?: boolean; hasFull?: boolean }[],
 ): LeftoverSpec[] {
   const specs: LeftoverSpec[] = [];
   for (const t of tracks) {
@@ -76,6 +76,13 @@ export function leftoverSpecsFromRecords(
         key: artistArtBlobKey(ar.artistId, "thumb"),
         dirParts: artistCoverDirParts(),
         fileName: artistCoverFileName(ar.artistId, "thumb"),
+      });
+    }
+    if (ar.hasFull) {
+      specs.push({
+        key: artistArtBlobKey(ar.artistId, "full"),
+        dirParts: artistCoverDirParts(),
+        fileName: artistCoverFileName(ar.artistId, "full"),
       });
     }
   }
