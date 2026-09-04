@@ -165,6 +165,22 @@ export async function fetchLyrics(trackId: string): Promise<Lyrics> {
   return fromApiLyrics(raw);
 }
 
+/** POST /api/cd/lyrics — LRCLIB by tags; never 404 for not found. */
+export async function fetchCdromLyrics(body: {
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  duration_ms?: number | null;
+}): Promise<Lyrics> {
+  const raw = await apiPost<unknown>("/api/cd/lyrics", {
+    title: body.title || "",
+    artist: body.artist || "",
+    album: body.album || "",
+    duration_ms: body.duration_ms ?? null,
+  });
+  return fromApiLyrics(raw);
+}
+
 /** POST /api/tracks/meta → Track[] */
 export async function fetchTracksMeta(ids: string[]): Promise<Track[]> {
   if (!ids?.length) return [];

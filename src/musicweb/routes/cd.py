@@ -27,6 +27,13 @@ class ConfirmIn(BaseModel):
     toc: dict[str, Any]
 
 
+class CdLyricsIn(BaseModel):
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    duration_ms: int | None = None
+
+
 def _toc(raw: dict[str, Any]) -> TocIn:
     try:
         return TocIn.from_dict(raw)
@@ -76,6 +83,16 @@ def post_confirm(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/cd/lyrics")
+def post_cd_lyrics(body: CdLyricsIn) -> dict[str, Any]:
+    from musicweb.lyrics.lookup import lookup_remote_lyrics, lyrics_result_dict
+
+    result = lookup_remote_lyrics(
+        body.title, body.artist, body.album, body.duration_ms
+    )
+    return lyrics_result_dict(None, result)
 
 
 @router.get("/cd/identities/{discid}")

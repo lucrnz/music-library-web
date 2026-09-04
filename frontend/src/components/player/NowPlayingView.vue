@@ -54,6 +54,7 @@ const props = withDefaults(
     openLabel?: string;
     playState: PlayStatusState;
     exclusiveSnap: ExclusiveFaceSnapshot | null;
+    resolve?: (trackId: string) => Promise<import("@/models/lyrics").Lyrics>;
   }>(),
   {
     title: "—",
@@ -304,9 +305,10 @@ function refreshLyricsOffer() {
 async function copyLyrics() {
   const id = props.trackId;
   if (!id) return;
-  const payload = await resolveLyrics(id, {
-    allowNetwork: canReachServer(),
-  });
+  const resolver =
+    props.resolve ||
+    ((tid: string) => resolveLyrics(tid, { allowNetwork: canReachServer() }));
+  const payload = await resolver(id);
   if (props.trackId !== id) return;
   const text = lyricsClipboardText(payload);
   if (!text) {
@@ -462,6 +464,7 @@ defineExpose({ focusClose, closeBtn });
         :current-time="currentTime"
         :duration="duration"
         :seekable="lyricsSeekable"
+        :resolve="resolve"
         @seek-fraction="(frac) => emit('seek-fraction', frac)"
       />
     </div>

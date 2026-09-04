@@ -33,6 +33,7 @@ const props = withDefaults(
     currentTime?: number;
     duration?: number;
     seekable?: boolean;
+    resolve?: (trackId: string) => Promise<Lyrics>;
   }>(),
   { open: false, trackId: null, currentTime: 0, duration: 0, seekable: true },
 );
@@ -90,7 +91,10 @@ async function load() {
   payload.value = null;
   lastScrollIdx = -1;
   try {
-    const data = await resolveLyrics(id, { allowNetwork: canReachServer() });
+    const resolver =
+      props.resolve ||
+      ((tid: string) => resolveLyrics(tid, { allowNetwork: canReachServer() }));
+    const data = await resolver(id);
     if (gen !== loadGen) return;
     payload.value = data;
   } catch (err: unknown) {
