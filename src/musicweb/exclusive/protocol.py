@@ -44,6 +44,7 @@ MSG_LIST_OPTICAL_DRIVES: Final[str] = "list_optical_drives"
 MSG_WATCH_OPTICAL: Final[str] = "watch_optical"
 MSG_READ_OPTICAL: Final[str] = "read_optical"
 MSG_EJECT_OPTICAL: Final[str] = "eject_optical"
+MSG_LIST_CDROM: Final[str] = "list_cdrom"
 
 # --- Server → client ---
 MSG_HELLO_OK: Final[str] = "hello_ok"
@@ -62,6 +63,8 @@ MSG_DISK_INFO_OK: Final[str] = "disk_info_ok"
 MSG_OPTICAL_DRIVES: Final[str] = "optical_drives"
 MSG_OPTICAL_MEDIA: Final[str] = "optical_media"
 MSG_OPTICAL_ERROR: Final[str] = "optical_error"
+MSG_CDROM_LIST: Final[str] = "cdrom_list"
+MSG_CDROM_INDEX: Final[str] = "cdrom_index"
 
 BLOB_CLIENT_TYPES: Final[frozenset[str]] = frozenset(
     {

@@ -8,15 +8,39 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from musicweb.exclusive import blob_store
 from musicweb.exclusive import protocol as p
 from musicweb.exclusive.cdda_stream import content_length
+from musicweb.exclusive.optical_meta import cover_bytes, local_lyrics
 from musicweb.exclusive.session import ExclusiveHub
 
 logger = logging.getLogger("musicweb.companion.app")
+
+_CDROM_MIME = {
+    ".mp3": "audio/mpeg",
+    ".aac": "audio/aac",
+    ".wma": "audio/x-ms-wma",
+    ".flac": "audio/flac",
+    ".alac": "audio/mp4",
+    ".m4a": "audio/mp4",
+}
+
+
+def _cdrom_media_type(path: Path) -> str:
+    return _CDROM_MIME.get(path.suffix.lower(), "application/octet-stream")
+
+
+def _cover_media_type(data: bytes) -> str:
+    if data.startswith(b"\x89PNG"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8"):
+        return "image/jpeg"
+    if data.startswith(b"RIFF") and b"WEBP" in data[:16]:
+        return "image/webp"
+    return "image/jpeg"
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -255,6 +279,102 @@ def create_exclusive_app(hub: ExclusiveHub) -> FastAPI:
             status_code=status,
             media_type="audio/wav",
             headers=headers,
+        )
+
+    @app.api_route("/cdrom/file", methods=["GET", "HEAD"])
+    async def get_cdrom_file(request: Request) -> Response:
+        _require_file_token(request)
+        device_id = str(request.query_params.get("device") or "")
+        rel = str(request.query_params.get("rel") or "")
+        if not device_id:
+            raise HTTPException(status_code=404, detail="missing")
+        path = hub.optical.resolve_cdrom_file(device_id, rel)
+        if path is None:
+            raise HTTPException(status_code=404, detail="missing")
+        size = path.stat().st_size
+        media_type = _cdrom_media_type(path)
+        rng = request.headers.get("range") or request.headers.get("Range")
+        try:
+            span = parse_byte_range(rng, size)
+        except ValueError:
+            raise HTTPException(status_code=416, detail="unsatisfiable") from None
+        if span is None:
+            if request.method == "HEAD":
+                return Response(
+                    status_code=200,
+                    media_type=media_type,
+                    headers={
+                        "Accept-Ranges": "bytes",
+                        "Content-Length": str(size),
+                    },
+                )
+            return FileResponse(
+                path,
+                media_type=media_type,
+                headers={"Accept-Ranges": "bytes"},
+            )
+        start, end = span
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Content-Length": str(end - start + 1),
+        }
+        if request.method == "HEAD":
+            return Response(
+                status_code=206,
+                media_type=media_type,
+                headers=headers,
+            )
+        return StreamingResponse(
+            blob_store.iter_file_span(path, start, end),
+            status_code=206,
+            media_type=media_type,
+            headers=headers,
+        )
+
+    @app.api_route("/cdrom/cover", methods=["GET", "HEAD"])
+    async def get_cdrom_cover(request: Request) -> Response:
+        _require_file_token(request)
+        device_id = str(request.query_params.get("device") or "")
+        rel = str(request.query_params.get("rel") or "")
+        if not device_id:
+            raise HTTPException(status_code=404, detail="missing")
+        path = hub.optical.resolve_cdrom_file(device_id, rel)
+        if path is None:
+            raise HTTPException(status_code=404, detail="missing")
+        data = cover_bytes(path)
+        if not data:
+            raise HTTPException(status_code=404, detail="missing")
+        media_type = _cover_media_type(data)
+        if request.method == "HEAD":
+            return Response(
+                status_code=200,
+                media_type=media_type,
+                headers={"Content-Length": str(len(data))},
+            )
+        return Response(content=data, media_type=media_type)
+
+    @app.get("/cdrom/lyrics")
+    async def get_cdrom_lyrics(request: Request) -> JSONResponse:
+        _require_file_token(request)
+        device_id = str(request.query_params.get("device") or "")
+        rel = str(request.query_params.get("rel") or "")
+        if not device_id:
+            raise HTTPException(status_code=404, detail="missing")
+        path = hub.optical.resolve_cdrom_file(device_id, rel)
+        if path is None:
+            raise HTTPException(status_code=404, detail="missing")
+        found = local_lyrics(path)
+        if found is None:
+            return JSONResponse(
+                {"plain": None, "synced": None, "source": None}
+            )
+        return JSONResponse(
+            {
+                "plain": found.plain_text,
+                "synced": found.synced_lrc,
+                "source": found.source,
+            }
         )
 
     @app.put("/files/{key:path}")

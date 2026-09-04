@@ -469,6 +469,13 @@ class ExclusiveHub:
             sess, msg, send=self._send, broadcast=self.broadcast
         )
 
+    async def _cmd_list_cdrom(
+        self, sess: ClientSession, msg: dict[str, Any]
+    ) -> None:
+        await self.optical.list_cdrom(
+            sess, msg, send=self._send, live=self._with_live
+        )
+
     async def _cmd_set_device(
         self, sess: ClientSession, msg: dict[str, Any]
     ) -> None:
@@ -766,4 +773,5 @@ COMMANDS: dict[str, tuple[_Command, bool]] = {
     p.MSG_WATCH_OPTICAL: (ExclusiveHub._cmd_watch_optical, False),
     p.MSG_READ_OPTICAL: (ExclusiveHub._cmd_read_optical, False),
     p.MSG_EJECT_OPTICAL: (ExclusiveHub._cmd_eject_optical, False),
+    p.MSG_LIST_CDROM: (ExclusiveHub._cmd_list_cdrom, False),
 }

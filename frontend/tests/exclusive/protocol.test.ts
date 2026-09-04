@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   MSG_BLOB_PUT,
   MSG_DISK_INFO_OK,
+  MSG_CDROM_INDEX,
+  MSG_CDROM_LIST,
   MSG_EJECT_OPTICAL,
+  MSG_LIST_CDROM,
   MSG_LIST_OPTICAL_DRIVES,
   MSG_OPTICAL_DRIVES,
   MSG_OPTICAL_ERROR,
@@ -37,6 +40,9 @@ describe("exclusive protocol envelope", () => {
     expect(MSG_OPTICAL_DRIVES).toBe("optical_drives");
     expect(MSG_OPTICAL_MEDIA).toBe("optical_media");
     expect(MSG_OPTICAL_ERROR).toBe("optical_error");
+    expect(MSG_LIST_CDROM).toBe("list_cdrom");
+    expect(MSG_CDROM_LIST).toBe("cdrom_list");
+    expect(MSG_CDROM_INDEX).toBe("cdrom_index");
     expect(envelope(MSG_LIST_OPTICAL_DRIVES).type).toBe("list_optical_drives");
   });
 });

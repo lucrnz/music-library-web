@@ -31,6 +31,7 @@ export const MSG_LIST_OPTICAL_DRIVES = "list_optical_drives";
 export const MSG_WATCH_OPTICAL = "watch_optical";
 export const MSG_READ_OPTICAL = "read_optical";
 export const MSG_EJECT_OPTICAL = "eject_optical";
+export const MSG_LIST_CDROM = "list_cdrom";
 
 /** Server → client */
 export const MSG_HELLO_OK = "hello_ok";
@@ -49,6 +50,8 @@ export const MSG_DISK_INFO_OK = "disk_info_ok";
 export const MSG_OPTICAL_DRIVES = "optical_drives";
 export const MSG_OPTICAL_MEDIA = "optical_media";
 export const MSG_OPTICAL_ERROR = "optical_error";
+export const MSG_CDROM_LIST = "cdrom_list";
+export const MSG_CDROM_INDEX = "cdrom_index";
 
 export const ROLE_CONTROLLER = "controller";
 export const ROLE_READONLY = "readonly";

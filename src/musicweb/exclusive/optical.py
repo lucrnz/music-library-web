@@ -69,6 +69,8 @@ class OpticalMedia:
     toc: DiscToc | None
     cd_text: CdText | None
     kind: str = "none"
+    volume_name: str | None = None
+    volume_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -77,6 +79,7 @@ class OpticalMedia:
             "toc": self.toc.to_dict() if self.toc else None,
             "cd_text": self.cd_text.to_dict() if self.cd_text else None,
             "kind": self.kind,
+            "volume_name": self.volume_name,
         }
 
 
@@ -163,7 +166,7 @@ def get_optical_port() -> OpticalPort:
 
 
 def media_signature(media: OpticalMedia) -> tuple[Any, ...]:
-    """Compare present-edge + TOC (+ CD-Text) without device path logging."""
+    """Compare present-edge + TOC (+ CD-Text) + volume_id. No host path."""
     toc = media.toc
     text = media.cd_text
     return (
@@ -180,4 +183,5 @@ def media_signature(media: OpticalMedia) -> tuple[Any, ...]:
         None
         if text is None
         else (text.album, text.artist, tuple(text.tracks)),
+        media.volume_id,
     )
