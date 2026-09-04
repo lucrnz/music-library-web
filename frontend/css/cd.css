@@ -80,3 +80,142 @@
 .playback-status .icon-cd {
   animation: cd-spin 4s linear infinite;
 }
+
+#view-cdrom {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.cdrom-pane {
+  min-height: 0;
+}
+
+.cdrom-fs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  height: var(--cdrom-fs-h, 50%);
+}
+
+.has-cdrom-split .cdrom-fs {
+  flex: 0 0 var(--cdrom-fs-h);
+}
+
+.cdrom-fs-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.cdrom-fs-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cdrom-fs-list,
+.cdrom-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.cdrom-fs-list.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.cdrom-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.cdrom-fs-list.grid .cdrom-cell {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.cdrom-cell-more {
+  margin-left: auto;
+}
+
+.cdrom-file-row,
+.cdrom-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cdrom-file-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.cdrom-file-label,
+.cdrom-folder-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cdrom-split {
+  flex: 0 0 8px;
+  cursor: row-resize;
+  background: var(--border, #333);
+}
+
+.cdrom-queue {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+#view-cd .cdrom-fs,
+#view-cd .cdrom-queue {
+  flex: 1;
+  min-height: 0;
+}
+
+.cdrom-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cdrom-tree-hit,
+.cdrom-tree-toggle {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cdrom-tree-hit {
+  flex: 1;
+  min-width: 0;
+}

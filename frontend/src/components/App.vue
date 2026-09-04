@@ -6,12 +6,13 @@ import { ui } from "@/stores/ui";
 import { openCdRail, openRadioRail } from "@/stores/playerPrefs";
 import { player } from "@/stores/playerState";
 import { setTabOpen } from "@/stores/radio";
-import { cdEntryAllowed, enterCdMode } from "@/stores/cd";
+import { cd, cdEntryAllowed, enterCdMode } from "@/stores/cd";
 import { activeSession } from "@/playback/session";
 import LibraryView from "@/components/library/LibraryView.vue";
 import PlaylistView from "@/components/playlist/PlaylistView.vue";
 import CdView from "@/components/cd/CdView.vue";
 import CdTrackList from "@/components/cd/CdTrackList.vue";
+import CdRomPane from "@/components/cd/CdRomPane.vue";
 import PlayerBar from "@/components/player/PlayerBar.vue";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import DownloadsModal from "@/components/downloads/DownloadsModal.vue";
@@ -42,6 +43,9 @@ const route = useRoute();
     );
     const showCdList = computed(
       () => desktop.value && cdEntryAllowed() && activeSession() === "cd",
+    );
+    const showCdRom = computed(
+      () => showCdList.value && cd.mediaKind === "data",
     );
     const customLibraryPane = computed(
       () => desktop.value && ui.libraryPaneWidthPx != null,
@@ -142,7 +146,8 @@ const route = useRoute();
       <template v-if="showLibraryPanes">
         <LibraryView :class="{ hidden: onQueue }" />
         <PaneResizer v-if="desktop" />
-        <CdTrackList v-if="showCdList" />
+        <CdRomPane v-if="showCdRom" />
+        <CdTrackList v-else-if="showCdList" />
         <PlaylistView v-else :class="{ hidden: !onQueue }" />
       </template>
     </main>

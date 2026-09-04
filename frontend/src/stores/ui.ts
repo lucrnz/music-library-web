@@ -24,12 +24,17 @@ export interface UiState {
    * (percentage + max-width). Mobile ignores this.
    */
   libraryPaneWidthPx: number | null;
+  /** Desktop CD-ROM split: filesystem height in CSS pixels. `null` is CSS default. */
+  cdromSplitHeightPx: number | null;
   lastLibrary: LibraryRouteSnapshot;
   toast: UiToast | null;
 }
 
 const LAYOUT_STORAGE_KEY = "musicweb.libraryLayout.v1";
 const PANE_WIDTH_STORAGE_KEY = "musicweb.libraryPaneWidth.v1";
+const CDROM_SPLIT_STORAGE_KEY = "musicweb.cdromSplitHeight.v1";
+/** Shortest filesystem pane the CD-ROM splitter will set. */
+export const CDROM_SPLIT_MIN_PX = 120;
 const TOAST_DEFAULT_MS = 2800;
 
 /** Narrowest library pane the desktop splitter will set. */
@@ -105,6 +110,7 @@ export const ui = reactive<UiState>({
    */
   libraryLayout: loadLibraryLayout(),
   libraryPaneWidthPx: loadLibraryPaneWidth(),
+  cdromSplitHeightPx: loadCdromSplitHeight(),
   /**
    * Last library route snapshot so /queue can leave the dual-pane library
    * content intact (and mobile tab can restore drill-down).
@@ -155,6 +161,42 @@ export function setLibraryPaneWidth(px: number | null) {
   if (!Number.isFinite(n) || n < LIBRARY_PANE_MIN_PX) return;
   ui.libraryPaneWidthPx = n;
   saveLibraryPaneWidth(n);
+}
+
+export function parseCdromSplitHeight(raw: string | null): number | null {
+  if (raw == null || raw === "") return null;
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n) || n < CDROM_SPLIT_MIN_PX) return null;
+  return n;
+}
+
+function loadCdromSplitHeight(): number | null {
+  try {
+    return parseCdromSplitHeight(localStorage.getItem(CDROM_SPLIT_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function saveCdromSplitHeight(px: number | null) {
+  try {
+    if (px == null) localStorage.removeItem(CDROM_SPLIT_STORAGE_KEY);
+    else localStorage.setItem(CDROM_SPLIT_STORAGE_KEY, String(px));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export function setCdromSplitHeight(px: number | null) {
+  if (px == null) {
+    ui.cdromSplitHeightPx = null;
+    saveCdromSplitHeight(null);
+    return;
+  }
+  const n = Math.round(Number(px));
+  if (!Number.isFinite(n) || n < CDROM_SPLIT_MIN_PX) return;
+  ui.cdromSplitHeightPx = n;
+  saveCdromSplitHeight(n);
 }
 
 export function rememberLibraryRoute(route: {
